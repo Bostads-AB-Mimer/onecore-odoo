@@ -23,10 +23,10 @@ Track equipment and maintenance requests""",
     'demo': ['data/maintenance_demo.xml'],
     'installable': True,
     'application': True,
-    'assets': {
-        'web.assets_backend': [
-            'onecore_maintenance/static/src/**/*',
-        ],
-    },
+    # 'assets': {
+    #     'web.assets_backend': [
+    #         'onecore_maintenance/static/src/**/*',
+    #     ],
+    # },
     'license': 'LGPL-3',
 }

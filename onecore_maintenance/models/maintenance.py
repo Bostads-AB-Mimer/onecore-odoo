@@ -137,7 +137,7 @@ class OnecoreMaintenanceEquipment(models.Model):
     def _track_subtype(self, init_values):
         self.ensure_one()
         if 'owner_user_id' in init_values and self.owner_user_id:
-            return self.env.ref('maintenance.mt_mat_assign')
+            return self.env.ref('onecore_maintenance.mt_mat_assign')
         return super(OnecoreMaintenanceEquipment, self)._track_subtype(init_values)
 
     @api.depends('serial_no')
@@ -263,12 +263,12 @@ class OnecoreMaintenanceRequest(models.Model):
         return self.env['onecore.maintenance.stage'].search([], limit=1)
 
     def _creation_subtype(self):
-        return self.env.ref('onecore.maintenance.mt_req_created')
+        return self.env.ref('onecore_maintenance.mt_req_created')
 
     def _track_subtype(self, init_values):
         self.ensure_one()
         if 'stage_id' in init_values:
-            return self.env.ref('onecore.maintenance.mt_req_status')
+            return self.env.ref('onecore_maintenance.mt_req_status')
         return super(OnecoreMaintenanceRequest, self)._track_subtype(init_values)
 
     def _get_default_team_id(self):
@@ -409,7 +409,7 @@ class OnecoreMaintenanceRequest(models.Model):
         return maintenance_requests
 
     def write(self, vals):
-        if vals and 'kanban_state' not in vals and 'stage_id' in vals:
+        if 'kanban_state' not in vals and 'stage_id' in vals:
             vals['kanban_state'] = 'normal'
         if 'stage_id' in vals and self.maintenance_type == 'preventive' and self.recurring_maintenance and self.env['onecore.maintenance.stage'].browse(vals['stage_id']).done:
             schedule_date = self.schedule_date or fields.Datetime.now()
@@ -418,19 +418,19 @@ class OnecoreMaintenanceRequest(models.Model):
                 self.copy({'schedule_date': schedule_date})
         res = super(OnecoreMaintenanceRequest, self).write(vals)
 
-        # if vals.get('owner_user_id') or vals.get('user_id'):
-        #     self._add_followers()
-        # if 'stage_id' in vals:
-        #     self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
-        #     self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
-        #     self.activity_feedback(['maintenance.mail_act_maintenance_request'])
-        #     self.activity_update()
-        # if vals.get('user_id') or vals.get('schedule_date'):
-        #     self.activity_update()
-        # if self._need_new_activity(vals):
-        #     # need to change description of activity also so unlink old and create new activity
-        #     self.activity_unlink(['maintenance.mail_act_maintenance_request'])
-        #     self.activity_update()
+        if vals.get('owner_user_id') or vals.get('user_id'):
+            self._add_followers()
+        if 'stage_id' in vals:
+            self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
+            self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
+            self.activity_feedback(['maintenance.mail_act_maintenance_request'])
+            self.activity_update()
+        if vals.get('user_id') or vals.get('schedule_date'):
+            self.activity_update()
+        if self._need_new_activity(vals):
+            # need to change description of activity also so unlink old and create new activity
+            self.activity_unlink(['maintenance.mail_act_maintenance_request'])
+            self.activity_update()
 
         # The below is  a Mimer added API-call to update errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
         # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/
