@@ -7,6 +7,16 @@ from odoo import api, fields, models, SUPERUSER_ID, _
 from odoo.exceptions import UserError
 from odoo.osv import expression
 
+#Mimerimports
+from odoo import models, fields, api
+from odoo.tools.mail import html2plaintext
+import requests
+import json
+import logging
+
+_logger = logging.getLogger(__name__)
+
+
 
 class OnecoreMaintenanceStage(models.Model):
     """ Model for case stages. This models the main stages of a Maintenance Request management flow. """
@@ -56,7 +66,7 @@ class OnecoreMaintenanceEquipmentCategory(models.Model):
             category.equipment_count = mapped_data.get(category.id, 0)
 
     def _compute_maintenance_count(self):
-        maintenance_data = self.env['onecore.maintenance.request']._read_group([('category_id', 'in', self.ids)], ['category_id', 'archive'], ['__count'])
+        maintenance_data = self.env['maintenance.request']._read_group([('category_id', 'in', self.ids)], ['category_id', 'archive'], ['__count'])
         mapped_data = {(category.id, archive): count for category, archive, count in maintenance_data}
         for category in self:
             category.maintenance_open_count = mapped_data.get((category.id, False), 0)
@@ -201,6 +211,53 @@ class OnecoreMaintenanceRequest(models.Model):
     _order = "id desc"
     _check_company_auto = True
 
+
+     #Mimer added fields
+    rental_property_id = fields.Char('Rental Property ID')
+    address = fields.Char('Address', compute='_compute_address', readonly=True)
+    estate_code = fields.Char('Estate Code', compute='_compute_address', readonly=True)
+    estate_caption = fields.Char('Estate Caption', compute='_compute_address', readonly=True)
+    apartment_type = fields.Char('Type', compute='_compute_address', readonly=True)
+    bra = fields.Char('Bra', compute='_compute_address', readonly=True)
+    block_code = fields.Char('Block Code', compute='_compute_address', readonly=True)
+
+
+#Mimer added API-call to fetch apartments, the api call to apps.mimer.nu is only to be used for testing as it does not fetch data from xpand.
+    @api.depends('rental_property_id')
+    def _compute_address(self):
+        for record in self:
+            record.address = None
+            record.estate_code = None
+            record.estate_caption = None
+            record.apartment_type = None
+            record.bra = None
+            record.block_code = None
+
+            if record.rental_property_id:
+                url = "https://apps.mimer.nu/api/1.1/obj/apartment"
+                constraints = [{
+                    "key": "rentalPropertyId",
+                    "constraint_type": "equals",
+                    "value": record.rental_property_id
+                }]
+                try:
+                    response = requests.get(url, params={'constraints': json.dumps(constraints)})
+                    if response.status_code == 200:
+                        data = response.json().get('response', {}).get('results', [])
+                        if data:
+                            record.address = data[0].get('adress')
+                            record.estate_code = data[0].get('estateCode')
+                            record.estate_caption = data[0].get('estateCaption')
+                            record.apartment_type = data[0].get('type')
+                            record.bra = data[0].get('bra')
+                            record.block_code = data[0].get('blockCode')
+                        else:
+                            _logger.info("No data found in response.")
+                    else:
+                        _logger.error(f"Error fetching data: {response.status_code}")
+                except Exception as e:
+                    _logger.error(f"Error fetching address: {str(e)}")
+
     @api.returns('self')
     def _default_stage(self):
         return self.env['onecore.maintenance.stage'].search([], limit=1)
@@ -301,7 +358,6 @@ class OnecoreMaintenanceRequest(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        # context: no_log, because subtype already handle this
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             if request.owner_user_id or request.user_id:
@@ -312,12 +368,47 @@ class OnecoreMaintenanceRequest(models.Model):
                 request.close_date = False
             if not request.close_date and request.stage_id.done:
                 request.close_date = fields.Date.today()
-        maintenance_requests.activity_update()
+            maintenance_requests.activity_update()
+
+            # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
+            # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
+
+
+            # Only proceed if rental_property_id is present
+            if request.rental_property_id:
+                ICP = self.env['ir.config_parameter'].sudo()
+                token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
+                if not token:
+                    _logger.error("Bearer token is not set in system parameters.")
+                    return maintenance_requests
+
+                webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/createerrand"
+                headers = {
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json'
+                }
+
+                 # Convert HTML to plain text
+                description_text = html2plaintext(request.description) if request.description else ""
+
+                data = {
+                    "rentalObjectId": request.rental_property_id,
+                    "title": request.name,
+                    "odooId": str(request.id),  # The unique Odoo ID
+                    "description": description_text,
+                    "state": request.stage_id.name,
+                }
+                try:
+                    response = requests.post(webhook_url, headers=headers, json=data)
+                    _logger.info(f"Webhook sent. Status Code: {response.status_code}, Response: {response.text}")
+                except Exception as e:
+                    _logger.error(f"Failed to send webhook: {e}")
+            else:
+                _logger.info(f"Webhook not sent. rental_property_id is missing for Maintenance Request ID: {request.id}")
+
         return maintenance_requests
 
     def write(self, vals):
-        # Overridden to reset the kanban_state to normal whenever
-        # the stage (stage_id) of the Maintenance Request changes.
         if vals and 'kanban_state' not in vals and 'stage_id' in vals:
             vals['kanban_state'] = 'normal'
         if 'stage_id' in vals and self.maintenance_type == 'preventive' and self.recurring_maintenance and self.env['onecore.maintenance.stage'].browse(vals['stage_id']).done:
@@ -326,20 +417,84 @@ class OnecoreMaintenanceRequest(models.Model):
             if self.repeat_type == 'forever' or schedule_date.date() <= self.repeat_until:
                 self.copy({'schedule_date': schedule_date})
         res = super(OnecoreMaintenanceRequest, self).write(vals)
-        if vals.get('owner_user_id') or vals.get('user_id'):
-            self._add_followers()
-        if 'stage_id' in vals:
-            self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
-            self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
-            self.activity_feedback(['maintenance.mail_act_maintenance_request'])
-            self.activity_update()
-        if vals.get('user_id') or vals.get('schedule_date'):
-            self.activity_update()
-        if self._need_new_activity(vals):
-            # need to change description of activity also so unlink old and create new activity
-            self.activity_unlink(['maintenance.mail_act_maintenance_request'])
-            self.activity_update()
+
+        # if vals.get('owner_user_id') or vals.get('user_id'):
+        #     self._add_followers()
+        # if 'stage_id' in vals:
+        #     self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
+        #     self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
+        #     self.activity_feedback(['maintenance.mail_act_maintenance_request'])
+        #     self.activity_update()
+        # if vals.get('user_id') or vals.get('schedule_date'):
+        #     self.activity_update()
+        # if self._need_new_activity(vals):
+        #     # need to change description of activity also so unlink old and create new activity
+        #     self.activity_unlink(['maintenance.mail_act_maintenance_request'])
+        #     self.activity_update()
+
+        # The below is  a Mimer added API-call to update errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
+        # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/
+
+        for request in self:
+            # Only proceed if rental_property_id is present
+            if request.rental_property_id:
+                ICP = request.env['ir.config_parameter'].sudo()
+                token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
+                if not token:
+                    _logger.error("Bearer token is not set in system parameters.")
+                    continue  # Skip this iteration
+
+                webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/updateErrand"
+                headers = {
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json'
+                }
+
+                # Assuming you want to update the same fields as those you send when creating an errand
+                description_text = html2plaintext(request.description) if request.description else ""
+                data = {
+                    "odooId": str(request.id),
+                    "rentalObjectId": request.rental_property_id,
+                    "title": request.name,
+                    "description": description_text,
+                    "state": request.stage_id.name,
+                }
+
+                try:
+                    response = requests.post(webhook_url, headers=headers, json=data)
+                    _logger.info(f"Webhook for update sent. Status Code: {response.status_code}, Response: {response.text}")
+                except Exception as e:
+                    _logger.error(f"Failed to send update webhook: {e}")
+
         return res
+
+
+    #Mimer created webhook to delete errands from external testapp. https://apps.mimer.nu/version-test/odootest/
+    def unlink(self):
+        ICP = self.env['ir.config_parameter'].sudo()
+        token = ICP.get_param('x_webhook_bearer_token', default=None)
+        if not token:
+            _logger.error("Bearer token is not set in system parameters.")
+        else:
+            for request in self:
+                if request.rental_property_id:
+                    webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/deleteerrand"
+                    headers = {
+                        'Authorization': f'Bearer {token}',
+                        'Content-Type': 'application/json'
+                    }
+                    data = {"odooId": str(request.id)}
+                    try:
+                        response = requests.post(webhook_url, headers=headers, json=data)
+                        if response.status_code != 200:
+                            _logger.error(f"Webhook call failed: {response.text}")
+                    except Exception as e:
+                        _logger.error(f"Error calling webhook: {str(e)}")
+                else:
+                    _logger.info(f"Webhook not sent. rental_property_id is missing for Maintenance Request ID: {request.id}")
+
+        return super(OnecoreMaintenanceRequest, self).unlink()
+
 
     def _need_new_activity(self, vals):
         return vals.get('equipment_id')
