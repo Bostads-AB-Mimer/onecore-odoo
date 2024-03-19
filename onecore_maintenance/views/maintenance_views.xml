@@ -1115,7 +1115,7 @@
 
     <menuitem
         id="menu_maintenance_teams"
-        name="Maintenance Teamz"
+        name="Maintenance Teams"
         parent="menu_maintenance_configuration"
         action="maintenance_team_action_settings"
         groups="group_equipment_manager"
