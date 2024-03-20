@@ -2,7 +2,7 @@
 <odoo>
 
     <!-- equiment.request: views -->
-    <record id="hr_equipment_request_view_search" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_search" model="ir.ui.view">
         <field name="name">equipment.request.search</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -52,7 +52,7 @@
         </field>
     </record>
 
-    <record id="maintenance_request_view_activity" model="ir.ui.view">
+    <record id="onecore_maintenance_request_view_activity" model="ir.ui.view">
         <field name="name">maintenance.request.view.activity</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -73,7 +73,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_view_form" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_form" model="ir.ui.view">
         <field name="name">equipment.request.form</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -150,7 +150,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_view_kanban" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_kanban" model="ir.ui.view">
         <field name="name">equipment.request.kanban</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -222,7 +222,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_view_tree" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_tree" model="ir.ui.view">
         <field name="name">equipment.request.tree</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -232,7 +232,7 @@
                 <field name="request_date" groups="base.group_no_one"/>
                 <field name="owner_user_id"/>
                 <field name="user_id"/>
-                <field name="category_id" readonly="1" groups="maintenance.group_equipment_manager"/>
+                <field name="category_id" readonly="1" groups="onecore_maintenance.group_equipment_manager"/>
                 <field name="stage_id"/>
                 <field name="company_id" readonly="1" groups="base.group_multi_company"/>
                 <field name="activity_exception_decoration" widget="activity_exception"/>
@@ -240,7 +240,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_view_graph" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_graph" model="ir.ui.view">
         <field name="name">equipment.request.graph</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -251,7 +251,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_view_pivot" model="ir.ui.view">
+    <record id="onecore_hr_equipment_request_view_pivot" model="ir.ui.view">
         <field name="name">equipment.request.pivot</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -264,7 +264,7 @@
     </record>
 
 
-    <record id="hr_equipment_view_calendar" model="ir.ui.view">
+    <record id="onecore_hr_equipment_view_calendar" model="ir.ui.view">
         <field name="name">equipment.request.calendar</field>
         <field name="model">onecore.maintenance.request</field>
         <field name="arch" type="xml">
@@ -284,11 +284,11 @@
     </record>
 
     <!-- equiment.request: actions -->
-    <record id="hr_equipment_request_action" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_request_action" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
-        <field name="view_id" ref="hr_equipment_request_view_kanban"/>
+        <field name="view_id" ref="onecore_hr_equipment_request_view_kanban"/>
         <field name="context">{
             'search_default_active': True,
             'default_user_id': uid
@@ -302,12 +302,12 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_action_link" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_request_action_link" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
-        <field name="search_view_id" ref="hr_equipment_request_view_search"/>
-        <field name="view_id" ref="hr_equipment_request_view_kanban"/>
+        <field name="search_view_id" ref="onecore_hr_equipment_request_view_search"/>
+        <field name="view_id" ref="onecore_hr_equipment_request_view_kanban"/>
         <field name="context">{
             'search_default_category_id': [active_id],
             'search_default_active': True,
@@ -322,7 +322,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_action_from_equipment" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_request_action_from_equipment" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="binding_model_id" ref="onecore_maintenance.model_onecore_maintenance_equipment"/>
@@ -341,7 +341,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
@@ -360,11 +360,11 @@
         </field>
     </record>
 
-    <record id="hr_equipment_request_action_cal" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_request_action_cal" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">calendar,kanban,tree,form,pivot,graph,activity</field>
-        <field name="view_id" ref="hr_equipment_view_calendar"/>
+        <field name="view_id" ref="onecore_hr_equipment_view_calendar"/>
         <field name="context">{
             'search_default_active': True,
             'search_default_todo': True,
@@ -378,7 +378,7 @@
         </field>
     </record>
 
-    <record id="maintenance_request_action_reports" model="ir.actions.act_window">
+    <record id="onecore_maintenance_request_action_reports" model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">graph,pivot,kanban,tree,form,calendar,activity</field>
@@ -395,7 +395,7 @@
     </record>
 
     <!-- equiment: views -->
-    <record id="hr_equipment_view_form" model="ir.ui.view">
+    <record id="onecore_hr_equipment_view_form" model="ir.ui.view">
         <field name="name">equipment.form</field>
         <field name="model">onecore.maintenance.equipment</field>
         <field name="arch" type="xml">
@@ -403,7 +403,7 @@
                 <sheet>
                     <field name="company_id" invisible="1"/>
                     <div class="oe_button_box" name="button_box">
-                        <button name="%(hr_equipment_request_action_from_equipment)d"
+                        <button name="%(onecore_hr_equipment_request_action_from_equipment)d"
                             type="action"
                             class="oe_stat_button"
                             context="{'search_default_active': True, 'default_company_id': company_id, 'default_maintenance_team_id': maintenance_team_id}"
@@ -444,7 +444,7 @@
                                     <field name="serial_no"/>
                                 </group><group>
                                     <field name="effective_date"/>
-                                    <field name="cost" groups="maintenance.group_equipment_manager"/>
+                                    <field name="cost" groups="onecore_maintenance.group_equipment_manager"/>
                                     <field name="warranty_date"/>
                                 </group>
                             </group>
@@ -483,7 +483,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_view_kanban" model="ir.ui.view">
+    <record id="onecore_hr_equipment_view_kanban" model="ir.ui.view">
         <field name="name">equipment.kanban</field>
         <field name="model">onecore.maintenance.equipment</field>
         <field name="arch" type="xml">
@@ -545,7 +545,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_view_tree" model="ir.ui.view">
+    <record id="onecore_hr_equipment_view_tree" model="ir.ui.view">
         <field name="name">equipment.tree</field>
         <field name="model">onecore.maintenance.equipment</field>
         <field name="arch" type="xml">
@@ -565,7 +565,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_view_search" model="ir.ui.view">
+    <record id="onecore_hr_equipment_view_search" model="ir.ui.view">
         <field name="name">equipment.search</field>
         <field name="model">onecore.maintenance.equipment</field>
         <field name="arch" type="xml">
@@ -602,11 +602,11 @@
         </field>
     </record>
 
-    <record id="hr_equipment_action" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_action" model="ir.actions.act_window">
         <field name="name">Equipment</field>
         <field name="res_model">onecore.maintenance.equipment</field>
         <field name="view_mode">kanban,tree,form</field>
-        <field name="view_id" ref="hr_equipment_view_kanban"/>
+        <field name="view_id" ref="onecore_hr_equipment_view_kanban"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Add a new equipment
@@ -618,12 +618,12 @@
     </record>
 
     <!-- equiment: actions -->
-    <record id="hr_equipment_action_from_category_form" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_action_from_category_form" model="ir.actions.act_window">
         <field name="name">Equipment</field>
         <field name="res_model">onecore.maintenance.equipment</field>
         <field name="view_mode">kanban,tree,form</field>
-        <field name="search_view_id" ref="hr_equipment_view_search"/>
-        <field name="view_id" ref="hr_equipment_view_kanban"/>
+        <field name="search_view_id" ref="onecore_hr_equipment_view_search"/>
+        <field name="view_id" ref="onecore_hr_equipment_view_kanban"/>
         <field name="context">{
             'search_default_category_id': [active_id],
             'default_category_id': active_id,
@@ -639,20 +639,20 @@
     </record>
 
     <!-- equipment.category: views -->
-    <record id="hr_equipment_category_view_form" model="ir.ui.view">
+    <record id="onecore_hr_equipment_category_view_form" model="ir.ui.view">
         <field name="name">equipment.category.form</field>
         <field name="model">onecore.maintenance.equipment.category</field>
         <field name="arch" type="xml">
             <form string="Equipment Categories">
                 <sheet>
                 <div class="oe_button_box" name="button_box">
-                    <button name="%(hr_equipment_action_from_category_form)d"
+                    <button name="%(onecore_hr_equipment_action_from_category_form)d"
                         class="oe_stat_button"
                         icon="fa-cubes"
                         type="action">
                         <field string="Equipment" name="equipment_count" widget="statinfo"/>
                     </button>
-                    <button name="%(hr_equipment_request_action_link)d"
+                    <button name="%(onecore_hr_equipment_request_action_link)d"
                         type="action"
                         class="oe_stat_button"
                         icon="fa-wrench">
@@ -692,7 +692,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_category_view_tree" model="ir.ui.view">
+    <record id="onecore_hr_equipment_category_view_tree" model="ir.ui.view">
         <field name="name">equipment.category.tree</field>
         <field name="model">onecore.maintenance.equipment.category</field>
         <field name="arch" type="xml">
@@ -704,7 +704,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_category_view_search" model="ir.ui.view">
+    <record id="onecore_hr_equipment_category_view_search" model="ir.ui.view">
         <field name="name">equipment.category.search</field>
         <field name="model">onecore.maintenance.equipment.category</field>
         <field name="arch" type="xml">
@@ -717,7 +717,7 @@
         </field>
     </record>
 
-    <record id="view_maintenance_equipment_category_kanban" model="ir.ui.view">
+    <record id="onecore_view_maintenance_equipment_category_kanban" model="ir.ui.view">
         <field name="name">maintenance.equipment.category.kanban</field>
         <field name="model">onecore.maintenance.equipment.category</field>
         <field name="arch" type="xml">
@@ -751,11 +751,11 @@
     </record>
 
     <!-- equipment.category: actions -->
-    <record id="hr_equipment_category_action" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_category_action" model="ir.actions.act_window">
         <field name="name">Equipment Categories</field>
         <field name="res_model">onecore.maintenance.equipment.category</field>
         <field name="view_mode">tree,kanban,form</field>
-        <field name="view_id" ref="hr_equipment_category_view_tree"/>
+        <field name="view_id" ref="onecore_hr_equipment_category_view_tree"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Add a new equipment category
@@ -764,7 +764,7 @@
     </record>
 
     <!-- equipment.stage: views -->
-    <record id="hr_equipment_stage_view_search" model="ir.ui.view">
+    <record id="onecore_hr_equipment_stage_view_search" model="ir.ui.view">
         <field name="name">equipment.stage.search</field>
         <field name="model">onecore.maintenance.stage</field>
         <field name="arch" type="xml">
@@ -774,7 +774,7 @@
         </field>
     </record>
 
-    <record id="hr_equipment_stage_view_tree" model="ir.ui.view">
+    <record id="onecore_hr_equipment_stage_view_tree" model="ir.ui.view">
         <field name="name">equipment.stage.tree</field>
         <field name="model">onecore.maintenance.stage</field>
         <field name="arch" type="xml">
@@ -786,7 +786,7 @@
             </tree>
         </field>
     </record>
-    <record id="hr_equipment_stage_view_kanban" model="ir.ui.view">
+    <record id="onecore_hr_equipment_stage_view_kanban" model="ir.ui.view">
         <field name="name">equipment.stage.kanban</field>
         <field name="model">onecore.maintenance.stage</field>
         <field name="arch" type="xml">
@@ -805,7 +805,7 @@
     </record>
 
     <!-- equipment.stages: actions -->
-    <record id="hr_equipment_stage_action" model="ir.actions.act_window">
+    <record id="onecore_hr_equipment_stage_action" model="ir.actions.act_window">
         <field name="name">Stages</field>
         <field name="res_model">onecore.maintenance.stage</field>
         <field name="view_mode">tree,kanban,form</field>
@@ -817,7 +817,7 @@
     </record>
 
     <!-- maintenance.team: views -->
-    <record id="maintenance_team_view_form" model="ir.ui.view">
+    <record id="onecore_maintenance_team_view_form" model="ir.ui.view">
         <field name="name">maintenance.team.form</field>
         <field name="model">onecore.maintenance.team</field>
         <field name="arch" type="xml">
@@ -844,7 +844,7 @@
         </field>
     </record>
 
-    <record id="maintenance_team_view_tree" model="ir.ui.view">
+    <record id="onecore_maintenance_team_view_tree" model="ir.ui.view">
         <field name="name">maintenance.team.tree</field>
         <field name="model">onecore.maintenance.team</field>
         <field name="arch" type="xml">
@@ -856,7 +856,7 @@
         </field>
     </record>
 
-    <record id="maintenance_team_view_kanban" model="ir.ui.view">
+    <record id="onecore_maintenance_team_view_kanban" model="ir.ui.view">
         <field name="name">maintenance.team.kanban</field>
         <field name="model">onecore.maintenance.team</field>
         <field name="arch" type="xml">
@@ -874,11 +874,11 @@
         </field>
     </record>
 
-    <record id="maintenance_team_kanban" model="ir.ui.view">
+    <record id="onecore_maintenance_team_kanban" model="ir.ui.view">
         <field name="name">maintenance.team.kanban</field>
         <field name="model">onecore.maintenance.team</field>
         <field name="arch" type="xml">
-            <kanban class="o_kanban_dashboard o_maintenance_team_kanban" create="0">
+            <kanban class="o_kanban_dashboard o_onecore_maintenance_team_kanban" create="0">
                 <field name="name"/>
                 <field name="color"/>
                 <field name="todo_request_ids"/>
@@ -896,22 +896,22 @@
                                         <span>Requests</span>
                                     </h5>
                                     <div role="menuitem">
-                                        <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action">
+                                        <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action">
                                             All
                                         </a>
                                     </div>
                                     <div role="menuitem">
-                                        <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1}">
+                                        <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1}">
                                             To Do
                                         </a>
                                     </div>
                                     <div role="menuitem">
-                                        <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_progress': 1}">
+                                        <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_progress': 1}">
                                             In Progress
                                         </a>
                                     </div>
                                     <div role="menuitem">
-                                        <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_done': 1}">
+                                        <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_done': 1}">
                                             Done
                                         </a>
                                     </div>
@@ -921,7 +921,7 @@
                                         <span>Reporting</span>
                                     </h5>
                                     <div role="menuitem">
-                                        <a name="%(maintenance_request_action_reports)d" type="action" context="{'search_default_maintenance_team_id': id}">
+                                        <a name="%(onecore_maintenance_request_action_reports)d" type="action" context="{'search_default_maintenance_team_id': id}">
                                         Maintenance Requests
                                         </a>
                                     </div>
@@ -942,7 +942,7 @@
                             <div t-attf-class="o_kanban_card_header">
                                 <div class="o_kanban_card_header_title">
                                     <div class="o_primary">
-                                        <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action">
+                                        <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action">
                                             <field name="name"/>
                                         </a></div>
                                 </div>
@@ -950,31 +950,31 @@
                             <div class="container o_kanban_card_content">
                                 <div class="row">
                                     <div class="col-6 o_kanban_primary_left">
-                                        <button class="btn btn-primary" name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1}">
+                                        <button class="btn btn-primary" name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1}">
                                             <t t-esc="record.todo_request_count.value"/> To Do
                                         </button>
                                     </div>
                                     <div class="col-6 o_kanban_primary_right">
                                         <div t-if="record.todo_request_count_date.raw_value > 0">
-                                            <a name="%(hr_equipment_request_action_cal)d" type="action" context="{'search_default_todo': 1, 'search_default_maintenance_team_id': id}">
+                                            <a name="%(onecore_hr_equipment_request_action_cal)d" type="action" context="{'search_default_todo': 1, 'search_default_maintenance_team_id': id}">
                                                 <t t-esc="record.todo_request_count_date.value"/>
                                                 Scheduled
                                             </a>
                                         </div>
                                         <div t-if="record.todo_request_count_high_priority.raw_value > 0">
-                                            <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_high_priority': 1}">
+                                            <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_high_priority': 1}">
                                                 <t t-esc="record.todo_request_count_high_priority.value"/>
                                                 Top Priorities
                                             </a>
                                         </div>
                                         <div t-if="record.todo_request_count_block.raw_value > 0">
-                                            <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_kanban_state_block': 1}">
+                                            <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_kanban_state_block': 1}">
                                                 <t t-esc="record.todo_request_count_block.value"/>
                                                 Blocked
                                             </a>
                                         </div>
                                         <div t-if="record.todo_request_count_unscheduled.raw_value > 0">
-                                            <a name="%(hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1, 'search_default_unscheduled': 1}">
+                                            <a name="%(onecore_hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1, 'search_default_unscheduled': 1}">
                                                 <t t-esc="record.todo_request_count_unscheduled.value"/>
                                                 Unscheduled
                                             </a>
@@ -989,7 +989,7 @@
         </field>
     </record>
 
-    <record id="maintenance_team_view_search" model="ir.ui.view">
+    <record id="onecore_maintenance_team_view_search" model="ir.ui.view">
         <field name="name">maintenance.team.search</field>
         <field name="model">onecore.maintenance.team</field>
         <field name="arch" type="xml">
@@ -1005,10 +1005,10 @@
         <field name="name">Teams</field>
         <field name="res_model">onecore.maintenance.team</field>
         <field name="view_mode">tree,kanban,form</field>
-        <field name="search_view_id" ref="maintenance_team_view_search"/>
+        <field name="search_view_id" ref="onecore_maintenance_team_view_search"/>
         <field name="view_ids" eval="[(5, 0, 0),
-                (0, 0, {'view_mode': 'tree', 'view_id': ref('maintenance_team_view_tree')}),
-                (0, 0, {'view_mode': 'kanban', 'view_id': ref('maintenance_team_view_kanban')})]"/>
+                (0, 0, {'view_mode': 'tree', 'view_id': ref('onecore_maintenance_team_view_tree')}),
+                (0, 0, {'view_mode': 'kanban', 'view_id': ref('onecore_maintenance_team_view_kanban')})]"/>
         <field name="help" type="html">
           <p class="o_view_nocontent_smiling_face">
             Add a team in the maintenance request
@@ -1016,11 +1016,11 @@
         </field>
     </record>
 
-    <record id="maintenance_dashboard_action" model="ir.actions.act_window">
+    <record id="onecore_maintenance_dashboard_action" model="ir.actions.act_window">
         <field name="name">Maintenance Teams</field>
         <field name="res_model">onecore.maintenance.team</field>
         <field name="view_mode">kanban,form</field>
-        <field name="view_id" ref="maintenance_team_kanban"/>
+        <field name="view_id" ref="onecore_maintenance_team_kanban"/>
         <field name="help" type="html">
           <p class="o_view_nocontent_smiling_face">
             Add a new stage in the maintenance request
@@ -1031,108 +1031,108 @@
 
     <!-- Menu items hierachy -->
     <menuitem
-        id="menu_maintenance_title"
+        id="onecore_menu_maintenance_title"
         name="Maintenance"
         web_icon="maintenance,static/description/icon.png"
         sequence="160"/>
 
     <menuitem
-        id="menu_m_dashboard"
+        id="onecore_menu_m_dashboard"
         name="Dashboard"
-        parent="menu_maintenance_title"
+        parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
-        action="maintenance_dashboard_action"
+        action="onecore_maintenance_dashboard_action"
         sequence="0"/>
 
     <menuitem
-        id="menu_m_request"
+        id="onecore_menu_m_request"
         name="Maintenance"
-        parent="menu_maintenance_title"
+        parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
         sequence="1"/>
 
     <menuitem
-        id="menu_m_request_form"
+        id="onecore_menu_m_request_form"
         name="Maintenance Requests"
-        parent="menu_m_request"
-        action="hr_equipment_request_action"
+        parent="onecore_menu_m_request"
+        action="onecore_hr_equipment_request_action"
         groups="group_equipment_manager,base.group_user"
         sequence="1"/>
 
     <menuitem
-        id="menu_m_request_calendar"
+        id="onecore_menu_m_request_calendar"
         name="Maintenance Calendar"
-        parent="menu_m_request"
-        action="hr_equipment_request_action_cal"
+        parent="onecore_menu_m_request"
+        action="onecore_hr_equipment_request_action_cal"
         groups="group_equipment_manager,base.group_user"
         sequence="2"/>
 
     <menuitem
-        id="menu_equipment_form"
+        id="onecore_menu_equipment_form"
         name="Equipment"
-        parent="menu_maintenance_title"
-        action="hr_equipment_action"
+        parent="onecore_menu_maintenance_title"
+        action="onecore_hr_equipment_action"
         groups="group_equipment_manager,base.group_user"
         sequence="2"/>
 
     <menuitem
-        id="menu_m_reports"
+        id="onecore_menu_m_reports"
         name="Reporting"
-        parent="menu_maintenance_title"
+        parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
         sequence="3"/>
 
     <menuitem
-        id="menu_m_reports_oee"
+        id="onecore_menu_m_reports_oee"
         name="Overall Equipment Effectiveness (OEE)"
-        parent="menu_m_reports"
+        parent="onecore_menu_m_reports"
         groups="group_equipment_manager,base.group_user"
         sequence="1"/>
 
     <menuitem
-        id="menu_m_reports_losses"
+        id="onecore_menu_m_reports_losses"
         name="Losses Analysis"
-        parent="menu_m_reports"
+        parent="onecore_menu_m_reports"
         groups="group_equipment_manager,base.group_user"
         sequence="2"/>
 
     <menuitem
-        id="maintenance_reporting"
+        id="onecore_maintenance_reporting"
         name="Reporting"
-        parent="menu_maintenance_title"
+        parent="onecore_menu_maintenance_title"
         sequence="20"/>
     <menuitem
         id="maintenance_request_reporting"
-        action="maintenance_request_action_reports"
-        parent="maintenance_reporting"/>
+        action="onecore_maintenance_request_action_reports"
+        parent="onecore_maintenance_reporting"/>
 
     <menuitem
-        id="menu_maintenance_configuration"
+        id="onecore_menu_maintenance_configuration"
         name="Configuration"
-        parent="menu_maintenance_title"
+        parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager"
         sequence="100"/>
 
     <menuitem
-        id="menu_maintenance_teams"
+        id="onecore_menu_maintenance_teams"
         name="Maintenance Teams"
-        parent="menu_maintenance_configuration"
+        parent="onecore_menu_maintenance_configuration"
         action="maintenance_team_action_settings"
         groups="group_equipment_manager"
         sequence="1"/>
 
     <menuitem
-        id="menu_maintenance_cat"
+        id="onecore_menu_maintenance_cat"
         name="Equipment Categories"
-        parent="menu_maintenance_configuration"
-        action="hr_equipment_category_action"
+        parent="onecore_menu_maintenance_configuration"
+        action="onecore_hr_equipment_category_action"
         sequence="2"/>
 
     <menuitem
-        id="menu_maintenance_stage_configuration"
+        id="onecore_menu_maintenance_stage_configuration"
         name="Maintenance Stages"
-        parent="menu_maintenance_configuration"
-        action="hr_equipment_stage_action"
+        parent="onecore_menu_maintenance_configuration"
+        action="onecore_hr_equipment_stage_action"
         groups="base.group_no_one"
         sequence="3" />
 </odoo>
