@@ -21,14 +21,14 @@
         </record>
 
         <record id="onecore_action_maintenance_configuration" model="ir.actions.act_window">
-            <field name="name">Settings</field>
+            <field name="name">Allmänna Inställningar</field>
             <field name="res_model">res.config.settings</field>
             <field name="view_mode">form</field>
             <field name="target">inline</field>
             <field name="context">{'module' : 'onecore_maintenance', 'bin_size': False}</field>
         </record>
 
-        <menuitem id="onecore_menu_maintenance_config" name="Settings" parent="onecore_menu_maintenance_configuration"
+        <menuitem id="onecore_menu_maintenance_config" name="Allmänna Inställningar" parent="onecore_menu_maintenance_configuration"
             sequence="0" action="onecore_action_maintenance_configuration" groups="base.group_system"/>
 
     </data>
