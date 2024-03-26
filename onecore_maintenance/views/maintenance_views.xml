@@ -95,8 +95,8 @@
           <group>
             <group>
               <field name="owner_user_id" string="Requested By" invisible="1"/>
-              <field name="rental_property_id" string="Hyresobjekt" groups="!maintenance.external_contractor"/>
-              <field name="rental_property_id" string="Hyresobjekt" readonly="1" groups="maintenance.external_contractor"/>
+              <field name="rental_property_id" string="Hyresobjekt" groups="maintenance.group_equipment_manager"/>
+              <field name="rental_property_id" string="Hyresobjekt" readonly="1" groups="!maintenance.group_equipment_manager"/>
               <field name="address" readonly="1" string="Adress"/>
               <field name="apartment_type" readonly="1" string="Typ"/>
               <field name="bra" readonly="1" string="Storlek kvm"/>
