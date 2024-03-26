@@ -285,7 +285,7 @@
 
     <!-- equiment.request: actions -->
     <record id="onecore_hr_equipment_request_action" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
         <field name="view_id" ref="onecore_hr_equipment_request_view_kanban"/>
@@ -303,7 +303,7 @@
     </record>
 
     <record id="onecore_hr_equipment_request_action_link" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
         <field name="search_view_id" ref="onecore_hr_equipment_request_view_search"/>
@@ -323,7 +323,7 @@
     </record>
 
     <record id="onecore_hr_equipment_request_action_from_equipment" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="binding_model_id" ref="onecore_maintenance.model_onecore_maintenance_equipment"/>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
@@ -342,7 +342,7 @@
     </record>
 
     <record id="onecore_hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">kanban,tree,form,pivot,graph,calendar,activity</field>
         <field name="context">{
@@ -361,7 +361,7 @@
     </record>
 
     <record id="onecore_hr_equipment_request_action_cal" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">calendar,kanban,tree,form,pivot,graph,activity</field>
         <field name="view_id" ref="onecore_hr_equipment_view_calendar"/>
@@ -379,7 +379,7 @@
     </record>
 
     <record id="onecore_maintenance_request_action_reports" model="ir.actions.act_window">
-        <field name="name">Maintenance Requests</field>
+        <field name="name">Ärendehantering</field>
         <field name="res_model">onecore.maintenance.request</field>
         <field name="view_mode">graph,pivot,kanban,tree,form,calendar,activity</field>
         <field name="context">{
@@ -603,7 +603,7 @@
     </record>
 
     <record id="onecore_hr_equipment_action" model="ir.actions.act_window">
-        <field name="name">Equipment</field>
+        <field name="name">Komponenter</field>
         <field name="res_model">onecore.maintenance.equipment</field>
         <field name="view_mode">kanban,tree,form</field>
         <field name="view_id" ref="onecore_hr_equipment_view_kanban"/>
@@ -619,7 +619,7 @@
 
     <!-- equiment: actions -->
     <record id="onecore_hr_equipment_action_from_category_form" model="ir.actions.act_window">
-        <field name="name">Equipment</field>
+        <field name="name">Komponenter</field>
         <field name="res_model">onecore.maintenance.equipment</field>
         <field name="view_mode">kanban,tree,form</field>
         <field name="search_view_id" ref="onecore_hr_equipment_view_search"/>
@@ -922,7 +922,7 @@
                                     </h5>
                                     <div role="menuitem">
                                         <a name="%(onecore_maintenance_request_action_reports)d" type="action" context="{'search_default_maintenance_team_id': id}">
-                                        Maintenance Requests
+                                        Ärendehantering
                                         </a>
                                     </div>
                                 </div>
@@ -1017,7 +1017,7 @@
     </record>
 
     <record id="onecore_maintenance_dashboard_action" model="ir.actions.act_window">
-        <field name="name">Maintenance Teams</field>
+        <field name="name">Resursgrupper</field>
         <field name="res_model">onecore.maintenance.team</field>
         <field name="view_mode">kanban,form</field>
         <field name="view_id" ref="onecore_maintenance_team_kanban"/>
@@ -1032,13 +1032,13 @@
     <!-- Menu items hierachy -->
     <menuitem
         id="onecore_menu_maintenance_title"
-        name="Maintenance"
+        name="Ärendehantering"
         web_icon="maintenance,static/description/icon.png"
         sequence="160"/>
 
     <menuitem
         id="onecore_menu_m_dashboard"
-        name="Dashboard"
+        name="Översikt"
         parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
         action="onecore_maintenance_dashboard_action"
@@ -1046,14 +1046,14 @@
 
     <menuitem
         id="onecore_menu_m_request"
-        name="Maintenance"
+        name="Ärenden"
         parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
         sequence="1"/>
 
     <menuitem
         id="onecore_menu_m_request_form"
-        name="Maintenance Requests"
+        name="Alla Ärenden"
         parent="onecore_menu_m_request"
         action="onecore_hr_equipment_request_action"
         groups="group_equipment_manager,base.group_user"
@@ -1061,7 +1061,7 @@
 
     <menuitem
         id="onecore_menu_m_request_calendar"
-        name="Maintenance Calendar"
+        name="Kalendervy ärenden"
         parent="onecore_menu_m_request"
         action="onecore_hr_equipment_request_action_cal"
         groups="group_equipment_manager,base.group_user"
@@ -1069,7 +1069,7 @@
 
     <menuitem
         id="onecore_menu_equipment_form"
-        name="Equipment"
+        name="Komponenter"
         parent="onecore_menu_maintenance_title"
         action="onecore_hr_equipment_action"
         groups="group_equipment_manager,base.group_user"
@@ -1077,7 +1077,7 @@
 
     <menuitem
         id="onecore_menu_m_reports"
-        name="Reporting"
+        name="Statistik"
         parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager,base.group_user"
         sequence="3"/>
@@ -1098,7 +1098,7 @@
 
     <menuitem
         id="onecore_maintenance_reporting"
-        name="Reporting"
+        name="Statistik"
         parent="onecore_menu_maintenance_title"
         sequence="20"/>
     <menuitem
@@ -1108,14 +1108,14 @@
 
     <menuitem
         id="onecore_menu_maintenance_configuration"
-        name="Configuration"
+        name="Inställningar"
         parent="onecore_menu_maintenance_title"
         groups="group_equipment_manager"
         sequence="100"/>
 
     <menuitem
         id="onecore_menu_maintenance_teams"
-        name="Maintenance Teams"
+        name="Resursgrupper"
         parent="onecore_menu_maintenance_configuration"
         action="maintenance_team_action_settings"
         groups="group_equipment_manager"
@@ -1123,14 +1123,14 @@
 
     <menuitem
         id="onecore_menu_maintenance_cat"
-        name="Equipment Categories"
+        name="Komponentkategorier"
         parent="onecore_menu_maintenance_configuration"
         action="onecore_hr_equipment_category_action"
         sequence="2"/>
 
     <menuitem
         id="onecore_menu_maintenance_stage_configuration"
-        name="Maintenance Stages"
+        name="Ärendeprocess"
         parent="onecore_menu_maintenance_configuration"
         action="onecore_hr_equipment_stage_action"
         groups="base.group_no_one"
