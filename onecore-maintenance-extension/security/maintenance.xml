@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data>
+    <record id="external_contractor" model="res.groups">
+      <field name="name">Maintenance external contractor</field>
+      <field name="category_id" ref="base.module_category_manufacturing_maintenance"/>
+      <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+      <field name="users" eval="[(4, ref('base.user_root'))]"/>
+      <field name="comment">The user will be able to manage requests but not change all fields.</field>
+    </record>
+  </data>
+</odoo>
