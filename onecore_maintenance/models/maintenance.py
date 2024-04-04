@@ -2,6 +2,7 @@
 
 import ast
 from dateutil.relativedelta import relativedelta
+from urllib.parse import quote
 
 from odoo import api, fields, models, SUPERUSER_ID, _
 from odoo.exceptions import UserError
@@ -211,20 +212,124 @@ class OnecoreMaintenanceRequest(models.Model):
     _order = "id desc"
     _check_company_auto = True
 
+    search_by_number = fields.Char('Search')
+    search_type = fields.Selection([
+        ('leaseId', 'Kontraktsnummer'),
+        ('propertyId', 'Property ID'),
+        ('pnr', 'Personnummer (12 siffror)'),
+        ('phoneNumber', 'Telefonnummer (10 siffror)'),
+    ], string='Search Type', default='leaseId', required=True)
 
-     #Mimer added fields
-    rental_property_id = fields.Char('Rental Property ID')
-    address = fields.Char('Address', compute='_compute_address', readonly=True)
-    estate_code = fields.Char('Estate Code', compute='_compute_address', readonly=True)
-    estate_caption = fields.Char('Estate Caption', compute='_compute_address', readonly=True)
-    apartment_type = fields.Char('Type', compute='_compute_address', readonly=True)
-    bra = fields.Char('Bra', compute='_compute_address', readonly=True)
-    block_code = fields.Char('Block Code', compute='_compute_address', readonly=True)
+    rental_property_id = fields.Many2one('onecore.maintenance.rental.property.option', compute='_compute_search', string='Property Id', store=True, readonly=False)
+    address = fields.Char('Address', compute='_compute_rental_property', readonly=True)
+    estate_code = fields.Char('Estate Code', compute='_compute_rental_property', readonly=True)
+    estate_caption = fields.Char('Estate Caption', compute='_compute_rental_property', readonly=True)
+    apartment_type = fields.Char('Type', compute='_compute_rental_property', readonly=True)
+    bra = fields.Char('Bra', compute='_compute_rental_property', readonly=True)
+    block_code = fields.Char('Block Code', compute='_compute_rental_property', readonly=True)
 
+    lease = fields.Many2one('onecore.maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
+    lease_type = fields.Char('Lease Type', compute='_compute_lease', readonly=True)
+    contract_date = fields.Date('Contract Date', compute='_compute_lease', readonly=True)
+    lease_start_date = fields.Date('Lease Start Date', compute='_compute_lease', readonly=True)
+    lease_end_date = fields.Date('Lease End Date', compute='_compute_lease', readonly=True)
 
-#Mimer added API-call to fetch apartments, the api call to apps.mimer.nu is only to be used for testing as it does not fetch data from xpand.
+    tenant = fields.Many2one('onecore.maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
+    national_registration_number = fields.Char('National Registration Number', compute='_compute_tenant', readonly=True)
+    phone_number = fields.Char('Phone Number', compute='_compute_tenant', readonly=True)
+    email_address = fields.Char('Email Address', compute='_compute_tenant', readonly=True)
+    is_tenant = fields.Boolean('Is Tenant', compute='_compute_tenant', readonly=True)
+
+    def fetch_property_data(self, search_by_number, search_type):
+        base_url = self.env['ir.config_parameter'].get_param(
+           'core_endpoint', '')
+        bearer_token = self.env['ir.config_parameter'].get_param(
+           'bearer_token', '')
+        headers = {"Authorization": f"Bearer {bearer_token}"}
+        params = {'typeOfNumber': search_type}
+        url = f"{base_url}{quote(search_by_number, safe='')}"
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json().get('data', {})
+        except requests.HTTPError as http_err:
+            _logger.error(f"HTTP error occurred: {http_err}")
+        except Exception as err:
+            _logger.error(f"An error occurred: {err}")
+        return None
+
+    def update_form_options(self, search_by_number, search_type):
+        _logger.info("Updating rental property options")
+        data = self.fetch_property_data(search_by_number, search_type)
+        _logger.info(f"Data: {data}")
+        if data:
+            for property in data:
+                _logger.info(f"Creating rental property option: {property}")
+                rental_property_option = self.env['onecore.maintenance.rental.property.option'].create({
+                    'user_id': self.env.user.id,
+                    'name': property['id'],
+                    'property_address': property['address'],
+                    'property_type': property['type'],
+                    'property_size': property['size'],
+                    'property_estate_code': property['estateCode'],
+                    'property_estate_name': property['estateName'],
+                    'property_block_code': property['blockCode'],
+                })
+                for lease in property['leases']:
+                    _logger.info(f"Creating lease: {lease}")
+                    lease_option = self.env['onecore.maintenance.lease.option'].create({
+                        'user_id': self.env.user.id,
+                        'name': lease['leaseId'],
+                        'lease_number': lease['leaseNumber'],
+                        'rental_property_option_id': rental_property_option.id,
+                        'lease_type': lease['type'],
+                        'lease_start_date': lease['leaseStartDate'],
+                        'lease_end_date': lease['leaseEndDate'],
+                        'contract_date': lease['contractDate'],
+                        'approval_date': lease['approvalDate'],
+                        # Add other fields as necessary
+                    })
+                    for tenant in lease['tenants']:
+                        _logger.info(f"Creating tenant: {tenant}")
+                        # Find the main phone number
+                        phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
+                        self.env['onecore.maintenance.tenant.option'].create({
+                            'user_id': self.env.user.id,
+                            'name': tenant['firstName'] + " " + tenant['lastName'],
+                            'contact_code': tenant['contactCode'],
+                            'contact_key': tenant['contactKey'],
+                            'national_registration_number': tenant['nationalRegistrationNumber'],
+                            'email_address': tenant['emailAddress'],
+                            'phone_number': phone_number,
+                            'is_tenant': tenant['isTenant'],
+                            'tenant_option_id': lease_option.id,
+                        })
+        else:
+            _logger.info("No data found in response.")
+
+    @api.depends('search_by_number', 'search_type')
+    def _compute_search(self):
+        # Clear existing records for this user
+        self.env['onecore.maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['onecore.maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['onecore.maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        for record in self:
+            if not record.search_by_number:
+                record.search_by_number = False
+                continue
+            record.update_form_options(record.search_by_number, record.search_type)
+            property_records = self.env['onecore.maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
+            if property_records:
+                record.rental_property_id = property_records[0].id
+            lease_records = self.env['onecore.maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
+            if lease_records:
+                record.lease = lease_records[0].id
+            tenant_records = self.env['onecore.maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
+            if tenant_records:
+                record.tenant = tenant_records[0].id
+
     @api.depends('rental_property_id')
-    def _compute_address(self):
+    def _compute_rental_property(self):
         for record in self:
             record.address = None
             record.estate_code = None
@@ -234,29 +339,46 @@ class OnecoreMaintenanceRequest(models.Model):
             record.block_code = None
 
             if record.rental_property_id:
-                url = "https://apps.mimer.nu/api/1.1/obj/apartment"
-                constraints = [{
-                    "key": "rentalPropertyId",
-                    "constraint_type": "equals",
-                    "value": record.rental_property_id
-                }]
-                try:
-                    response = requests.get(url, params={'constraints': json.dumps(constraints)})
-                    if response.status_code == 200:
-                        data = response.json().get('response', {}).get('results', [])
-                        if data:
-                            record.address = data[0].get('adress')
-                            record.estate_code = data[0].get('estateCode')
-                            record.estate_caption = data[0].get('estateCaption')
-                            record.apartment_type = data[0].get('type')
-                            record.bra = data[0].get('bra')
-                            record.block_code = data[0].get('blockCode')
-                        else:
-                            _logger.info("No data found in response.")
-                    else:
-                        _logger.error(f"Error fetching data: {response.status_code}")
-                except Exception as e:
-                    _logger.error(f"Error fetching address: {str(e)}")
+                property = self.env['onecore.maintenance.rental.property.option'].search([('name', '=', record.rental_property_id.name)], limit=1)
+                if property:
+                    record.address = property.property_address
+                    record.estate_code = property.property_estate_code
+                    record.estate_caption = property.property_estate_name
+                    record.apartment_type = property.property_type
+                    record.bra = property.property_size
+                    record.block_code = property.property_block_code
+
+    @api.depends('lease')
+    def _compute_lease(self):
+        for record in self:
+            record.lease_type = None
+            record.contract_date = None
+            record.lease_start_date = None
+            record.lease_end_date = None
+
+            if record.lease:
+                lease = self.env['onecore.maintenance.lease.option'].search([('name', '=', record.lease.name)], limit=1)
+                if lease:
+                    record.lease_type = lease.lease_type
+                    record.contract_date = lease.contract_date
+                    record.lease_start_date = lease.lease_start_date
+                    record.lease_end_date = lease.lease_end_date
+
+    @api.depends('tenant')
+    def _compute_tenant(self):
+        for record in self:
+            record.national_registration_number = None
+            record.phone_number = None
+            record.email_address = None
+            record.is_tenant = None
+
+            if record.tenant:
+                tenant = self.env['onecore.maintenance.tenant.option'].search([('name', '=', record.tenant.name)], limit=1)
+                if tenant:
+                    record.national_registration_number = tenant.national_registration_number
+                    record.phone_number = tenant.phone_number
+                    record.email_address = tenant.email_address
+                    record.is_tenant = tenant.is_tenant
 
     @api.returns('self')
     def _default_stage(self):
@@ -578,3 +700,53 @@ class OnecoreMaintenanceTeam(models.Model):
     def _compute_equipment(self):
         for team in self:
             team.equipment_count = len(team.equipment_ids)
+
+class OnecoreMaintenanceRentalPropertyOption(models.Model):
+    _name = 'onecore.maintenance.rental.property.option'
+    _description = 'ONECore Rental Property Option'
+
+    user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
+    name = fields.Char('name', required=True)
+    property_address = fields.Char('Address', required=True)
+    property_type = fields.Char('Type', required=True)
+    property_size = fields.Char('Size', required=True)
+    property_estate_code = fields.Char('Estate Code', required=True)
+    property_estate_name = fields.Char('Estate Name', required=True)
+    property_block_code = fields.Char('Block Code', required=True)
+    lease_ids = fields.One2many('onecore.maintenance.lease.option', 'rental_property_option_id', string='Leases')
+
+class OnecoreMaintenanceLeaseOption(models.Model):
+    _name = 'onecore.maintenance.lease.option'
+    _description = 'ONECore Lease Option'
+
+    user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
+    name = fields.Char('name', required=True)
+    lease_number = fields.Char('Lease Number', required=True)
+    rental_property_option_id = fields.Many2one('onecore.maintenance.rental.property.option', string='Rental Property Option')
+    lease_type = fields.Char('Type', required=True)
+    lease_start_date = fields.Date('Lease Start Date', required=True)
+    lease_end_date = fields.Date('Lease End Date')
+    tenants = fields.One2many('onecore.maintenance.tenant.option', 'tenant_option_id', string='Tenants')
+    notice_given_by = fields.Char('Notice Given By')
+    notice_date = fields.Date('Notice Date')
+    notice_time_tenant = fields.Integer('Notice Time Tenant')
+    preferred_move_out_date = fields.Date('Preferred Move Out Date')
+    termination_date = fields.Date('Termination Date')
+    contract_date = fields.Date('Contract Date', required=True)
+    last_debit_date = fields.Date('Last Debit Date')
+    approval_date = fields.Date('Approval Date', required=True)
+
+class OnecoreMaintenanceTenantOption(models.Model):
+    _name = 'onecore.maintenance.tenant.option'
+    _description = 'ONECore Tenant Option'
+
+    user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
+    name = fields.Char('name', required=True)
+    contact_code = fields.Char('Contact Code', required=True)
+    contact_key = fields.Char('Contact Key', required=True)
+    national_registration_number = fields.Char('National Registration Number', required=True)
+    phone_number = fields.Char('Phone Number', required=True)
+    email_address = fields.Char('Email Address', required=True)
+    is_tenant = fields.Boolean('Is Tenant', default=True)
+    tenant_option_id = fields.Many2one('onecore.maintenance.lease.option', string='Lease Option')
+

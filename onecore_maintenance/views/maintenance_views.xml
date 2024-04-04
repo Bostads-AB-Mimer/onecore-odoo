@@ -69,83 +69,95 @@
     </field>
   </record>
 
-  <record id="onecore_hr_equipment_request_view_form" model="ir.ui.view">
-    <field name="name">equipment.request.form</field>
-    <field name="model">onecore.maintenance.request</field>
-    <field name="arch" type="xml">
-      <form string="Maintenance Request">
-        <field name="company_id" invisible="1"/>
-        <field name="category_id" invisible="1"/>
-        <header>
-          <button string="Cancel" name="archive_equipment_request" type="object" invisible="archive"/>
-          <button string="Reopen Request" name="reset_equipment_request" type="object" invisible="not archive"/>
-          <field name="stage_id" widget="statusbar" options="{'clickable': '1'}" invisible="archive"/>
-        </header>
-        <sheet>
-          <div invisible="not archive">
-            <span class="badge text-bg-warning float-end">Canceled</span>
-          </div>
-          <field name="kanban_state" widget="state_selection"/>
-          <div class="oe_title">
-            <label for="name" string="Rubrik"/>
-            <h1>
-              <field name="name" placeholder="Exempel, stopp i avlopp"/>
-            </h1>
-          </div>
-          <group>
-            <group>
-              <field name="owner_user_id" string="Requested By" invisible="1"/>
-              <field name="rental_property_id" string="Hyresobjekt" groups="maintenance.group_equipment_manager"/>
-              <field name="rental_property_id" string="Hyresobjekt" readonly="1" groups="!maintenance.group_equipment_manager"/>
-              <field name="address" readonly="1" string="Adress"/>
-              <field name="apartment_type" readonly="1" string="Typ"/>
-              <field name="bra" readonly="1" string="Storlek kvm"/>
-              <field name="estate_code" readonly="1" string="Fastighetsnr"/>
-              <field name="estate_caption" readonly="1" string="Fastighetsnamn"/>
-              <field name="block_code" readonly="1" string="Byggnad"/>
-              <field name="done" invisible="1"/>
-              <field name="close_date" readonly="True" invisible="not done"/>
-              <field name="archive" invisible="1"/>
-            </group>
-            <group>
-              <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" string="Leverantör"/>
-              <field name="user_id" string="Utförare"/>
-              <field name="schedule_date" string="Bokad tid"/>
-              <label for="duration" string="Arbetstid"/>
-              <div style="display:flex;align-items:center;">
-                <field name="duration" widget="float_time" class="oe_inline"/>
-                <span class="ml8">timmar</span>
-              </div>
-              <field name="priority" widget="priority" string="Prioritet"/>
-              <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company"/>
-            </group>
-
-
-
-
-          </group>
-          <notebook>
-            <page string="Noteringar">
-              <field name='description' placeholder="Beskrivning"/>
-            </page>
-            <page string="Bilagor">
-              <group col="1">
-                <field name="instruction_type" widget="radio" nolabel="1"/>
-                <field name="instruction_pdf" help="Upload your PDF file." widget="pdf_viewer" invisible="instruction_type != 'pdf'" required="instruction_type == 'pdf'" nolabel="1"/>
-                <field name="instruction_google_slide" placeholder="Google Slide Link" widget="embed_viewer" invisible="instruction_type != 'google_slide'" required="instruction_type == 'google_slide'" nolabel="1"/>
-                <field name="instruction_text" placeholder="Övriga instruktioner" invisible="instruction_type != 'text'" nolabel="1"/>
-              </group>
-            </page>
-          </notebook>
-        </sheet>
-        <div class="oe_chatter">
-          <field name="message_follower_ids"/>
-          <field name="activity_ids"/>
-          <field name="message_ids"/>
-        </div>
-      </form>
-    </field>
-  </record>
+    <record id="onecore_hr_equipment_request_view_form" model="ir.ui.view">
+        <field name="name">equipment.request.form</field>
+        <field name="model">onecore.maintenance.request</field>
+        <field name="arch" type="xml">
+            <form string="Maintenance Request">
+                <field name="company_id" invisible="1"/>
+                <field name="category_id" invisible="1"/>
+                <header>
+                    <button string="Cancel" name="archive_equipment_request" type="object" invisible="archive"/>
+                    <button string="Reopen Request" name="reset_equipment_request" type="object" invisible="not archive"/>
+                    <field name="stage_id" widget="statusbar" options="{'clickable': '1'}" invisible="archive"/>
+                </header>
+                <sheet>
+                    <div invisible="not archive">
+                        <span class="badge text-bg-warning float-end">Canceled</span>
+                    </div>
+                    <field name="kanban_state" widget="state_selection"/>
+                    <div class="oe_title">
+                        <label for="name" string="Rubrik"/>
+                        <h1>
+                            <field name="name" placeholder="Exempel, stopp i avlopp"/>
+                        </h1>
+                    </div>
+                    <div class="d-flex flex-nowrap align-items-center mb-4 border rounded">
+                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search" placeholder="Enter a Property Id, national registration number or phone number"/>
+                        <field class="w-25 my-0 p-2 border-start bg-light" name="search_type"/>
+                    </div>
+                    <group class="d-flex flex-row">
+                        <group class="w-auto">
+                            <field name="owner_user_id" string="Requested By" invisible="1"/>
+                            <field name="rental_property_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" groups="maintenance.group_equipment_manager"/>
+                            <field name="rental_property_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" groups="!maintenance.group_equipment_manager"/>
+                            <field name="address" readonly="1" string="Adress"/>
+                            <field name="apartment_type" readonly="1" string="Typ"/>
+                            <field name="bra" readonly="1" string="Storlek kvm"/>
+                            <field name="estate_code" readonly="1" string="Fastighetsnr"/>
+                            <field name="estate_caption" readonly="1" string="Fastighetsnamn"/>
+                            <field name="block_code" readonly="1" string="Byggnad"/>
+                            <field name="done" invisible="1"/>
+                            <field name="close_date" readonly="True" invisible="not done"/>
+                            <field name="archive" invisible="1"/>
+                        </group>
+                        <group class="w-auto">
+                            <field name="lease" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"/>
+                            <field name="lease_type" string="Kontraktstyp"/>
+                            <field name="contract_date" string="Kontraktsdatum"/>
+                            <field name="lease_start_date" string="Startdatum"/>
+                            <field name="lease_end_date" string="Slutdatum"/>
+                            <field name="tenant" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"/>
+                            <field name="national_registration_number" string="Personnummer"/>
+                            <field name="phone_number" string="Telefon"/>
+                            <field name="email_address" string="E-post"/>
+                            <field name="is_tenant" string="Hyresgäst"/>
+                        </group>
+                        <group class="w-auto">
+                            <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" string="Leverantör"/>
+                            <field name="user_id" string="Utförare"/>
+                            <field name="schedule_date" string="Bokad tid"/>
+                            <label for="duration" string="Arbetstid"/>
+                            <div style="display:flex;align-items:center;">
+                                <field name="duration" widget="float_time" class="oe_inline"/>
+                                <span class="ml8">timmar</span>
+                            </div>
+                            <field name="priority" widget="priority" string="Prioritet"/>
+                            <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Noteringar">
+                            <field name='description' placeholder="Beskrivning"/>
+                        </page>
+                        <page string="Bilagor">
+                            <group col="1">
+                                <field name="instruction_type" widget="radio" nolabel="1"/>
+                                <field name="instruction_pdf" help="Upload your PDF file." widget="pdf_viewer" invisible="instruction_type != 'pdf'" required="instruction_type == 'pdf'" nolabel="1"/>
+                                <field name="instruction_google_slide" placeholder="Google Slide Link" widget="embed_viewer" invisible="instruction_type != 'google_slide'" required="instruction_type == 'google_slide'" nolabel="1"/>
+                                <field name="instruction_text" placeholder="Övriga instruktioner" invisible="instruction_type != 'text'" nolabel="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
 
   <record id="onecore_hr_equipment_request_view_kanban" model="ir.ui.view">
     <field name="name">equipment.request.kanban</field>
