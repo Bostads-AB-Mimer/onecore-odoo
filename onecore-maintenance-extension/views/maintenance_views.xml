@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="hr_equipment_request_view_form_extension" model="ir.ui.view">
+            <field name="name">equipment.request.form</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form"/>
+            <field name="arch" type="xml">
+                <!-- Add a div before the first group tag -->
+                <xpath expr="//group[1]" position="before">
+                    <div class="d-flex flex-nowrap align-items-center mb-4 border rounded">
+                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search" placeholder="Enter a Property Id, national registration number or phone number"/>
+                        <field class="w-25 my-0 p-2 border-start bg-light" name="search_type"/>
+                    </div>
+                </xpath>
+                <xpath expr="//group[1]" position="attributes">
+                    <attribute name="class">d-flex flex-row</attribute>
+                </xpath>
+                <xpath expr="//group[1]/group[1]" position="attributes">
+                    <attribute name="class">w-auto</attribute>
+                </xpath>
+                <!-- Removes existing fields from first group -->
+                <xpath expr="//group[1]/group[1]/field[@name='equipment_id']" position="replace"/>
+                <xpath expr="//group[1]/group[1]/field[@name='category_id']" position="replace"/>
+                <xpath expr="//group[1]/group[1]/field[@name='request_date']" position="replace"/>
+                <!-- Add new fields to first group -->
+                <xpath expr="//group[1]/group[1]/field[@name='owner_user_id']" position="after">
+                    <field name="rental_property_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" groups="maintenance.group_equipment_manager"/>
+                    <field name="rental_property_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" groups="!maintenance.group_equipment_manager"/>
+                    <field name="address" readonly="1" string="Adress"/>
+                    <field name="apartment_type" readonly="1" string="Typ"/>
+                    <field name="bra" readonly="1" string="Storlek kvm"/>
+                    <field name="estate_code" readonly="1" string="Fastighetsnr"/>
+                    <field name="estate_caption" readonly="1" string="Fastighetsnamn"/>
+                    <field name="block_code" readonly="1" string="Byggnad"/>
+                </xpath>
+                <!-- Add contract and tenant group -->
+                <xpath expr="//group[1]/group[1]" position="after">
+                    <group class="w-auto">
+                        <field name="lease" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"/>
+                        <field name="lease_type" string="Kontraktstyp"/>
+                        <field name="contract_date" string="Kontraktsdatum"/>
+                        <field name="lease_start_date" string="Startdatum"/>
+                        <field name="lease_end_date" string="Slutdatum"/>
+                        <field name="tenant" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"/>
+                        <field name="national_registration_number" string="Personnummer"/>
+                        <field name="phone_number" string="Telefon"/>
+                        <field name="email_address" string="E-post"/>
+                        <field name="is_tenant" string="Hyresgäst"/>
+                    </group>
+                </xpath>
+                <xpath expr="//group[1]/group[3]" position="attributes">
+                    <attribute name="class">w-auto</attribute>
+                </xpath>
+            </field>
+        </record>
+        <record id="hr_equipment_request_view_kanban_extension" model="ir.ui.view">
+            <field name="name">equipment.request.kanban</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='archive']" position="after">
+                    <field name="rental_property_id" />
+                    <field name="address" readonly="1"/>
+                    <field name="apartment_type" readonly="1"/>
+                </xpath>
+                <!-- Remove existing fields regarding equipment -->
+                <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace"/>
+                <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace"/>
+                <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
+                    <span name="rental_property_id" t-if="record.rental_property_id.raw_value">Hyresobjekt: <field name="rental_property_id"/><br/></span>
+                    <span name="address" t-if="record.address.raw_value">Adress: <field name="address"/><br/></span>
+                    <span name="apartment_type" t-if="record.apartment_type.raw_value">Typ: <field name="apartment_type"/><br/></span>
+                    <span name="user_id" t-if="record.user_id.raw_value">Utförare: <field name="user_id"/><br/></span>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>
