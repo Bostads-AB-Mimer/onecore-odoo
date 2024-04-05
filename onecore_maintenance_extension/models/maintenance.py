@@ -39,15 +39,13 @@ class OneCoreMaintenanceRequest(models.Model):
     is_tenant = fields.Boolean('Is Tenant', compute='_compute_tenant', readonly=True)
 
     def fetch_property_data(self, search_by_number, search_type):
+        onecore_auth = self.env['onecore.auth']
         base_url = self.env['ir.config_parameter'].get_param(
-            'core_endpoint', '')
-        bearer_token = self.env['ir.config_parameter'].get_param(
-            'bearer_token', '')
-        headers = {"Authorization": f"Bearer {bearer_token}"}
+            'onecore_propertyinfo_url', '')
         params = {'typeOfNumber': search_type}
         url = f"{base_url}{quote(search_by_number, safe='')}"
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = onecore_auth.onecore_request(url, params=params)
             response.raise_for_status()
             return response.json().get('data', {})
         except requests.HTTPError as http_err:
