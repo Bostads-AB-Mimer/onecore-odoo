@@ -59,7 +59,6 @@ class OneCoreMaintenanceRequest(models.Model):
         data = self.fetch_property_data(search_by_number, search_type)
         if data:
             for property in data:
-                _logger.info(f"Creating rental property option: {property}")
                 rental_property_option = self.env['maintenance.rental.property.option'].create({
                     'user_id': self.env.user.id,
                     'name': property['id'],
@@ -71,7 +70,6 @@ class OneCoreMaintenanceRequest(models.Model):
                     'property_block_code': property['blockCode'],
                 })
                 for lease in property['leases']:
-                    _logger.info(f"Creating lease: {lease}")
                     lease_option = self.env['maintenance.lease.option'].create({
                         'user_id': self.env.user.id,
                         'name': lease['leaseId'],
@@ -84,7 +82,6 @@ class OneCoreMaintenanceRequest(models.Model):
                         'approval_date': lease['approvalDate'],
                     })
                     for tenant in lease['tenants']:
-                        _logger.info(f"Creating tenant: {tenant}")
                         # Find the main phone number
                         phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
                         self.env['maintenance.tenant.option'].create({
@@ -211,7 +208,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 description_text = html2plaintext(request.description) if request.description else ""
 
                 data = {
-                    "rentalObjectId": request.rental_property_id,
+                    "rentalObjectId": request.rental_property_id.name,
                     "title": request.name,
                     "odooId": str(request.id),  # The unique Odoo ID
                     "description": description_text,
@@ -273,7 +270,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 description_text = html2plaintext(request.description) if request.description else ""
                 data = {
                     "odooId": str(request.id),
-                    "rentalObjectId": request.rental_property_id,
+                    "rentalObjectId": request.rental_property_id.name,
                     "title": request.name,
                     "description": description_text,
                     "state": request.stage_id.name,
