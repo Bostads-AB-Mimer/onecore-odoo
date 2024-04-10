@@ -18,25 +18,28 @@ class OneCoreMaintenanceRequest(models.Model):
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
     ], string='Search Type', default='leaseId', required=True)
 
-    rental_property_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Property Id', store=True, readonly=False)
-    address = fields.Char('Address', compute='_compute_rental_property', readonly=True)
-    estate_code = fields.Char('Estate Code', compute='_compute_rental_property', readonly=True)
-    estate_caption = fields.Char('Estate Caption', compute='_compute_rental_property', readonly=True)
-    apartment_type = fields.Char('Type', compute='_compute_rental_property', readonly=True)
-    bra = fields.Char('Bra', compute='_compute_rental_property', readonly=True)
-    block_code = fields.Char('Block Code', compute='_compute_rental_property', readonly=True)
+    rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', store=True, readonly=False)
+    rental_property_id = fields.Char(string='Rental Property ID', store=True, readonly=True)
+    address = fields.Char('Address', compute='_compute_rental_property', store=True, readonly=True)
+    estate_code = fields.Char('Estate Code', compute='_compute_rental_property', store=True, readonly=True)
+    estate_caption = fields.Char('Estate Caption', compute='_compute_rental_property', store=True, readonly=True)
+    apartment_type = fields.Char('Type', compute='_compute_rental_property', store=True, readonly=True)
+    bra = fields.Char('Bra', compute='_compute_rental_property', store=True, readonly=True)
+    block_code = fields.Char('Block Code', compute='_compute_rental_property', store=True, readonly=True)
 
-    lease = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
-    lease_type = fields.Char('Lease Type', compute='_compute_lease', readonly=True)
-    contract_date = fields.Date('Contract Date', compute='_compute_lease', readonly=True)
-    lease_start_date = fields.Date('Lease Start Date', compute='_compute_lease', readonly=True)
-    lease_end_date = fields.Date('Lease End Date', compute='_compute_lease', readonly=True)
+    lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
+    lease_id = fields.Char(string='Lease Id', store=True, readonly=True)
+    lease_type = fields.Char('Lease Type', compute='_compute_lease', store=True, readonly=True)
+    contract_date = fields.Date('Contract Date', compute='_compute_lease', store=True, readonly=True)
+    lease_start_date = fields.Date('Lease Start Date', compute='_compute_lease', store=True, readonly=True)
+    lease_end_date = fields.Date('Lease End Date', compute='_compute_lease', store=True, readonly=True)
 
-    tenant = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
-    national_registration_number = fields.Char('National Registration Number', compute='_compute_tenant', readonly=True)
-    phone_number = fields.Char('Phone Number', compute='_compute_tenant', readonly=True)
-    email_address = fields.Char('Email Address', compute='_compute_tenant', readonly=True)
-    is_tenant = fields.Boolean('Is Tenant', compute='_compute_tenant', readonly=True)
+    tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
+    tenant_id = fields.Char(string='Tenant Id', store=True, readonly=True)
+    national_registration_number = fields.Char('National Registration Number', compute='_compute_tenant', store=True, readonly=True)
+    phone_number = fields.Char('Phone Number', compute='_compute_tenant', store=True, readonly=True)
+    email_address = fields.Char('Email Address', compute='_compute_tenant', store=True, readonly=True)
+    is_tenant = fields.Boolean('Is Tenant', compute='_compute_tenant', store=True, readonly=True)
 
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
@@ -111,15 +114,15 @@ class OneCoreMaintenanceRequest(models.Model):
             record.update_form_options(record.search_by_number, record.search_type)
             property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
             if property_records:
-                record.rental_property_id = property_records[0].id
+                record.rental_property_option_id = property_records[0].id
             lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
             if lease_records:
-                record.lease = lease_records[0].id
+                record.lease_option_id = lease_records[0].id
             tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
             if tenant_records:
-                record.tenant = tenant_records[0].id
+                record.tenant_option_id = tenant_records[0].id
 
-    @api.depends('rental_property_id')
+    @api.depends('rental_property_option_id')
     def _compute_rental_property(self):
         for record in self:
             record.address = None
@@ -129,8 +132,8 @@ class OneCoreMaintenanceRequest(models.Model):
             record.bra = None
             record.block_code = None
 
-            if record.rental_property_id:
-                property = self.env['maintenance.rental.property.option'].search([('name', '=', record.rental_property_id.name)], limit=1)
+            if record.rental_property_option_id:
+                property = self.env['maintenance.rental.property.option'].search([('name', '=', record.rental_property_option_id.name)], limit=1)
                 if property:
                     record.address = property.property_address
                     record.estate_code = property.property_estate_code
@@ -139,7 +142,8 @@ class OneCoreMaintenanceRequest(models.Model):
                     record.bra = property.property_size
                     record.block_code = property.property_block_code
 
-    @api.depends('lease')
+
+    @api.depends('lease_option_id')
     def _compute_lease(self):
         for record in self:
             record.lease_type = None
@@ -147,15 +151,15 @@ class OneCoreMaintenanceRequest(models.Model):
             record.lease_start_date = None
             record.lease_end_date = None
 
-            if record.lease:
-                lease = self.env['maintenance.lease.option'].search([('name', '=', record.lease.name)], limit=1)
+            if record.lease_option_id:
+                lease = self.env['maintenance.lease.option'].search([('name', '=', record.lease_option_id.name)], limit=1)
                 if lease:
                     record.lease_type = lease.lease_type
                     record.contract_date = lease.contract_date
                     record.lease_start_date = lease.lease_start_date
                     record.lease_end_date = lease.lease_end_date
 
-    @api.depends('tenant')
+    @api.depends('tenant_option_id')
     def _compute_tenant(self):
         for record in self:
             record.national_registration_number = None
@@ -163,8 +167,8 @@ class OneCoreMaintenanceRequest(models.Model):
             record.email_address = None
             record.is_tenant = None
 
-            if record.tenant:
-                tenant = self.env['maintenance.tenant.option'].search([('name', '=', record.tenant.name)], limit=1)
+            if record.tenant_option_id:
+                tenant = self.env['maintenance.tenant.option'].search([('name', '=', record.tenant_option_id.name)], limit=1)
                 if tenant:
                     record.national_registration_number = tenant.national_registration_number
                     record.phone_number = tenant.phone_number
@@ -174,6 +178,17 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        _logger.info(f"Creating maintenance requests: {vals_list}")
+        for vals in vals_list:
+            if 'rental_property_option_id' in vals:
+                rental_property = self.env['maintenance.rental.property.option'].browse(vals['rental_property_option_id'])
+                vals['rental_property_id'] = rental_property.name
+            if 'lease_option_id' in vals:
+                lease = self.env['maintenance.lease.option'].browse(vals['lease_option_id'])
+                vals['lease_id'] = lease.name
+            if 'tenant_option_id' in vals:
+                tenant = self.env['maintenance.tenant.option'].browse(vals['tenant_option_id'])
+                vals['tenant_id'] = tenant.name
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             if request.owner_user_id or request.user_id:
@@ -190,8 +205,8 @@ class OneCoreMaintenanceRequest(models.Model):
             # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
 
 
-            # Only proceed if rental_property_id is present
-            if request.rental_property_id:
+            # Only proceed if rental_property_option_id is present
+            if request.rental_property_option_id:
                 ICP = self.env['ir.config_parameter'].sudo()
                 token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
                 if not token:
@@ -208,7 +223,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 description_text = html2plaintext(request.description) if request.description else ""
 
                 data = {
-                    "rentalObjectId": request.rental_property_id.name,
+                    "rentalObjectId": request.rental_property_option_id.name,
                     "title": request.name,
                     "odooId": str(request.id),  # The unique Odoo ID
                     "description": description_text,
@@ -220,7 +235,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 except Exception as e:
                     _logger.error(f"Failed to send webhook: {e}")
             else:
-                _logger.info(f"Webhook not sent. rental_property_id is missing for Maintenance Request ID: {request.id}")
+                _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return maintenance_requests
 
@@ -252,8 +267,8 @@ class OneCoreMaintenanceRequest(models.Model):
         # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/
 
         for request in self:
-            # Only proceed if rental_property_id is present
-            if request.rental_property_id:
+            # Only proceed if rental_property_option_id is present
+            if request.rental_property_option_id:
                 ICP = request.env['ir.config_parameter'].sudo()
                 token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
                 if not token:
@@ -270,7 +285,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 description_text = html2plaintext(request.description) if request.description else ""
                 data = {
                     "odooId": str(request.id),
-                    "rentalObjectId": request.rental_property_id.name,
+                    "rentalObjectId": request.rental_property_option_id.name,
                     "title": request.name,
                     "description": description_text,
                     "state": request.stage_id.name,
@@ -293,7 +308,7 @@ class OneCoreMaintenanceRequest(models.Model):
             _logger.error("Bearer token is not set in system parameters.")
         else:
             for request in self:
-                if request.rental_property_id:
+                if request.rental_property_option_id:
                     webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/deleteerrand"
                     headers = {
                         'Authorization': f'Bearer {token}',
@@ -307,7 +322,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     except Exception as e:
                         _logger.error(f"Error calling webhook: {str(e)}")
                 else:
-                    _logger.info(f"Webhook not sent. rental_property_id is missing for Maintenance Request ID: {request.id}")
+                    _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return super().unlink()
 
