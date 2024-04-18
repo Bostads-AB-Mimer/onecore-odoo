@@ -13,6 +13,10 @@
       'security/maintenance.xml',
       'security/ir.model.access.csv',
       'views/maintenance_views.xml',
+
+      # Load initial Data
+      'data/maintenance.team.csv'
+
     ],
     'auto_install': True,
     'license': 'LGPL-3',

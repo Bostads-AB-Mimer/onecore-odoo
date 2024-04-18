@@ -20,7 +20,7 @@
                     <attribute name="class">w-auto</attribute>
                 </xpath>
                 <!-- Removes existing fields from first group -->
-                <!-- <xpath expr="//field[@name='equipment_id'] | //field[@name='category_id'] | //field[@name='request_date']" position="replace"/> -->
+               
                 <!-- Add new fields to first group -->
                 <xpath expr="//field[@name='owner_user_id']" position="after">
                     <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" groups="maintenance.group_equipment_manager"/>
