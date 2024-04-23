@@ -25,12 +25,19 @@
                 <xpath expr="//field[@name='owner_user_id']" position="after">
                     <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" groups="maintenance.group_equipment_manager"/>
                     <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" groups="!maintenance.group_equipment_manager"/>
+                    <field name="property_type" readonly="1" string="Fastighetstyp"/>
                     <field name="address" readonly="1" string="Adress"/>
-                    <field name="apartment_type" readonly="1" string="Typ"/>
-                    <field name="bra" readonly="1" string="Storlek kvm"/>
-                    <field name="estate_code" readonly="1" string="Fastighetsnr"/>
-                    <field name="estate_caption" readonly="1" string="Fastighetsnamn"/>
-                    <field name="block_code" readonly="1" string="Byggnad"/>
+                    <field name="code" readonly="1" string="Kod"/>
+                    <field name="type" readonly="1" string="Typ"/>
+                    <field name="area" readonly="1" string="Yta"/>
+                    <field name="entrance" readonly="1" string="Ingång"/>
+                    <field name="floor" readonly="1" string="Våning"/>
+                    <field name="has_elevator" readonly="1" string="Hiss"/>
+                    <field name="wash_space" readonly="1" string="Tvättstuga"/>
+                    <field name="estate_code" readonly="1" string="Fastighetskod"/>
+                    <field name="estate" readonly="1" string="Fastighet"/>
+                    <field name="building_code" readonly="1" string="Byggnadskod"/>
+                    <field name="building" readonly="1" string="Byggnad"/>
                 </xpath>
                 <!-- Add contract and tenant group -->
                 <xpath expr="//group[1]/group[1]" position="after">
@@ -60,7 +67,7 @@
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="rental_property_option_id" />
                     <field name="address" readonly="1"/>
-                    <field name="apartment_type" readonly="1"/>
+                    <field name="type" readonly="1"/>
                 </xpath>
                 <!-- Remove existing fields regarding equipment -->
                 <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace"/>
@@ -68,7 +75,7 @@
                 <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
                     <span name="rental_property_option_id" t-if="record.rental_property_option_id.raw_value">Hyresobjekt: <field name="rental_property_option_id"/><br/></span>
                     <span name="address" t-if="record.address.raw_value">Adress: <field name="address"/><br/></span>
-                    <span name="apartment_type" t-if="record.apartment_type.raw_value">Typ: <field name="apartment_type"/><br/></span>
+                    <span name="type" t-if="record.type.raw_value">Typ: <field name="type"/><br/></span>
                     <span name="user_id" t-if="record.user_id.raw_value">Utförare: <field name="user_id"/><br/></span>
                 </xpath>
             </field>

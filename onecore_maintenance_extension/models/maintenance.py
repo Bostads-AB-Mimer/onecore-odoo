@@ -21,11 +21,18 @@ class OneCoreMaintenanceRequest(models.Model):
     rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', store=True, readonly=False)
     rental_property_id = fields.Char(string='Rental Property ID', store=True, readonly=True)
     address = fields.Char('Address', compute='_compute_rental_property', store=True, readonly=True)
+    property_type = fields.Char('Property Type', compute='_compute_rental_property', store=True, readonly=True)
+    code = fields.Char('Code', compute='_compute_rental_property', store=True, readonly=True)
+    type = fields.Char('Type', compute='_compute_rental_property', store=True, readonly=True)
+    area = fields.Char('Size', compute='_compute_rental_property', store=True, readonly=True)
+    entrance = fields.Char('Entrance', compute='_compute_rental_property', store=True, readonly=True)
+    floor = fields.Char('Floor', compute='_compute_rental_property', store=True, readonly=True)
+    has_elevator = fields.Char('Has Elevator', compute='_compute_rental_property', store=True, readonly=True)
+    wash_space = fields.Char('Wash Space', compute='_compute_rental_property', store=True, readonly=True)
     estate_code = fields.Char('Estate Code', compute='_compute_rental_property', store=True, readonly=True)
-    estate_caption = fields.Char('Estate Caption', compute='_compute_rental_property', store=True, readonly=True)
-    apartment_type = fields.Char('Type', compute='_compute_rental_property', store=True, readonly=True)
-    bra = fields.Char('Bra', compute='_compute_rental_property', store=True, readonly=True)
-    block_code = fields.Char('Block Code', compute='_compute_rental_property', store=True, readonly=True)
+    estate = fields.Char('Estate Caption', compute='_compute_rental_property', store=True, readonly=True)
+    building_code = fields.Char('Block Code', compute='_compute_rental_property', store=True, readonly=True)
+    building = fields.Char('Block Name', compute='_compute_rental_property', store=True, readonly=True)
 
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
     lease_id = fields.Char(string='Lease Id', store=True, readonly=True)
@@ -65,12 +72,19 @@ class OneCoreMaintenanceRequest(models.Model):
                 rental_property_option = self.env['maintenance.rental.property.option'].create({
                     'user_id': self.env.user.id,
                     'name': property['id'],
-                    'property_address': property['address'],
                     'property_type': property['type'],
-                    'property_size': property['size'],
-                    'property_estate_code': property['estateCode'],
-                    'property_estate_name': property['estateName'],
-                    'property_block_code': property['blockCode'],
+                    'address': property['property'].get('address'),
+                    'code': property['property'].get('code'),
+                    'type': property['property'].get('type'),
+                    'area': property['property'].get('area'),
+                    'entrance': property['property'].get('entrance'),
+                    'floor': property['property'].get('floor'),
+                    'has_elevator': property['property'].get('hasElevator'),
+                    'wash_space': property['property'].get('washSpace'),
+                    'estate_code': property['property'].get('estateCode'),
+                    'estate': property['property'].get('estateName'),
+                    'building_code': property['property'].get('buildingCode'),
+                    'building': property['property'].get('building'),
                 })
                 for lease in property['leases']:
                     lease_option = self.env['maintenance.lease.option'].create({
@@ -126,21 +140,35 @@ class OneCoreMaintenanceRequest(models.Model):
     def _compute_rental_property(self):
         for record in self:
             record.address = None
+            record.property_type = None
+            record.code = None
+            record.type = None
+            record.area = None
+            record.entrance = None
+            record.floor = None
+            record.has_elevator = None
+            record.wash_space = None
             record.estate_code = None
-            record.estate_caption = None
-            record.apartment_type = None
-            record.bra = None
-            record.block_code = None
+            record.estate = None
+            record.building_code = None
+            record.building = None
 
             if record.rental_property_option_id:
                 property = self.env['maintenance.rental.property.option'].search([('name', '=', record.rental_property_option_id.name)], limit=1)
                 if property:
-                    record.address = property.property_address
-                    record.estate_code = property.property_estate_code
-                    record.estate_caption = property.property_estate_name
-                    record.apartment_type = property.property_type
-                    record.bra = property.property_size
-                    record.block_code = property.property_block_code
+                    record.address = property.address
+                    record.property_type = property.property_type
+                    record.code = property.code
+                    record.type = property.type
+                    record.area = property.area
+                    record.entrance = property.entrance
+                    record.floor = property.floor
+                    record.has_elevator = property.has_elevator
+                    record.wash_space = property.wash_space
+                    record.estate_code = property.estate_code
+                    record.estate = property.estate
+                    record.building_code = property.building_code
+                    record.building = property.building
 
 
     @api.depends('lease_option_id')
@@ -175,6 +203,22 @@ class OneCoreMaintenanceRequest(models.Model):
                     record.email_address = tenant.email_address
                     record.is_tenant = tenant.is_tenant
 
+    @api.onchange('rental_property_option_id')
+    def _onchange_rental_property_option_id(self):
+        if self.rental_property_option_id:
+            lease_records = self.env['maintenance.lease.option'].search([('rental_property_option_id', '=', self.rental_property_option_id.id)])
+            if lease_records:
+                self.lease_option_id = lease_records[0].id
+
+    @api.onchange('lease_option_id')
+    def _onchange_lease_option_id(self):
+        if self.lease_option_id:
+            tenant_records = self.env['maintenance.tenant.option'].search([('tenant_option_id', '=', self.lease_option_id.id)])
+            if tenant_records:
+                self.tenant_option_id = tenant_records[0].id
+            rental_property_records = self.env['maintenance.rental.property.option'].search([('id', '=', self.lease_option_id.rental_property_option_id.id)])
+            if rental_property_records:
+                self.rental_property_option_id = rental_property_records[0].id
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -332,12 +376,19 @@ class OnecoreMaintenanceRentalPropertyOption(models.Model):
 
     user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
     name = fields.Char('name', required=True)
-    property_address = fields.Char('Address', required=True)
     property_type = fields.Char('Type', required=True)
-    property_size = fields.Char('Size', required=True)
-    property_estate_code = fields.Char('Estate Code', required=True)
-    property_estate_name = fields.Char('Estate Name', required=True)
-    property_block_code = fields.Char('Block Code', required=True)
+    address = fields.Char('Address')
+    code = fields.Char('Code')
+    type = fields.Char('Type')
+    area = fields.Char('Size')
+    entrance = fields.Char('Entrance')
+    floor = fields.Char('Floor')
+    has_elevator = fields.Char('Has Elevator')
+    wash_space = fields.Char('Wash Space')
+    estate_code = fields.Char('Estate Code')
+    estate = fields.Char('Estate Name')
+    building_code = fields.Char('Block Code')
+    building = fields.Char('Block Name')
     lease_ids = fields.One2many('maintenance.lease.option', 'rental_property_option_id', string='Leases')
 
 class OnecoreMaintenanceLeaseOption(models.Model):
@@ -359,7 +410,7 @@ class OnecoreMaintenanceLeaseOption(models.Model):
     termination_date = fields.Date('Termination Date')
     contract_date = fields.Date('Contract Date', required=True)
     last_debit_date = fields.Date('Last Debit Date')
-    approval_date = fields.Date('Approval Date', required=True)
+    approval_date = fields.Date('Approval Date')
 
 class OnecoreMaintenanceTenantOption(models.Model):
     _name = 'maintenance.tenant.option'
