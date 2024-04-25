@@ -13,7 +13,7 @@ class OneCoreMaintenanceRequest(models.Model):
     search_by_number = fields.Char('Search')
     search_type = fields.Selection([
         ('leaseId', 'Kontraktsnummer'),
-        ('propertyId', 'Property ID'),
+        ('rentalPropertyId', 'Property ID'),
         ('pnr', 'Personnummer (12 siffror)'),
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
     ], string='Search Type', default='leaseId', required=True)
