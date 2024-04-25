@@ -42,6 +42,7 @@ class OneCoreMaintenanceRequest(models.Model):
     lease_end_date = fields.Date('Lease End Date', compute='_compute_lease', store=True, readonly=True)
 
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
+    contact_code = fields.Char(string='Contact Code', store=True, readonly=True)
     tenant_id = fields.Char(string='Tenant Id', store=True, readonly=True)
     national_registration_number = fields.Char('National Registration Number', compute='_compute_tenant', store=True, readonly=True)
     phone_number = fields.Char('Phone Number', compute='_compute_tenant', store=True, readonly=True)
@@ -190,6 +191,7 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.depends('tenant_option_id')
     def _compute_tenant(self):
         for record in self:
+            record.contact_code = None
             record.national_registration_number = None
             record.phone_number = None
             record.email_address = None
@@ -198,6 +200,7 @@ class OneCoreMaintenanceRequest(models.Model):
             if record.tenant_option_id:
                 tenant = self.env['maintenance.tenant.option'].search([('name', '=', record.tenant_option_id.name)], limit=1)
                 if tenant:
+                    record.contact_code = tenant.contact_code
                     record.national_registration_number = tenant.national_registration_number
                     record.phone_number = tenant.phone_number
                     record.email_address = tenant.email_address
