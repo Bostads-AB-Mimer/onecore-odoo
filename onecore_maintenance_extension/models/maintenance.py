@@ -36,9 +36,10 @@ class OneCoreMaintenanceRequest(models.Model):
 
     pet=fields.Char('Pet', store=True, readonly=True)
     call_between=fields.Char('Call Between', store=True, readonly=True)
-    hearing_impaired=fields.Char('Hearing Impaired', store=True, readonly=True)
+    hearing_impaired=fields.Boolean('Hearing Impaired', store=True, readonly=True)
     space_code=fields.Char('Space Code', store=True, readonly=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
+    equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
 
 
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
