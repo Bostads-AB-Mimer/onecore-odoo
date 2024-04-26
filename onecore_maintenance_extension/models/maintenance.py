@@ -34,6 +34,13 @@ class OneCoreMaintenanceRequest(models.Model):
     building_code = fields.Char('Block Code', compute='_compute_rental_property', store=True, readonly=True)
     building = fields.Char('Block Name', compute='_compute_rental_property', store=True, readonly=True)
 
+    pet=fields.Char('Pet', store=True, readonly=True)
+    call_between=fields.Char('Call Between', store=True, readonly=True)
+    hearing_impaired=fields.Char('Hearing Impaired', store=True, readonly=True)
+    space_code=fields.Char('Space Code', store=True, readonly=True)
+    space_caption=fields.Char('Space Caption', store=True, readonly=True)
+
+
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
     lease_id = fields.Char(string='Lease Id', store=True, readonly=True)
     lease_type = fields.Char('Lease Type', compute='_compute_lease', store=True, readonly=True)
