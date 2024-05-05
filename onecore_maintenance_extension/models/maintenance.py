@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 from urllib.parse import quote
 
+import uuid
 import requests
 import json
 import logging
@@ -10,6 +11,7 @@ _logger = logging.getLogger(__name__)
 class OneCoreMaintenanceRequest(models.Model):
     _inherit = 'maintenance.request'
 
+    uuid = fields.Char(string='UUID', default=lambda self: str(uuid.uuid4()), readonly=True, copy=False)
     search_by_number = fields.Char('Search')
     search_type = fields.Selection([
         ('leaseId', 'Kontraktsnummer'),
