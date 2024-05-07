@@ -112,7 +112,10 @@ class OneCoreMaintenanceRequest(models.Model):
                     for tenant in lease['tenants']:
                         # Find the main phone number
                         phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
-                        self.env['maintenance.tenant.option'].create({
+                        existing_tenant = self.env['maintenance.tenant.option'].search([('contact_code', '=', tenant['contactCode'])], limit=1)
+
+                        if not existing_tenant:
+                          self.env['maintenance.tenant.option'].create({
                             'user_id': self.env.user.id,
                             'name': tenant['firstName'] + " " + tenant['lastName'],
                             'contact_code': tenant['contactCode'],
@@ -122,7 +125,7 @@ class OneCoreMaintenanceRequest(models.Model):
                             'phone_number': phone_number,
                             'is_tenant': tenant['isTenant'],
                             'tenant_option_id': lease_option.id,
-                        })
+                          })
         else:
             _logger.info("No data found in response.")
 
@@ -185,11 +188,6 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.depends('lease_option_id')
     def _compute_lease(self):
         for record in self:
-            record.lease_type = None
-            record.contract_date = None
-            record.lease_start_date = None
-            record.lease_end_date = None
-
             if record.lease_option_id:
                 lease = self.env['maintenance.lease.option'].search([('name', '=', record.lease_option_id.name)], limit=1)
                 if lease:
@@ -201,12 +199,6 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.depends('tenant_option_id')
     def _compute_tenant(self):
         for record in self:
-            record.contact_code = None
-            record.national_registration_number = None
-            record.phone_number = None
-            record.email_address = None
-            record.is_tenant = None
-
             if record.tenant_option_id:
                 tenant = self.env['maintenance.tenant.option'].search([('name', '=', record.tenant_option_id.name)], limit=1)
                 if tenant:
