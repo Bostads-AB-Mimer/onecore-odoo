@@ -153,20 +153,6 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.depends('rental_property_option_id')
     def _compute_rental_property(self):
         for record in self:
-            record.address = None
-            record.property_type = None
-            record.code = None
-            record.type = None
-            record.area = None
-            record.entrance = None
-            record.floor = None
-            record.has_elevator = None
-            record.wash_space = None
-            record.estate_code = None
-            record.estate = None
-            record.building_code = None
-            record.building = None
-
             if record.rental_property_option_id:
                 property = self.env['maintenance.rental.property.option'].search([('name', '=', record.rental_property_option_id.name)], limit=1)
                 if property:
