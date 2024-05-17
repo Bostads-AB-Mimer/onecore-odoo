@@ -1,0 +1,7 @@
+<templates xml:space="preserve">
+    <t t-name="onecore_ui.MobileRenderer" owl="1">
+        <div>
+            <h1>New Mobile View</h1>
+        </div>
+    </t>
+</templates>
