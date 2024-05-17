@@ -18,6 +18,7 @@
       'data/maintenance.team.csv'
 
     ],
+    'post_init_hook': '_maintenance_stage_update_hook',
     'auto_install': True,
     'license': 'LGPL-3',
 }
