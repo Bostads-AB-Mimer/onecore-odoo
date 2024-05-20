@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="maintenance_request_mobile" model="ir.ui.view">
+        <field name="name">maintenance.request.mobile</field>
+        <field name="model">maintenance.request</field>
+        <field name="arch" type="xml">
+            <mobile string="My Mobile View">
+                <!-- Add your columns here -->
+            </mobile>
+        </field>
+    </record>
+    <record id="maintenance.hr_equipment_request_action" model="ir.actions.act_window">
+        <field name="name">Maintenance Requests</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="view_mode">mobile,kanban,tree,form,pivot,graph,calendar,activity</field>
+        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+        <field name="context">{
+            'search_default_active': True,
+            'default_user_id': uid
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add a new maintenance request
+            </p><p>
+                Follow the process of the request and communicate with the collaborator.
+            </p>
+        </field>
+    </record>
+        <record id="maintenance.hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
+        <field name="name">Maintenance Requests</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="view_mode">mobile,kanban,tree,form,pivot,graph,calendar,activity</field>
+        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+        <field name="context">{
+            'search_default_active': True,
+            'search_default_maintenance_team_id': active_id,
+            'default_maintenance_team_id': active_id,
+        }</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('maintenance_type', 'in', context.get('maintenance_type', ['preventive', 'corrective']))]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add a new maintenance request
+            </p><p>
+                Follow the process of the request and communicate with the collaborator.
+            </p>
+        </field>
+    </record>
+    <record id="hr_equipment_action_view_mobile" model="ir.actions.act_window.view">
+            <field name="sequence" eval="1"/>
+            <field name="view_mode">mobile</field>
+            <field name="view_id" ref="maintenance_request_mobile"/>
+            <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
+    </record>
+    <record id="hr_equipment_from_dashboard_action_view_mobile" model="ir.actions.act_window.view">
+            <field name="sequence" eval="1"/>
+            <field name="view_mode">mobile</field>
+            <field name="view_id" ref="maintenance_request_mobile"/>
+            <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
+    </record>
+</odoo>
