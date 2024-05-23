@@ -1,0 +1,25 @@
+$o-accordion-background: $o-gray-100 !default;
+$o-accordion-default-record-width: 320px !default;
+$o-accordion-small-record-width: 300px !default;
+$o-accordion-image-width: 64px !default;
+$o-accordion-image-fill-width: 95px !default;
+$o-accordion-inside-vgutter: $o-spacer * 0.5 !default;
+$o-accordion-inside-hgutter: $o-spacer * 0.5 !default;
+$o-accordion-color-border-width: 3px !default;
+$o-accordion-inner-hmargin: 5px !default;
+$o-accordion-progressbar-height: 20px !default;
+$o-accordion-mobile-tabs-height: 40px !default;
+$o-accordion-mobile-empty-height: $o-accordion-image-width !default;
+$o-accordion-record-margin: $o-horizontal-padding / 2 !default;
+$o-accordion-group-padding: $o-horizontal-padding !default; // Cannot be higher than this
+$o-accordion-inside-hgutter-mobile: $o-horizontal-padding !default;
+
+// ------- Kanban dashboard variables -------
+
+// Used to manage spacing in complex dropdown menu
+$o-accordion-dashboard-dropdown-complex-gap: 5px !default;
+
+// Since rows and containers are used inside cards, we're
+// forced to set the padding relative to the grid system.
+$o-accordion-dashboard-hpadding: $o-horizontal-padding !default;
+$o-accordion-dashboard-vpadding: $o-horizontal-padding / 2 !default;

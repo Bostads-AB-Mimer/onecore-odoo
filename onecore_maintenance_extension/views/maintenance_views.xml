@@ -4,16 +4,18 @@
         <record id="hr_equipment_request_view_form_extension" model="ir.ui.view">
             <field name="name">equipment.request.form</field>
             <field name="model">maintenance.request</field>
-            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form"/>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form" />
             <field name="arch" type="xml">
                 <!-- Add a div before the first group tag -->
 
-                  <xpath expr="//group[1]" position="before">
-                      <div class="d-flex flex-nowrap align-items-center mb-4 border rounded" invisible="create_date != False">
-                          <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search" placeholder="Enter a Property Id, national registration number or phone number"/>
-                          <field class="w-25 my-0 p-2 border-start bg-light" name="search_type"/>
-                      </div>
-                  </xpath>
+                <xpath expr="//group[1]" position="before">
+                    <div class="d-flex flex-nowrap align-items-center mb-4 border rounded"
+                        invisible="create_date != False">
+                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
+                            placeholder="Enter a Property Id, national registration number or phone number" />
+                        <field class="w-25 my-0 p-2 border-start bg-light" name="search_type" />
+                    </div>
+                </xpath>
 
                 <xpath expr="//group[1]" position="attributes">
                     <attribute name="class">d-flex flex-row</attribute>
@@ -27,43 +29,69 @@
                 </xpath>
                 <!-- Add new fields to first group -->
                 <xpath expr="//field[@name='owner_user_id']" position="after">
-                    <field name="create_date" invisible="1"/>
-                    <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" groups="maintenance.group_equipment_manager"/>
-                    <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" readonly="1" groups="!maintenance.group_equipment_manager"/>
-                    <field name="rental_property_id" string="Hyresobjekt" invisible="1" readonly="1"/>
-                    <field name="property_type" readonly="1" invisible="not property_type" string="Fastighetstyp"/>
+                    <field name="create_date" invisible="1" />
+                    <field name="rental_property_option_id" string="Hyresobjekt"
+                        options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                        invisible="create_date != False"
+                        groups="maintenance.group_equipment_manager" />
+                    <field name="rental_property_option_id" string="Hyresobjekt"
+                        options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                        invisible="create_date != False" readonly="1"
+                        groups="!maintenance.group_equipment_manager" />
+                    <field name="rental_property_id" string="Hyresobjekt" invisible="1" readonly="1" />
+                    <field name="property_type" readonly="1" invisible="not property_type"
+                        string="Fastighetstyp" />
 
-                    <field name="space_caption" readonly="1" invisible="not space_caption" string="Typ"/>
+                    <field name="space_caption" readonly="1" invisible="not space_caption"
+                        string="Typ" />
 
-                    <field name="code" readonly="1" invisible="not code" string="Kod"/>
-                    <field name="type" readonly="1" invisible="not type" string="Typ"/>
-                    <field name="area" readonly="1" invisible="not area" string="Yta"/>
-                    <field name="entrance" readonly="1" invisible="not entrance" string="Ingång"/>
-                    <field name="floor" readonly="1" invisible="not floor" string="Våning"/>
-                    <field name="has_elevator" readonly="1" invisible="not has_elevator" string="Hiss"/>
-                    <field name="wash_space" readonly="1" invisible="not wash_space" string="Tvättstuga"/>
-                    <field name="estate_code" readonly="1" invisible="1" string="Fastighetskod"/>
-                    <field name="address" readonly="1" invisible="not address" string="Adress"/>
-                    <field name="estate" readonly="1" invisible="not estate" string="Tillhör fastighet"/>
-                    <field name="building_code" readonly="1" invisible="1" string="Byggnadskod"/>
-                    <field name="building" readonly="1" invisible="1" string="Byggnad"/>
+                    <field name="code" readonly="1" invisible="not code" string="Kod" />
+                    <field name="type" readonly="1" invisible="not type" string="Typ" />
+                    <field name="area" readonly="1" invisible="not area" string="Yta" />
+                    <field name="entrance" readonly="1" invisible="not entrance" string="Ingång" />
+                    <field name="floor" readonly="1" invisible="not floor" string="Våning" />
+                    <field name="has_elevator" readonly="1" invisible="not has_elevator"
+                        string="Hiss" />
+                    <field name="wash_space" readonly="1" invisible="not wash_space"
+                        string="Tvättstuga" />
+                    <field name="estate_code" readonly="1" invisible="1" string="Fastighetskod" />
+                    <field name="address" readonly="1" invisible="not address" string="Adress" />
+                    <field name="estate" readonly="1" invisible="not estate"
+                        string="Tillhör fastighet" />
+                    <field name="building_code" readonly="1" invisible="1" string="Byggnadskod" />
+                    <field name="building" readonly="1" invisible="1" string="Byggnad" />
                 </xpath>
                 <!-- Add contract and tenant group -->
                 <xpath expr="//group[1]/group[1]" position="after">
                     <group class="w-auto">
-                        <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id" groups="maintenance.group_equipment_manager"/>
-                        <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" invisible="not lease_option_id" groups="!maintenance.group_equipment_manager"/>
-                        <field name="lease_type" invisible="not lease_type" string="Kontraktstyp"/>
-                        <field name="contract_date" invisible="not contract_date" string="Kontraktsdatum"/>
-                        <field name="lease_start_date" invisible="not lease_start_date" string="Startdatum"/>
-                        <field name="lease_end_date" invisible="not lease_end_date" string="Slutdatum"/>
-                        <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" groups="maintenance.group_equipment_manager"/>
-                        <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" invisible="not tenant_option_id" groups="!maintenance.group_equipment_manager"/>
-                        <field name="tenant_id" invisible="not tenant_id" string="Hyresgäst"/>
-                        <field name="national_registration_number" string="Personnummer"/>
-                        <field name="phone_number" string="Telefon"/>
-                        <field name="email_address" string="E-post"/>
-                        <field name="is_tenant" invisible="1" string="Hyresgäst"/>
+                        <field name="lease_option_id" string="Kontrakt"
+                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                            readonly="create_date != False" invisible="not lease_option_id"
+                            groups="maintenance.group_equipment_manager" />
+                        <field name="lease_option_id" string="Kontrakt"
+                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                            readonly="1" invisible="not lease_option_id"
+                            groups="!maintenance.group_equipment_manager" />
+                        <field name="lease_type" invisible="not lease_type" string="Kontraktstyp" />
+                        <field name="contract_date" invisible="not contract_date"
+                            string="Kontraktsdatum" />
+                        <field name="lease_start_date" invisible="not lease_start_date"
+                            string="Startdatum" />
+                        <field name="lease_end_date" invisible="not lease_end_date"
+                            string="Slutdatum" />
+                        <field name="tenant_option_id" string="Hyresgäst"
+                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                            readonly="create_date != False" invisible="not tenant_option_id"
+                            groups="maintenance.group_equipment_manager" />
+                        <field name="tenant_option_id" string="Hyresgäst"
+                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                            readonly="1" invisible="not tenant_option_id"
+                            groups="!maintenance.group_equipment_manager" />
+                        <field name="tenant_id" invisible="not tenant_id" string="Hyresgäst" />
+                        <field name="national_registration_number" string="Personnummer" />
+                        <field name="phone_number" string="Telefon" />
+                        <field name="email_address" string="E-post" />
+                        <field name="is_tenant" invisible="1" string="Hyresgäst" />
                     </group>
                 </xpath>
                 <xpath expr="//group[1]/group[3]" position="attributes">
@@ -74,24 +102,33 @@
         <record id="hr_equipment_request_view_kanban_extension" model="ir.ui.view">
             <field name="name">equipment.request.kanban</field>
             <field name="model">maintenance.request</field>
-            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_kanban" />
             <field name="arch" type="xml">
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="rental_property_option_id" />
-                    <field name="address" readonly="1"/>
-                    <field name="type" readonly="1"/>
+                    <field name="address" readonly="1" />
+                    <field name="type" readonly="1" />
                 </xpath>
                 <!-- Remove existing fields regarding equipment -->
-                <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace"/>
-                <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace"/>
+                <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace" />
+                <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace" />
                 <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
-                    <span name="rental_property_option_id" t-if="record.rental_property_option_id.raw_value">Hyresobjekt: <field name="rental_property_option_id"/><br/></span>
-                    <span name="address" t-if="record.address.raw_value">Adress: <field name="address"/><br/></span>
-                    <span name="rum" t-if="record.space_caption.raw_value"><field name="space_caption"/><br/></span>
-                    <span name="type" t-if="record.type.raw_value">Typ: <field name="type"/><br/></span>
-                    <span name="user_id" t-if="record.user_id.raw_value">Utförare: <field name="user_id"/><br/></span>
+                    <span name="rental_property_option_id"
+                        t-if="record.rental_property_option_id.raw_value">Hyresobjekt: <field
+                            name="rental_property_option_id" /><br /></span>
+                    <span name="address" t-if="record.address.raw_value">Adress: <field
+                            name="address" /><br /></span>
+                    <span name="rum" t-if="record.space_caption.raw_value">
+                        <field name="space_caption" />
+                        <br />
+                    </span>
+                    <span name="type" t-if="record.type.raw_value">Typ: <field name="type" /><br /></span>
+                    <span name="user_id" t-if="record.user_id.raw_value">Utförare: <field
+                            name="user_id" /><br /></span>
                 </xpath>
             </field>
         </record>
+
+
     </data>
 </odoo>

@@ -6,6 +6,20 @@
         <field name="arch" type="xml">
             <mobile string="My Mobile View">
                 <!-- Add your columns here -->
+                <field name="stage_id" />
+                <field name="color" />
+                <field name="priority" />
+                <field name="equipment_id" />
+                <field name="user_id" />
+                <field name="owner_user_id" />
+                <field name="category_id" />
+                <field name="kanban_state" />
+                <field name="activity_ids" />
+                <field name="activity_state" />
+                <field name="archive" />
+                <templates xml:space="preserve">
+                        
+                </templates>
             </mobile>
         </field>
     </record>
@@ -13,48 +27,195 @@
         <field name="name">Maintenance Requests</field>
         <field name="res_model">maintenance.request</field>
         <field name="view_mode">mobile,kanban,tree,form,pivot,graph,calendar,activity</field>
-        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban" />
         <field name="context">{
             'search_default_active': True,
             'default_user_id': uid
-        }</field>
+            }</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Add a new maintenance request
-            </p><p>
+            </p>
+            <p>
                 Follow the process of the request and communicate with the collaborator.
             </p>
         </field>
     </record>
-        <record id="maintenance.hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
+    <record id="maintenance.hr_equipment_todo_request_action_from_dashboard"
+        model="ir.actions.act_window">
         <field name="name">Maintenance Requests</field>
         <field name="res_model">maintenance.request</field>
         <field name="view_mode">mobile,kanban,tree,form,pivot,graph,calendar,activity</field>
-        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
+        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban" />
         <field name="context">{
             'search_default_active': True,
             'search_default_maintenance_team_id': active_id,
             'default_maintenance_team_id': active_id,
-        }</field>
-        <field name="domain">[('maintenance_team_id', '=', active_id), ('maintenance_type', 'in', context.get('maintenance_type', ['preventive', 'corrective']))]</field>
+            }</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('maintenance_type', 'in',
+            context.get('maintenance_type', ['preventive', 'corrective']))]</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Add a new maintenance request
-            </p><p>
+            </p>
+            <p>
                 Follow the process of the request and communicate with the collaborator.
             </p>
         </field>
     </record>
     <record id="hr_equipment_action_view_mobile" model="ir.actions.act_window.view">
-            <field name="sequence" eval="1"/>
-            <field name="view_mode">mobile</field>
-            <field name="view_id" ref="maintenance_request_mobile"/>
-            <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
+        <field name="sequence" eval="1" />
+        <field name="view_mode">mobile</field>
+        <field name="view_id" ref="maintenance_request_mobile" />
+        <field name="act_window_id" ref="maintenance.hr_equipment_request_action" />
     </record>
     <record id="hr_equipment_from_dashboard_action_view_mobile" model="ir.actions.act_window.view">
-            <field name="sequence" eval="1"/>
-            <field name="view_mode">mobile</field>
-            <field name="view_id" ref="maintenance_request_mobile"/>
-            <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
+        <field name="sequence" eval="1" />
+        <field name="view_mode">mobile</field>
+        <field name="view_id" ref="maintenance_request_mobile" />
+        <field name="act_window_id"
+            ref="maintenance.hr_equipment_todo_request_action_from_dashboard" />
+    </record>
+
+    <record id="maintenance_team_accordion" model="ir.ui.view">
+        <field name="name">maintenance.team.accordion</field>
+        <field name="model">maintenance.team</field>
+        <field name="arch" type="xml">
+            <mobile></mobile>
+            <!--  <accordion class="o_kanban_dashboard o_maintenance_team_kanban" create="0">
+                <field name="name" />
+                <field name="color" />
+                <field name="todo_request_ids" />
+                <field name="todo_request_count" />
+                <field name="todo_request_count_date" />
+                <field name="todo_request_count_high_priority" />
+                <field name="todo_request_count_block" />
+                <field name="todo_request_count_unscheduled" />
+                <templates>
+                    <t t-name="accordion-menu">
+                        <div class="container">
+                            <div class="row">
+                                <div class="col-6 o_kanban_card_manage_section o_kanban_manage_view">
+                                    <h5 role="menuitem" class="o_kanban_card_manage_title">
+                                        <span>Requests</span>
+                                    </h5>
+                                    <div role="menuitem">
+                                        <a
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action">
+                                            All
+                                        </a>
+                                    </div>
+                                    <div role="menuitem">
+                                        <a
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action" context="{'search_default_todo': 1}">
+                                            To Do
+                                        </a>
+                                    </div>
+                                    <div role="menuitem">
+                                        <a
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action" context="{'search_default_progress': 1}">
+                                            In Progress
+                                        </a>
+                                    </div>
+                                    <div role="menuitem">
+                                        <a
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action" context="{'search_default_done': 1}">
+                                            Done
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="col-6 o_kanban_card_manage_section o_kanban_manage_new">
+                                    <h5 role="menuitem" class="o_kanban_card_manage_title">
+                                        <span>Reporting</span>
+                                    </h5>
+                                    <div role="menuitem">
+                                        <a name="%(maintenance_request_action_reports)d"
+                                            type="action"
+                                            context="{'search_default_maintenance_team_id': id}">
+                                            Maintenance Requests
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div t-if="widget.editable" class="o_kanban_card_manage_settings row">
+                                <div class="col-8" role="menuitem" aria-haspopup="true">
+                                    <ul role="menu" class="oe_kanban_colorpicker" data-field="color" />
+                                </div>
+                                <div role="menuitem" class="col-4">
+                                    <a type="edit" class="dropdown-item">Configuration</a>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                    <t t-name="kanban-box">
+                        <div
+                            t-attf-class="#{!selection_mode ? kanban_color(record.color.raw_value) : ''}">
+                            <div t-attf-class="o_kanban_card_header">
+                                <div class="o_kanban_card_header_title">
+                                    <div class="o_primary">
+                                        <a
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action">
+                                            <field name="name" />
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="container o_kanban_card_content">
+                                <div class="row">
+                                    <div class="col-6 o_kanban_primary_left">
+                                        <button class="btn btn-primary"
+                                            name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                            type="action" context="{'search_default_todo': 1}">
+                                            <t t-esc="record.todo_request_count.value" /> To Do </button>
+                                    </div>
+                                    <div class="col-6 o_kanban_primary_right">
+                                        <div t-if="record.todo_request_count_date.raw_value > 0">
+                                            <a name="%(hr_equipment_request_action_cal)d"
+                                                type="action"
+                                                context="{'search_default_todo': 1, 'search_default_maintenance_team_id': id}">
+                                                <t t-esc="record.todo_request_count_date.value" />
+                                                Scheduled </a>
+                                        </div>
+                                        <div
+                                            t-if="record.todo_request_count_high_priority.raw_value > 0">
+                                            <a
+                                                name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                                type="action"
+                                                context="{'search_default_high_priority': 1}">
+                                                <t
+                                                    t-esc="record.todo_request_count_high_priority.value" />
+                                                Top Priorities </a>
+                                        </div>
+                                        <div t-if="record.todo_request_count_block.raw_value > 0">
+                                            <a
+                                                name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                                type="action"
+                                                context="{'search_default_kanban_state_block': 1}">
+                                                <t t-esc="record.todo_request_count_block.value" />
+                                                Blocked </a>
+                                        </div>
+                                        <div
+                                            t-if="record.todo_request_count_unscheduled.raw_value > 0">
+                                            <a
+                                                name="%(hr_equipment_todo_request_action_from_dashboard)d"
+                                                type="action"
+                                                context="{'search_default_todo': 1, 'search_default_unscheduled': 1}">
+                                                <t
+                                                    t-esc="record.todo_request_count_unscheduled.value" />
+                                                Unscheduled </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </accordion> -->
+        </field>
     </record>
 </odoo>

@@ -9,7 +9,9 @@
     'assets': {
         'web.assets_backend': [
             'onecore_ui/static/src/js/*.js',
+            'onecore_ui/static/src/accordion/*.js',
             'onecore_ui/static/src/views/*.xml',
+            'onecore_ui/static/src/accordion/*.xml',
         ],
     },
     'auto_install': True,

@@ -1,0 +1,711 @@
+// ------- Accordion View -------
+.o_accordion_view {
+    @include media-breakpoint-down(md) {
+        --ControlPanel-border-bottom: none;
+    }
+}
+
+// ------- Accordion renderer -------
+.o_accordion_renderer {
+    // ----------------------------------------------------------------------------
+    // Default AccordionView values
+
+    --Accordion-background: #{$o-accordion-background};
+    --Accordion-gap: unset;
+    --Accordion-padding: 0;
+
+    --AccordionGroup-background: var(--Accordion-background);
+    --AccordionGroup-padding-h: #{$o-accordion-group-padding};
+    --AccordionGroup-padding-bottom: #{$o-accordion-group-padding};
+
+    --AccordionRecord-width: #{$o-accordion-default-record-width};
+    --AccordionRecord-margin-v: #{$o-accordion-record-margin};
+    --AccordionRecord-margin-h: #{$o-accordion-record-margin};
+    --AccordionRecord-padding-v: #{$o-accordion-inside-vgutter};
+    --AccordionRecord-padding-h: #{$o-accordion-inside-hgutter};
+    --AccordionRecord-gap-v: #{$o-accordion-inner-hmargin};
+
+    --AccordionRecord--small-width: #{$o-accordion-small-record-width};
+
+    --AccordionRecord__image-width: #{$o-accordion-image-width};
+    --AccordionRecord__image--fill-width: #{$o-accordion-image-fill-width};
+
+    --AccordionRecord__dropdown-gap: #{$border-width};
+
+    --AccordionColumn__highlight-background: #{tint-color($o-action, 90%)};
+    --AccordionColumn__highlight-border: #{$o-action};
+
+    --o-view-nocontent-zindex: 1;
+
+    // ----------------------------------------------------------------------------
+    // Inner components contextual adaptations
+
+    --Ribbon-font-size: #{$font-size-sm};
+    --Ribbon-gap-top: calc(var(--AccordionRecord-padding-v) * -1 - #{$border-width});
+    --Ribbon-gap-right: 0;
+    --Ribbon-wrapper-width: 6.5rem;
+    --Ribbon-height:  calc(var(--Ribbon-font-size) * 2);
+    --Ribbon-z-index: 0;
+
+    // ----------------------------------------------------------------------------
+
+    border-top: $border-width solid var(--Accordion-background);
+    background: var(--Accordion-background);
+    padding: var(--Accordion-padding);
+    gap: var(--Accordion-gap);
+
+    @include media-breakpoint-down(md) {
+        --AccordionRecord-padding-h: #{$o-accordion-inside-hgutter * 2};
+    }
+
+    .o_accordion_record > div:not(.o_dropdown_accordion),
+    .o_accordion_quick_create {
+        border: $border-width solid $border-color;
+        background-color: $o-view-background-color;
+    }
+
+    .o_accordion_quick_create {
+        margin-bottom: calc(var(--AccordionRecord-margin-h) * 2);
+        margin-top: calc(var(--AccordionRecord-margin-h) * 2);
+        padding: 8px;
+
+        .o_form_view .o_inner_group {
+            margin: 0;
+        }
+    }
+
+    .o_accordion_record {
+        position: relative;
+        min-width: 150px;
+        margin: 0 0 (-$border-width);
+
+        > div:not(.o_dropdown_accordion) {
+            padding: var(--AccordionRecord-padding-v) var(--AccordionRecord-padding-h);
+            width: 100%;
+            height: 100%;
+        }
+
+        // ------- Accordion Record, v11 Layout -------
+        // Records colours
+        > div::after {
+            content: "";
+            @include o-position-absolute(0, auto, 0, 0);
+            width: $o-accordion-color-border-width;
+        }
+
+        // Inner Sections
+        .o_accordion_record_top,
+        .o_accordion_record_body {
+            margin-bottom: var(--AccordionRecord-gap-v);
+        }
+
+        .o_accordion_record_top,
+        .o_accordion_record_bottom {
+            display: flex;
+        }
+
+        .o_accordion_record_top {
+            align-items: flex-start;
+
+            .o_dropdown_accordion {
+                // For v11 layout, reset positioning to default to properly use
+                // flex-box
+                position: relative;
+                top: auto;
+                right: auto;
+            }
+
+            .o_accordion_record_headings {
+                line-height: 1.2;
+                flex: 1 1 auto;
+                // Ensure long word doesn't break out of container
+                word-wrap: break-word;
+                overflow: hidden;
+            }
+            
+            .o_field_priority {
+                margin: auto;
+            }
+        }
+
+        .o_accordion_record_title {
+            @include o-accordion-record-title();
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+
+        .o_accordion_record_subtitle {
+            display: block;
+            margin-top: calc(var(--AccordionRecord-gap-v) * 0.5);
+
+            i.fa[role="img"] {
+                margin-right: 2px;
+            }
+        }
+
+        .o_accordion_record_bottom {
+
+            .oe_accordion_bottom_left,
+            .oe_accordion_bottom_right {
+                display: flex;
+                align-items: center;
+                min-height: 20px;
+                gap: map-get($map: $spacers, $key: 1);
+            }
+            .oe_accordion_bottom_left {
+                flex: 1 1 auto;
+
+                > * {
+                    margin-right: 6px;
+                    line-height: 1;
+                }
+
+                .o_priority_star {
+                    margin-top: 1px;
+                    font-size: 18px;
+                }
+
+                span {
+                    overflow-wrap: anywhere;
+                }
+            }
+            .oe_accordion_bottom_right {
+                flex: 0 1 auto;
+            }
+            .o_link_muted {
+                color: $body-color;
+                &:hover {
+                    color: map-get($theme-colors, "primary");
+                    text-decoration: underline;
+                }
+            }
+        }
+
+        // ---------- Accordion Record, fill image design ----------
+        // Records with images that compensate record's padding
+        // filling all the available space (eg. hr, partners.. )
+        .o_accordion_record_has_image_fill {
+            display: flex;
+
+            .o_accordion_image_fill_left {
+                position: relative;
+                margin-right: var(--AccordionRecord-padding-h);
+                @include media-breakpoint-up(sm) {
+                    margin: {
+                        top: calc(var(--AccordionRecord-padding-v) * -1);
+                        bottom: calc(var(--AccordionRecord-padding-v) * -1);
+                        left: calc(var(--AccordionRecord-padding-h) * -1);
+                    }
+                }
+                flex: 1 0 var(--AccordionRecord__image--fill-width);
+                min-height: 95px;
+                background: {
+                    size: cover;
+                    position: center;
+                    repeat: no-repeat;
+                }
+                > img:not(.o_accordion_image_inner_pic) {
+                    object-fit: cover;
+                    object-position: center;
+                    width: 100%;
+                    height: 100%;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                }
+
+                &:not(.o_accordion_image_full) {
+                    max-height: 140px;
+                    height: calc(100% + var(--AccordionRecord-padding-v) * 2);
+                    align-self: center;
+                }
+                &.o_accordion_image_full {
+                    background-size: contain;
+                    > img {
+                        object-fit: contain;
+                    }
+                }
+            }
+
+            // Adapt default 'o_accordion_image' element if present.
+            // This adaptation allow to use both images type.
+            // Eg. In partners list we use to fill user picture only, keeping the
+            // default design for company logos.
+            .o_accordion_image {
+                position: relative;
+                margin-right: var(--AccordionRecord-padding-h);
+                flex: 0 0 var(--AccordionRecord__image-width);
+                min-height: var(--AccordionRecord__image-width);
+                align-self: center;
+                background: {
+                    size: cover;
+                    repeat: no-repeat;
+                    position: center;
+                }
+                > img:not(.o_accordion_image_inner_pic) {
+                    object-fit: cover;
+                    object-position: center;
+                    width: 100%;
+                    height: 100%;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                }
+
+                @include media-breakpoint-down(md) {
+                    flex-basis: var(--AccordionRecord__image--fill-width);
+                    min-height: var(--AccordionRecord__image--fill-width);
+                }
+
+                // Reset immedialy after div padding
+                + div {
+                    padding-left: 0;
+                }
+            }
+
+            // Images (backgrounds) could accomodate another image inside.
+            // (eg. Company logo badge inside a contact picture)
+            .o_accordion_image_fill_left,
+            .o_accordion_image {
+                background-color: var(--AccordionRecord__image-bg-color, none);
+
+                .o_accordion_image_inner_pic {
+                    @include o-position-absolute($right: 0, $bottom: 0);
+                    max: {
+                        height: 25px;
+                        width: 80%;
+                    }
+                    background: white;
+                    box-shadow: -1px -1px 0 1px white;
+                }
+            }
+        }
+    }
+
+    .o_dragged {
+        transform: rotate(-3deg);
+        transition: transform 0.6s, box-shadow 0.3s;
+
+        .dropdown {
+            display: none;
+        }
+    }
+
+    // -------  Compatibility of old (<= v10) Generic layouts -------
+
+    // Accordion Records - Uniform Design
+    // Provide a basic style for different accordion record layouts
+    // ---------------------------------------------------------
+    .oe_accordion_card,
+    .o_accordion_record {
+        // -------  v11 Layout + generic layouts (~v10) -------
+        // Accordion Record - Dropdown
+        .o_dropdown_accordion {
+            visibility: hidden;
+            @include media-breakpoint-down(md) {
+                visibility: visible;
+            }
+
+            .dropdown-toggle {
+                $padding-base: var(--AccordionRecord-padding-h);
+                margin: 1px 1px 0 0;
+                padding: if(type-of($padding-base) == 'string', calc(#{$padding-base}/2) $padding-base, $padding-base/2 $padding-base);
+                vertical-align: top;
+                @include o-hover-text-color($body-color, $headings-color);
+            }
+            &.show .dropdown-toggle {
+                position: relative;
+                z-index: $zindex-dropdown + 1;
+            }
+            .dropdown-menu {
+                margin-top: -1px;
+                margin-bottom: 0px;
+                min-width: 9rem;
+            }
+        }
+
+        &:hover .o_dropdown_accordion,
+        .o_dropdown_accordion.show {
+            visibility: visible;
+        }
+
+        // Accordion Record - Dropdown colorpicker
+        .oe_accordion_colorpicker {
+            @include o-accordion-colorpicker;
+        }
+
+        // Accordion Record - Inner elements
+        .o_field_many2many_tags {
+            display: block;
+            margin-bottom: var(--AccordionRecord-gap-v);
+            word-break: break-all;
+
+            &.avatar {
+                margin: 0 0 0 6px;
+                .o_m2m_avatar_empty > span {
+                    display: block;
+                    margin-top: 3px;
+                }
+            }
+
+            .o_tag {
+                --Tag-max-width: MAX(200px, 100%);
+                --Tag-font-size: #{$o-font-size-base-smaller};
+            }
+        }
+
+        .o_field_many2one_avatar {
+            img.o_m2o_avatar {
+                margin-right: 0;
+            }
+        }
+
+        // Commonly used to place an image beside the text
+        // (e.g. Fleet, Employees, ...)
+        .o_accordion_image {
+            position: relative;
+            text-align: center;
+
+            img {
+                max-width: 100%;
+            }
+        }
+
+        .o_accordion_button {
+            margin-top: 15px;
+
+            > button,
+            > a {
+                @include o-position-absolute(
+                    $right: var(--AccordionRecord-padding-h),
+                    $bottom: var(--AccordionRecord-padding-v)
+                );
+            }
+        }
+
+        @mixin global-click-selector {
+            &.oe_accordion_global_click,
+            &.oe_accordion_global_click_edit,
+            .oe_accordion_global_click,
+            .oe_accordion_global_click_edit {
+                @content;
+            }
+        }
+
+        @include global-click-selector {
+            cursor: pointer;
+        }
+
+        &:focus-visible,
+        &:focus-within {
+            z-index: 2;
+
+            @include global-click-selector {
+                outline: thin solid mix($o-main-link-color, map-get($grays, "300"));
+                outline-offset: -1px;
+
+                &:after {
+                    transform: translateX($border-width);
+                }
+            }
+        }
+
+        .o_attachment_image > img {
+            width: 100%;
+            height: auto;
+        }
+
+        .o_progressbar {
+            height: $o-accordion-progressbar-height;
+
+            .o_progressbar_title {
+                flex: 0 0 auto;
+            }
+        }
+
+        .o_accordion_image {
+            float: left;
+            width: var(--AccordionRecord__image-width);
+
+            + div {
+                padding-left: calc(
+                    var(--AccordionRecord__image-width) + var(--AccordionRecord-padding-h)
+                );
+            }
+        }
+
+        .oe_accordion_details {
+            width: 100%;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            // Useful for the class 'o_text_overflow'
+            min-width: 0;
+
+            ul {
+                margin-bottom: calc(var(--AccordionRecord-gap-v) * 0.5);
+                padding-left: 0;
+                list-style: none;
+                font-size: $font-size-sm;
+
+                li {
+                    margin-bottom: 2px;
+                }
+            }
+        }
+
+        .o_accordion_footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            > * {
+                flex: 0 0 auto;
+            }
+        }
+
+        .oe_accordion_text_red {
+            color: o-text-color("danger");
+            font-weight: $font-weight-bold;
+        }
+
+        .o_text_bold {
+            font-weight: $font-weight-bold;
+        }
+
+        .o_text_block {
+            display: block;
+        }
+    }
+
+    // Accordion Grouped Layout
+    &.o_accordion_grouped {
+        --AccordionGroup-width: calc(var(--AccordionRecord--small-width) + (2 * var(--AccordionGroup-padding-h)));
+
+        min-height: 100%;
+
+        @include media-breakpoint-down(md) {
+            --AccordionGroup-width: 90%; // don't take full width to give a hint of next/previous column on smaller screens
+
+            min-height: initial;
+            height: 100%;
+            overflow: scroll hidden !important;
+            scroll-snap-type: x mandatory;
+        }
+
+        @include media-breakpoint-up(lg) {
+            --AccordionGroup-width: calc(var(--AccordionRecord-width) + (2 * var(--AccordionGroup-padding-h)));
+        }
+
+        .o_accordion_record {
+            width: 100%;
+        }
+
+        .o_accordion_group {
+            background: var(--AccordionGroup-background);
+        }
+
+        .o_accordion_group,
+        .o_column_quick_create {
+            flex-basis: var(--AccordionGroup-width);
+
+            @include media-breakpoint-up(md) {
+                max-width: var(--AccordionGroup-width);
+            }
+        }
+    }
+
+    // Accordion Grouped Layout - Column default
+    .o_accordion_group {
+        .o_accordion_header > .o_accordion_header_title {
+            &:hover .o_accordion_config,
+            .o_accordion_config.show {
+                visibility: visible;
+            }
+
+            .o_accordion_config {
+                visibility: hidden;
+                @include media-breakpoint-down(md) {
+                    visibility: visible;
+                }
+
+                > .dropdown-menu {
+                    cursor: default;
+                }
+            }
+        }
+        &.o_accordion_hover {
+            background-color: var(--AccordionColumn__highlight-background) !important;
+            box-shadow: -1px 0px 0px 0px var(--AccordionColumn__highlight-border) inset,
+                1px 0px 0px 0px var(--AccordionColumn__highlight-border) inset;
+
+            .o_accordion_header {
+                // hack to display correct background color
+                margin: 0 calc(-1 * var(--AccordionGroup-padding-h) + 1px);
+                padding: 0 calc(var(--AccordionGroup-padding-h) - 1px);
+            }
+        }
+    }
+
+    .o_accordion_group, .o_column_quick_create {
+        padding: 0 var(--AccordionGroup-padding-h) var(--AccordionGroup-padding-bottom);
+    }
+
+    .o_accordion_group:not(.o_column_folded) .o_accordion_header, .o_quick_create_folded {
+        background: inherit;
+    }
+
+    .o_accordion_group:not(.o_column_folded) .o_accordion_header {
+        .dropdown-item {
+            max-width: calc(var(--AccordionRecord-width) * 0.75);
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+    }
+
+    .o_quick_create_folded {
+        top: map-get($spacers, 3);
+    }
+
+    .o_column_quick_create,
+    .o_accordion_group:not(.o_column_folded) .o_accordion_header_title {
+        // Makes them come on top of the "no-content" background gradient.
+        z-index: calc(var(--o-view-nocontent-zindex) + 1);
+    }
+
+    .o_group_draggable .o_column_title {
+        cursor: grab;
+
+        &:active {
+            cursor: grabbing;
+        }
+    }
+
+    // Accordion Grouped Layout - Column Folded
+    .o_accordion_group.o_column_folded {
+
+        // don't fill the width of record for a folded column
+        .o_accordion_record.o_draggable {
+            display: none !important;
+        }
+        // don't visually fold on smaller screens (aka. mobile)
+        @include media-breakpoint-up(md) {
+            --AccordionGroup-padding-h: 0;
+
+            &, .o_column_unfold {
+                cursor: col-resize;
+            }
+
+            & + .o_accordion_group.o_column_folded {
+                margin-left: 1px;
+            }
+
+            .o_accordion_header {
+                padding: 0 floor($o-accordion-group-padding * 0.7);
+            }
+
+            button.o_column_unfold {
+                padding: 0 .15rem;
+
+                .fa-caret-left {
+                    margin-right: 0.2rem;
+                }
+            }
+
+            &:hover button.o_column_unfold {
+                padding: 0;
+
+                .fa-caret-left {
+                    margin-right: 0.5rem;
+                }
+            }
+
+            .o_column_title {
+                @include o-position-absolute(map-get($spacers, 4));
+                transform-origin: left bottom 0;
+                transform: rotate(90deg);
+                overflow: visible;
+            }
+        }
+    }
+
+    @include media-breakpoint-down(md) {
+        .o_accordion_group,
+        .o_column_quick_create {
+            scroll-snap-align: center;
+            overflow-y: scroll;
+        }
+    }
+
+    // Accordion UN-grouped Layout
+    &.o_accordion_ungrouped {
+        min-height: 100%;
+
+        @include media-breakpoint-up(md) {
+            --Accordion-padding:  var(--AccordionRecord-margin-v) var(--AccordionRecord-margin-h);
+        }
+
+        .o_accordion_record {
+            width: var(--AccordionRecord-width);
+            margin: calc(var(--AccordionRecord-margin-v) * 0.5) var(--AccordionRecord-margin-h);
+
+            @include media-breakpoint-down(md) {
+                margin: 0 0 #{-$border-width};
+                flex-basis: 100%;
+            }
+
+            &.o_accordion_ghost {
+                max-height: 0 !important; // to prevent view writers to override this height
+            }
+        }
+    }
+
+    // Records colours
+    @include o-accordion-record-color;
+
+    .oe_accordion_color_help {
+        @include o-position-absolute(0, auto, 0, -1px);
+        width: $o-accordion-color-border-width;
+        z-index: 1; // show the title over accordion color
+    }
+
+    .o_field_monetary, .o_accordion_monetary {
+        /*rtl:ignore*/
+        direction: ltr;
+    }
+
+    span.o_accordion_monetary {
+        display: inline-block;
+    }
+}
+
+.o_accordion_mobile .o_accordion_renderer .o_accordion_record {
+    div.label {
+        @include o-text-overflow;
+    }
+}
+
+.o_accordion_small_column .o_accordion_renderer.o_accordion_grouped {
+    @include media-breakpoint-up(md) {
+        --AccordionGroup-width: calc(var(--AccordionRecord--small-width) + (2 * var(--AccordionGroup-padding-h)));
+    }
+}
+
+
+// ------- Sample mode -------
+.o_accordion_view .o_view_sample_data {
+    // all records
+    .o_accordion_record,
+    // progress bars and counters
+    .o_accordion_counter,
+    // column actions
+    .o_accordion_toggle_fold,
+    .o_column_archive_records,
+    .o_column_unarchive_records {
+        @include o-sample-data-disabled;
+    }
+}
+
+// ------- Set cover dialog -------
+.modal .o_accordion_cover_container .o_accordion_cover_image {
+    height: 120px;
+    width: 120px;
+}
