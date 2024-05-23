@@ -86,6 +86,7 @@ export class MobileArchParser {
       buttons: {},
       fields: {},
     };
+    const defaultGroupBy = xmlDoc.getAttribute('default_group_by');
     let headerButtons = [];
     const creates = [];
     const groupListArchParser = new GroupListArchParser();
@@ -235,6 +236,7 @@ export class MobileArchParser {
     });
     return {
       creates,
+      defaultGroupBy,
       handleField,
       headerButtons,
       fieldNodes,

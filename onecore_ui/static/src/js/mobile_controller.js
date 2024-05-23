@@ -12,9 +12,12 @@ import { session } from '@web/session';
 import { useBus, useService } from '@web/core/utils/hooks';
 import { useSearchBarToggler } from '@web/search/search_bar/search_bar_toggler';
 import { useSetupView } from '@web/views/view_hook';
+import { MobileRenderer } from './mobile_renderer';
+import { standardViewProps } from '@web/views/standard_view_props';
 export class MobileController extends Component {
   static components = {
     Layout,
+    MobileRenderer,
     Dropdown,
     DropdownItem,
     ViewButton,
@@ -91,3 +94,14 @@ export class MobileController extends Component {
   }
 }
 MobileController.template = 'onecore_ui.MobileView';
+MobileController.props = {
+  ...standardViewProps,
+  defaultGroupBy: {
+    validate: (dgb) => !dgb || typeof dgb === 'string',
+    optional: true,
+  },
+  Compiler: { type: Function, optional: true }, // optional in stable for backward compatibility
+  Model: Function,
+  Renderer: Function,
+  archInfo: Object,
+};

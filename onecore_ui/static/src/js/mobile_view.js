@@ -29,11 +29,15 @@ export const mobileView = {
       relatedModels,
       resModel
     );
+    const defaultGroupBy =
+      genericProps.searchMenuTypes.includes('groupBy') &&
+      archInfo.defaultGroupBy;
     return {
       ...genericProps,
       archInfo,
       Model: view.Model,
       Renderer,
+      defaultGroupBy,
     };
   },
 };
