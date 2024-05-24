@@ -22,7 +22,7 @@
           <t t-component="searchBarToggler.component" t-props="searchBarToggler.props"/>
         </t>
         <!-- Render the main content using the Renderer component -->
-        <t t-component="props.Renderer" t-props="renderProps" list="model.root" archInfo="props.archInfo" Compiler="props.Compiler"/>
+        <t t-component="props.Renderer" t-props="renderProps" list="model.root" archInfo="props.archInfo" Compiler="props.Compiler" openRecord.bind="openRecord"/>
       </Layout>
     </div>
   </t>

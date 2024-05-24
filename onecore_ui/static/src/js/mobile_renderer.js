@@ -1,14 +1,20 @@
 /** @odoo-module **/
-import { Component } from '@odoo/owl';
+import { Component, useState } from '@odoo/owl';
 import { View } from '@web/views/view';
 import { Field } from '@web/views/fields/field';
 import { isNull } from '@web/views/utils';
 import { Record } from '@web/model/record';
+import { isRelational } from '@web/model/relational_model/utils';
 import { ViewScaleSelector } from '@web/views/view_components/view_scale_selector';
 import { MobileGroup } from './mobile_group';
+import { MobileRecord } from './mobile_record';
 export class MobileRenderer extends Component {
-  static props = ['archInfo', 'list'];
-  async setup() {}
+  static props = ['archInfo', 'list', 'openRecord'];
+  setup() {
+    this.state = useState({
+      selectedGroup: false,
+    });
+  }
 
   getGroupsOrRecords() {
     const { list } = this.props;
@@ -30,6 +36,40 @@ export class MobileRenderer extends Component {
       }));
     }
   }
+
+  onGroupClick(group) {
+    this.state.selectedGroup = group;
+  }
+
+  onBackClick() {
+    this.state.selectedGroup = false;
+  }
+
+  // ------------------------------------------------------------------------
+  // Getters, can be used as variables from xml-file, i.e get groupName() {...} will be available as groupName in xml
+  // ------------------------------------------------------------------------
+
+  _getEmptyGroupLabel(fieldName) {
+    return _t('None');
+  }
+
+  get groupName() {
+    const { groupByField, displayName } = this.state.selectedGroup;
+    let name = displayName;
+    if (groupByField.type === 'boolean') {
+      name = name ? _t('Yes') : _t('No');
+    } else if (!name) {
+      if (
+        isRelational(groupByField) ||
+        groupByField.type === 'date' ||
+        groupByField.type === 'datetime' ||
+        isNull(name)
+      ) {
+        name = this._getEmptyGroupLabel(groupByField.name);
+      }
+    }
+    return name;
+  }
 }
 MobileRenderer.template = 'onecore_ui.MobileRenderer';
 MobileRenderer.components = {
@@ -38,4 +78,5 @@ MobileRenderer.components = {
   Record,
   ViewScaleSelector,
   MobileGroup,
+  MobileRecord,
 };

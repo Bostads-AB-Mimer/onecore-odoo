@@ -1,15 +1,29 @@
 <templates xml:space="preserve">
-    <t t-name="onecore_ui.MobileRenderer" owl="1">
-        <div t-ref="root">
-            <div class="container">
-                <t t-foreach="getGroupsOrRecords()" t-as="groupOrRecord" t-key="groupOrRecord.key">
-                    <t t-if="groupOrRecord.group">
-                        <!-- This sets the value of the group variable to the value of the groupOrRecord.group attribute. -->
-                        <t t-set="group" t-value="groupOrRecord.group" />
-                        <MobileGroup group="group" list="props.list"/>
-                    </t>
-                </t>
+  <t t-name="onecore_ui.MobileRenderer" owl="1">
+    <div t-ref="root">
+      <div class="container">
+        <t t-if="!this.state.selectedGroup">
+          <t t-foreach="getGroupsOrRecords()" t-as="groupOrRecord" t-key="groupOrRecord.key">
+            <t t-if="groupOrRecord.group">
+              <t t-set="group" t-value="groupOrRecord.group" />
+              <MobileGroup group="group" list="props.list" t-on-click="() => this.onGroupClick(group)"/>
+            </t>
+          </t>
+        </t>
+        <t t-else="">
+          <div class="d-flex flex-row m-2 align-items-center">
+            <div class="d-flex align-items-center" t-on-click="this.onBackClick" style="height: 60px; width: 30px;">
+              <i class="fa fa-solid fa-chevron-left"/>
             </div>
-        </div>
-    </t>
+            <h2 class="m-0">
+              <t t-esc="groupName"></t>
+            </h2>
+          </div>
+          <t t-foreach="this.state.selectedGroup.records" t-as="record" t-key="record.id">
+            <MobileRecord record="record" list="props.list" openRecord="props.openRecord"/>
+          </t>
+        </t>
+      </div>
+    </div>
+  </t>
 </templates>
