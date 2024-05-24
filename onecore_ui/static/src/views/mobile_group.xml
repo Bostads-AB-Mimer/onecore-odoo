@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="onecore_ui.MobileGroup">
+    <div class="row m-2 shadow-sm rounded d-flex align-items-center" style="height: 60px;">
+      <div class="d-flex justify-content-between align-items-center">
+        <h2 class="m-0">
+          <t t-esc="groupName"></t>
+        </h2>
+        <i class="fa fa-solid fa-chevron-right"></i>
+      </div>
+    </div>
+  </t>
+</templates>

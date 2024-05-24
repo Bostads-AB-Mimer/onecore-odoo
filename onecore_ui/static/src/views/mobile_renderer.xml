@@ -1,7 +1,15 @@
 <templates xml:space="preserve">
     <t t-name="onecore_ui.MobileRenderer" owl="1">
-        <div>
-            <h1>New Mobile View</h1>
+        <div t-ref="root">
+            <div class="container">
+                <t t-foreach="getGroupsOrRecords()" t-as="groupOrRecord" t-key="groupOrRecord.key">
+                    <t t-if="groupOrRecord.group">
+                        <!-- This sets the value of the group variable to the value of the groupOrRecord.group attribute. -->
+                        <t t-set="group" t-value="groupOrRecord.group" />
+                        <MobileGroup group="group" list="props.list"/>
+                    </t>
+                </t>
+            </div>
         </div>
     </t>
 </templates>
