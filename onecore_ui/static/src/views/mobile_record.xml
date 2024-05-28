@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="onecore_ui.MobileRecord">
+    <div class="d-flex flex-row m-2 p-2 align-items-center bg-white" style="border: 0.5px solid #989898;" t-on-click="() => onRecordClick(this.props)">
+      <div class="o_kanban_record d-flex" role="article" t-att-data-id="record.id" t-ref="root">
+        <div class="oe_kanban_content" tooltip="kanban-tooltip">
+          <div class="o_kanban_record_top">
+            <b class="o_kanban_record_title">
+              <t t-esc="record.name.raw_value"/>
+            </b>
+          </div>
+          <div class="o_kanban_record_body">
+            <span class="oe_grey" t-if="record.address.raw_value">
+              <span t-if="record.address.raw_value">
+                <t t-esc="record.address.raw_value"/>
+              </span>
+              <br/>
+            </span>
+            <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
+              <t t-esc="record.space_caption.raw_value"/>
+/              <t t-esc="record.rental_property_id.raw_value"/>
+              <br/>
+            </span>
+            <span>
+            *Huvudnyckel: JA/NEJ
+              <br/>
+            </span>
+            <span>
+            *Prioritet: 5 dagar
+              <br/>
+            </span>
+          Skapad: <t t-esc="record.create_date.value"/>
+          </div>
+        </div>
+      </div>
+    </div>
+  </t>
+</templates>

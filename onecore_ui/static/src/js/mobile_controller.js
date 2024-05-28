@@ -92,6 +92,13 @@ export class MobileController extends Component {
       activeIdsLimit: session.active_ids_limit,
     };
   }
+
+  async openRecord(record, mode) {
+    const activeIds = this.model.root.records.map(
+      (datapoint) => datapoint.resId
+    );
+    this.props.selectRecord(record.resId, { activeIds, mode });
+  }
 }
 MobileController.template = 'onecore_ui.MobileView';
 MobileController.props = {

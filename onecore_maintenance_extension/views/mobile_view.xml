@@ -1,51 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+  <!-- Extension: adds mobile as second view_mode and sets the mobile view_mode to default on mobile screens -->
   <record id="maintenance.hr_equipment_request_action" model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
-    <field name="mobile_view_mode">mobile</field>
     <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
-    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
-    <field name="context">{
-            'search_default_active': True,
-            'default_user_id': uid
-        }</field>
-    <field name="help" type="html">
-      <p class="o_view_nocontent_smiling_face">
-                Add a new maintenance request
-      </p>
-      <p>
-                Follow the process of the request and communicate with the collaborator.
-      </p>
-    </field>
+    <field name="mobile_view_mode">mobile</field>
   </record>
+
+  <!-- Extension: does the same as above but for when selecting a team from the dashboard -->
   <record id="maintenance.hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
-    <field name="mobile_view_mode">mobile</field>
     <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
-    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
-    <field name="context">{
-            'search_default_active': True,
-            'search_default_maintenance_team_id': active_id,
-            'default_maintenance_team_id': active_id,
-        }</field>
-    <field name="domain">[('maintenance_team_id', '=', active_id), ('maintenance_type', 'in', context.get('maintenance_type', ['preventive', 'corrective']))]</field>
-    <field name="help" type="html">
-      <p class="o_view_nocontent_smiling_face">
-                Add a new maintenance request
-      </p>
-      <p>
-                Follow the process of the request and communicate with the collaborator.
-      </p>
-    </field>
+    <field name="mobile_view_mode">mobile</field>
   </record>
 
+  <!-- Adds mobile view_mode to views -->
   <record id="hr_equipment_request_view_mobile" model="ir.ui.view">
     <field name="name">maintenance.request.mobile</field>
     <field name="model">maintenance.request</field>
     <field name="arch" type="xml">
       <mobile default_group_by="stage_id">
+        <!-- These are the fields we want for each record from the db for this view_mode -->
         <field name="stage_id"/>
         <field name="color"/>
         <field name="priority"/>
@@ -57,20 +34,30 @@
         <field name="activity_ids" />
         <field name="activity_state" />
         <field name="archive" />
-        <templates>
-
-        </templates>
+        <field name="name"/>
+        <field name="address" />
+        <field name="rental_property_id" />
+        <field name="space_caption" />
+        <field name="create_date"/>
       </mobile>
     </field>
   </record>
 
+  <!-- Adds mobile action to the db -->
   <record id="hr_equipment_action_view_mobile" model="ir.actions.act_window.view">
+    <!-- Sequence overrides the order of view_modes:
+      <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
+
+      When adding a new action it seems to add a sequence of 0 by default, so we need to set it to 1
+      to make sure Kanban has lower sequence and becomes the default view_mode on desktop.
+    -->
     <field name="sequence" eval="1"/>
     <field name="view_mode">mobile</field>
     <field name="view_id" ref="hr_equipment_request_view_mobile"/>
     <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
   </record>
 
+  <!-- Adds mobile action to the db for when selecting a team from the dashboard -->
   <record id="hr_equipment_from_dashboard_action_view_mobile" model="ir.actions.act_window.view">
     <field name="sequence" eval="1"/>
     <field name="view_mode">mobile</field>
@@ -78,6 +65,7 @@
     <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
   </record>
 
+  <!-- Adds kanban action to the db with sequence 0 so that it becomes the default view_mode on desktop -->
   <record id="hr_equipment_action_view_kanban" model="ir.actions.act_window.view">
     <field name="sequence" eval="0"/>
     <field name="view_mode">kanban</field>
@@ -85,38 +73,11 @@
     <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
   </record>
 
+  <!-- Adds kanban action to the db for when selecting a team from the dashboard -->
   <record id="hr_equipment_from_dashboard_action_view_kanban" model="ir.actions.act_window.view">
     <field name="sequence" eval="0"/>
     <field name="view_mode">kanban</field>
     <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
     <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
-  </record>
-
-  <record id="maintenance_team_mobile" model="ir.ui.view">
-    <field name="name">maintenance.team.mobile</field>
-    <field name="model">maintenance.team</field>
-    <field name="arch" type="xml">
-      <mobile>
-        <field name="name"/>
-        <field name="color"/>
-        <field name="todo_request_ids"/>
-        <field name="todo_request_count"/>
-        <field name="todo_request_count_date"/>
-        <field name="todo_request_count_high_priority"/>
-        <field name="todo_request_count_block"/>
-        <field name="todo_request_count_unscheduled"/>
-        <templates>
-          <div class="container">
-            <div class="row">
-              <div class="bg-primary">
-                <a name="%(maintenance.hr_equipment_todo_request_action_from_dashboard)d" type="action" context="{'search_default_todo': 1}">
-                                            To Do
-                </a>
-              </div>
-            </div>
-          </div>
-        </templates>
-      </mobile>
-    </field>
   </record>
 </odoo>

@@ -12,8 +12,6 @@ export class MobileGroup extends Component {
     list: { type: Object },
   };
 
-  setup() {}
-
   // ------------------------------------------------------------------------
   // Getters, can be used as variables from xml-file, i.e get groupName() {...} will be available as groupName in xml
   // ------------------------------------------------------------------------
