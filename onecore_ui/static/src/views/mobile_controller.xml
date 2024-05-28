@@ -1,10 +1,20 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8"?>
 <template xml:space="preserve">
   <t t-name="onecore_ui.MobileView" owl="1">
     <!-- The root element of the view component -->
     <div t-ref="root" t-att-class="props.className">
       <!-- Layout component for organizing the view -->
       <Layout className="model.useSampleModel ? 'o_view_sample_data' : ''" display="props.display">
+        
+        <t t-set-slot="control-panel-create-button">
+          <t t-if="canCreate and props.showButtons">
+              <button type="button" class="btn btn-primary o-kanban-button-new" accesskey="c" t-on-click="() => this.createRecord()" data-bounce-button="">
+                  Ny
+              </button>
+          </t>
+      </t>
+
+
         <!-- Slot for additional actions in the control panel -->
         <t t-set-slot="control-panel-additional-actions">
           <CogMenu/>
