@@ -101,10 +101,6 @@ export class MobileArchParser {
     const fieldNextIds = {}
     const activeActions = getActiveActions(xmlDoc)
 
-    activeActions.quickCreate =
-      activeActions.create &&
-      archParseBoolean(xmlDoc.getAttribute('quick_create'), true)
-    const onCreate = xmlDoc.getAttribute('on_create')
     visitXML(xmlDoc, (node) => {
       if (node.tagName !== 'button') {
         buttonGroup = undefined
@@ -237,7 +233,6 @@ export class MobileArchParser {
       columns,
       groupBy,
       xmlDoc,
-      onCreate,
       activeActions,
       ...treeAttr,
     }

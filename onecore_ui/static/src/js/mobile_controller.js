@@ -15,14 +15,6 @@ import { useSetupView } from '@web/views/view_hook'
 import { MobileRenderer } from './mobile_renderer'
 import { standardViewProps } from '@web/views/standard_view_props'
 
-const QUICK_CREATE_FIELD_TYPES = [
-  'char',
-  'boolean',
-  'many2one',
-  'selection',
-  'many2many',
-]
-
 export class MobileController extends Component {
   static components = {
     Layout,
@@ -44,20 +36,6 @@ export class MobileController extends Component {
       useModelWithSampleData(this.props.Model, this.modelParams)
     )
     this.searchBarToggler = useSearchBarToggler()
-    const self = this
-    this.quickCreateState = reactive({
-      get groupId() {
-        return this._groupId || false
-      },
-      set groupId(groupId) {
-        if (self.model.useSampleModel) {
-          self.model.removeSampleDataInGroups()
-          self.model.useSampleModel = false
-        }
-        this._groupId = groupId
-      },
-      view: this.archInfo.quickCreateView,
-    })
 
     useSetupView({
       rootRef: this.rootRef,
@@ -81,7 +59,7 @@ export class MobileController extends Component {
   }
 
   get modelParams() {
-    const { defaultGroupBy, rawExpand } = this.archInfo
+    const { defaultGroupBy } = this.archInfo
     const { activeFields, fields } = extractFieldsFromArchInfo(
       this.archInfo,
       this.props.fields
@@ -114,27 +92,7 @@ export class MobileController extends Component {
     }
   }
   async createRecord() {
-    const { onCreate } = this.archInfo
-    const { root } = this.model
-    if (this.canQuickCreate && onCreate === 'quick_create') {
-      const firstGroup = root.groups[0]
-      if (firstGroup.isFolded) {
-        await firstGroup.toggle()
-      }
-      this.quickCreateState.groupId = firstGroup.id
-    } else if (onCreate && onCreate !== 'quick_create') {
-      const options = {
-        additionalContext: root.context,
-        onClose: async () => {
-          await root.load()
-          this.model.useSampleModel = false
-          this.render(true) // FIXME WOWL reactivity
-        },
-      }
-      await this.actionService.doAction(onCreate, options)
-    } else {
-      await this.props.createRecord()
-    }
+    await this.props.createRecord()
   }
 
   get canCreate() {
@@ -152,28 +110,11 @@ export class MobileController extends Component {
     return true
   }
 
-  get canQuickCreate() {
-    const { activeActions } = this.props.archInfo
-    if (!activeActions.quickCreate) {
-      return false
-    }
-
-    const list = this.model.root
-    if (list.groups && !list.groups.length) {
-      return false
-    }
-
-    return this.isQuickCreateField(list.groupByField)
-  }
-  isQuickCreateField(field) {
-    return field && QUICK_CREATE_FIELD_TYPES.includes(field.type)
-  }
-
   async openRecord(record, mode) {
     const activeIds = this.model.root.records.map(
       (datapoint) => datapoint.resId
-    );
-    this.props.selectRecord(record.resId, { activeIds, mode });
+    )
+    this.props.selectRecord(record.resId, { activeIds, mode })
   }
 }
 MobileController.template = 'onecore_ui.MobileView'
