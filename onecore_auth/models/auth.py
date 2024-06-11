@@ -1,6 +1,10 @@
 import requests
 from odoo import models, fields
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
 class OnecoreAuth(models.Model):
     _name = 'onecore.auth'
     _description = 'ONECore Auth'
