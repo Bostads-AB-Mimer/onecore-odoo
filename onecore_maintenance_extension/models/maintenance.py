@@ -157,10 +157,6 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange('rental_property_option_id')
     def _onchange_rental_property_option_id(self):
-        _logger.info(f"-------------------------------------------")
-        _logger.info(f"@api.onchange('rental_property_option_id')")
-        _logger.info(f"-------------------------------------------")
-
         if self.rental_property_option_id:
             self.rental_property_id = self.rental_property_option_id.name
             self.address = self.rental_property_option_id.address
@@ -179,9 +175,6 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange('lease_option_id')
     def _onchange_lease_option_id(self):
-        _logger.info(f"-------------------------------------------")
-        _logger.info(f"@api.onchange('lease_option_id')")
-        _logger.info(f"-------------------------------------------")
         if self.lease_option_id:
             self.lease_id = self.lease_option_id.name
             self.lease_type = self.lease_option_id.lease_type
@@ -191,9 +184,6 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange('tenant_option_id')
     def _onchange_tenant_option_id(self):
-        _logger.info(f"-------------------------------------------")
-        _logger.info(f"@api.onchange('tenant_option_id')")
-        _logger.info(f"-------------------------------------------")
         if self.tenant_option_id:
             self.contact_code = self.tenant_option_id.contact_code
             self.national_registration_number = self.tenant_option_id.national_registration_number
