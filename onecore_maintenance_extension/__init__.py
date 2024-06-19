@@ -15,6 +15,7 @@ def _maintenance_stage_update_hook(env):
     existing_stages = env['maintenance.stage'].search([])
 
     # Update existing stages
+    # We need to update the existing stages first to keep the stage ids for the new stages
     for stage in existing_stages:
         xml_id = env['ir.model.data'].search([('res_id', '=', stage.id), ('model', '=', 'maintenance.stage')]).name
         if xml_id in stage_data:
