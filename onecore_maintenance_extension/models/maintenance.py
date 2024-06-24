@@ -190,7 +190,6 @@ class OneCoreMaintenanceRequest(models.Model):
             self.phone_number = self.tenant_option_id.phone_number
             self.email_address = self.tenant_option_id.email_address
             self.is_tenant = self.tenant_option_id.is_tenant
-            self.contact_code_request = self.tenant_option_id.contact_code
             self.tenant_id = self.tenant_option_id.name
     
     @api.model_create_multi
@@ -203,7 +202,6 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['lease_id'] = self.lease_option_id.name
             if 'tenant_option_id' in vals:
                 vals['tenant_id'] = self.tenant_option_id.name
-                vals['contact_code_request'] = self.tenant_option_id.contact_code
                 vals['contact_code'] = self.tenant_option_id.contact_code
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
