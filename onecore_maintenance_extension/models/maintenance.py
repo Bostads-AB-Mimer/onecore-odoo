@@ -62,6 +62,8 @@ class OneCoreMaintenanceRequest(models.Model):
     space_code=fields.Char('Space Code', store=True, readonly=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
+    maintenance_unit_code=fields.Char('Maintenance Unit Code', store=True, readonly=True)
+    maintenance_unit_caption=fields.Char('Maintenance Unit Caption', store=True, readonly=True)
 
 
     def fetch_property_data(self, search_by_number, search_type):
