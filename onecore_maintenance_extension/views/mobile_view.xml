@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- Extension: adds mobile as second view_mode and sets the mobile view_mode to default on mobile screens -->
+  <!-- Extension: adds mobile as second view_mode and sets the mobile view_mode to default on mobile
+  screens -->
   <record id="maintenance.hr_equipment_request_action" model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
@@ -9,7 +10,8 @@
   </record>
 
   <!-- Extension: does the same as above but for when selecting a team from the dashboard -->
-  <record id="maintenance.hr_equipment_todo_request_action_from_dashboard" model="ir.actions.act_window">
+  <record id="maintenance.hr_equipment_todo_request_action_from_dashboard"
+    model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
     <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
@@ -23,22 +25,23 @@
     <field name="arch" type="xml">
       <mobile default_group_by="stage_id">
         <!-- These are the fields we want for each record from the db for this view_mode -->
-        <field name="stage_id"/>
-        <field name="color"/>
-        <field name="priority"/>
-        <field name="equipment_id"/>
-        <field name="user_id"/>
-        <field name="owner_user_id"/>
-        <field name="category_id"/>
-        <field name="kanban_state"/>
+        <field name="stage_id" />
+        <field name="color" />
+        <field name="priority_expanded" />
+        <field name="equipment_id" />
+        <field name="user_id" />
+        <field name="owner_user_id" />
+        <field name="category_id" />
+        <field name="kanban_state" />
         <field name="activity_ids" />
         <field name="activity_state" />
         <field name="archive" />
-        <field name="name"/>
+        <field name="name" />
         <field name="address" />
         <field name="rental_property_id" />
         <field name="space_caption" />
-        <field name="create_date"/>
+        <field name="create_date" />
+        <field name="master_key" />
       </mobile>
     </field>
   </record>
@@ -51,33 +54,34 @@
       When adding a new action it seems to add a sequence of 0 by default, so we need to set it to 1
       to make sure Kanban has lower sequence and becomes the default view_mode on desktop.
     -->
-    <field name="sequence" eval="1"/>
+    <field name="sequence" eval="1" />
     <field name="view_mode">mobile</field>
-    <field name="view_id" ref="hr_equipment_request_view_mobile"/>
-    <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
+    <field name="view_id" ref="hr_equipment_request_view_mobile" />
+    <field name="act_window_id" ref="maintenance.hr_equipment_request_action" />
   </record>
 
   <!-- Adds mobile action to the db for when selecting a team from the dashboard -->
   <record id="hr_equipment_from_dashboard_action_view_mobile" model="ir.actions.act_window.view">
-    <field name="sequence" eval="1"/>
+    <field name="sequence" eval="1" />
     <field name="view_mode">mobile</field>
-    <field name="view_id" ref="hr_equipment_request_view_mobile"/>
-    <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
+    <field name="view_id" ref="hr_equipment_request_view_mobile" />
+    <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard" />
   </record>
 
-  <!-- Adds kanban action to the db with sequence 0 so that it becomes the default view_mode on desktop -->
+  <!-- Adds kanban action to the db with sequence 0 so that it becomes the default view_mode on
+  desktop -->
   <record id="hr_equipment_action_view_kanban" model="ir.actions.act_window.view">
-    <field name="sequence" eval="0"/>
+    <field name="sequence" eval="0" />
     <field name="view_mode">kanban</field>
-    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
-    <field name="act_window_id" ref="maintenance.hr_equipment_request_action"/>
+    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban" />
+    <field name="act_window_id" ref="maintenance.hr_equipment_request_action" />
   </record>
 
   <!-- Adds kanban action to the db for when selecting a team from the dashboard -->
   <record id="hr_equipment_from_dashboard_action_view_kanban" model="ir.actions.act_window.view">
-    <field name="sequence" eval="0"/>
+    <field name="sequence" eval="0" />
     <field name="view_mode">kanban</field>
-    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban"/>
-    <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard"/>
+    <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban" />
+    <field name="act_window_id" ref="maintenance.hr_equipment_todo_request_action_from_dashboard" />
   </record>
 </odoo>
