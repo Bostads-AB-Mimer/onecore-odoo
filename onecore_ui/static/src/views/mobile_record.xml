@@ -23,17 +23,28 @@
               <br/>
             </span>
             <span>
-            *Huvudnyckel: JA/NEJ
+            Huvudnyckel:
+              <b>
+                <t t-if="record.master_key.raw_value === true">
+                Ja
+                </t>
+                <t t-elif="record.master_key.raw_value === false">
+                Nej
+                </t>
+                <t t-else="">
+                Ej angett
+                </t>
+              </b>
               <br/>
             </span>
             <span>
-            *Prioritet: 5 dagar
-              <br/>
-            </span>
+            Prioritet: <t t-esc="record.priority_expanded.value"/>
+            <br/>
+          </span>
           Skapad: <t t-esc="record.create_date.value"/>
-          </div>
         </div>
       </div>
     </div>
-  </t>
+  </div>
+</t>
 </templates>
