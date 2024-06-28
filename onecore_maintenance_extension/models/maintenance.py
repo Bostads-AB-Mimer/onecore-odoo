@@ -64,6 +64,10 @@ class OneCoreMaintenanceRequest(models.Model):
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
     maintenance_unit_code=fields.Char('Maintenance Unit Code', store=True, readonly=True)
     maintenance_unit_caption=fields.Char('Maintenance Unit Caption', store=True, readonly=True)
+    master_key=fields.Boolean('Master Key', store=True, readonly=True)
+
+    # New fields
+    priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', required=True, store=True, default='7')
 
 
     def fetch_property_data(self, search_by_number, search_type):
@@ -348,7 +352,7 @@ class OnecoreMaintenanceRentalPropertyOption(models.Model):
 
     user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
     name = fields.Char('name', required=True)
-    property_type = fields.Char('Type', required=True)
+    property_type = fields.Char('Property Type', required=True)
     address = fields.Char('Address')
     code = fields.Char('Code')
     type = fields.Char('Type')
