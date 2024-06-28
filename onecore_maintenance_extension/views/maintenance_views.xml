@@ -21,7 +21,7 @@
                 </xpath>
                 
                 <xpath expr="//group[1]" position="inside">
-                    <div class="accordion accordion-flush d-md-flex justify-content-between mb-3" id="accordionFlushExample">
+                    <div class="accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
                         <!-- Block 1 -->
                         <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
                           <h2 class="accordion-header">
@@ -34,7 +34,7 @@
                                 Objektsinformation
                             </div>
                           </h2>
-                          <div id="flush-collapse1" class="accordion-collapse collapse show" data-bs-parent="#accordionFlushExample">
+                          <div id="flush-collapse1" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group col="1">
                                 <field name="create_date" invisible="1" />
@@ -71,7 +71,7 @@
                                 Hyresgäst
                             </div>
                           </h2>
-                          <div id="flush-collapse2" class="accordion-collapse collapse show" data-bs-parent="#accordionFlushExample">
+                          <div id="flush-collapse2" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group>
                                     <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id" groups="maintenance.group_equipment_manager" />
@@ -105,7 +105,7 @@
                                 Detaljer
                             </div>
                           </h2>
-                          <div id="flush-collapse3" class="accordion-collapse collapse show" data-bs-parent="#accordionFlushExample">
+                          <div id="flush-collapse3" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group col="1">
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
