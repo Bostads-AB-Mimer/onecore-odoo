@@ -15,12 +15,21 @@
                     </div>
                 </xpath>
 
-                <!-- Add accordion to the group that wraps the form -->
+                <!-- Add ticket number before header -->
+                <xpath expr="//h1" position="before">
+                    <div invisible="id == False" class="d-flex fs-5 fw-medium ms-1">od-<field name="id" options="{'no_create_edit': True, 'no_create':True, 'no_open': True, 'type': 'number'}" /></div>
+                </xpath> 
+
+                <!-- Add just one column to the group that wraps the form -->
                 <xpath expr="//group[1]" position="attributes">
                     <attribute name="col">1</attribute>
                 </xpath>
                 
                 <xpath expr="//group[1]" position="inside">
+                    <div invisible="description == False" >
+                        <p class="mb-1">Kort beskrivning av anmälan (från kund).</p>
+                        <field name="description" readonly="1"></field>
+                    </div>
                     <div class="accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
                         <!-- Block 1 -->
                         <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
@@ -112,7 +121,7 @@
                                     <field name="user_id" string="Responsible" />
                                     <field name="schedule_date" />
                                     <field name="priority_expanded" string="Prioritet" />
-                                    <field name="master_key" string="Huvudnyckel" />
+                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
                                     <field name="email_cc" string="Email cc" groups="base.group_no_one" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
                                 </group>
@@ -125,9 +134,14 @@
 
                 <!-- Hides the details group since we moved them to the accordion -->
                 <xpath expr="//group[1]/group[2]" position="replace" /> 
-
                 <!-- Hides existing fields from first group -->
                 <xpath expr="//field[@name='maintenance_type']" position="attributes">
+                    <attribute name="invisible">1</attribute>
+                </xpath>   
+                <xpath expr="//field[@name='equipment_id']" position="attributes">
+                    <attribute name="invisible">1</attribute>
+                </xpath>    
+                <xpath expr="//field[@name='request_date']" position="attributes">
                     <attribute name="invisible">1</attribute>
                 </xpath>          
             </field>
