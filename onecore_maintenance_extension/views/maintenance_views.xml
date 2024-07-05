@@ -15,12 +15,34 @@
                     </div>
                 </xpath>
 
-                <!-- Add accordion to the group that wraps the form -->
+                <!-- Add ticket number before header -->
+                <xpath expr="//h1" position="before">
+                    <div invisible="id == False" class="mb-0 mt-2 d-flex fs-4 fw-semibold ms-1">od-<field class="mb-0" name="id" options="{'no_create_edit': True, 'no_create':True, 'no_open': True, 'type': 'number'}" /></div>
+                </xpath> 
+
+                <!-- Add just one column to the group that wraps the form -->
                 <xpath expr="//group[1]" position="attributes">
                     <attribute name="col">1</attribute>
                 </xpath>
                 
                 <xpath expr="//group[1]" position="inside">
+                    <div invisible="description == False" >
+                        <p class="mb-1">Kort beskrivning av anmälan (från kund).</p>
+                        <field name="description" readonly="1"></field>                       
+                    </div>
+
+                    <div class="d-flex w-100 justify-content-between justify-content-md-start">
+                        <label class="me-1" for="priority_expanded" string="Prioritet" />
+                        <field class="ms-1 text-end text-md-start" name="priority_expanded" readonly="1" />
+                    </div>
+                    <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start">
+                        <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
+                        
+                        <div class="ms-1">
+                            <span invisible="master_key == False">Ja</span>
+                            <span invisible="master_key == True">Nej</span>
+                        </div>
+                    </div>
                     <div class="accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
                         <!-- Block 1 -->
                         <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
@@ -112,7 +134,7 @@
                                     <field name="user_id" string="Responsible" />
                                     <field name="schedule_date" />
                                     <field name="priority_expanded" string="Prioritet" />
-                                    <field name="master_key" string="Huvudnyckel" />
+                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
                                     <field name="email_cc" string="Email cc" groups="base.group_no_one" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
                                 </group>
@@ -125,9 +147,14 @@
 
                 <!-- Hides the details group since we moved them to the accordion -->
                 <xpath expr="//group[1]/group[2]" position="replace" /> 
-
                 <!-- Hides existing fields from first group -->
                 <xpath expr="//field[@name='maintenance_type']" position="attributes">
+                    <attribute name="invisible">1</attribute>
+                </xpath>   
+                <xpath expr="//field[@name='equipment_id']" position="attributes">
+                    <attribute name="invisible">1</attribute>
+                </xpath>    
+                <xpath expr="//field[@name='request_date']" position="attributes">
                     <attribute name="invisible">1</attribute>
                 </xpath>          
             </field>
