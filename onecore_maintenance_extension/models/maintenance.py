@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 from urllib.parse import quote
 
+import base64
 import uuid
 import requests
 import json
@@ -23,7 +24,7 @@ class OneCoreMaintenanceRequest(models.Model):
     rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', store=True, readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
-    
+
     # Dependent on rental_property_option_id
     rental_property_id = fields.Char(string='Rental Property ID', store=True)
     address = fields.Char('Address', store=True)
@@ -197,7 +198,7 @@ class OneCoreMaintenanceRequest(models.Model):
             self.email_address = self.tenant_option_id.email_address
             self.is_tenant = self.tenant_option_id.is_tenant
             self.tenant_id = self.tenant_option_id.name
-    
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -209,8 +210,21 @@ class OneCoreMaintenanceRequest(models.Model):
             if 'tenant_option_id' in vals:
                 vals['tenant_id'] = self.tenant_option_id.name
                 vals['contact_code'] = self.tenant_option_id.contact_code
+            if 'images' in vals:
+                images = vals.pop('images')
+
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
+            for image in images:
+              file_data = base64.b64decode(image['Base64String'])
+              attachment = self.env['ir.attachment'].create({
+                  'name': image['Filename'],
+                  'type': 'binary',
+                  'datas': base64.b64encode(file_data),
+                  'res_model': 'maintenance.request',
+                  'res_id': request.id,
+                  'mimetype': 'application/octet-stream'
+              })
             if request.owner_user_id or request.user_id:
                 request._add_followers()
             if request.equipment_id and not request.maintenance_team_id:
