@@ -73,10 +73,10 @@
                                     <field name="entrance" invisible="not entrance" string="Ingång" />
                                     <field name="floor" invisible="not floor" string="Våning" />
                                     <field name="has_elevator" invisible="not has_elevator" string="Hiss" />
-                                    <field name="wash_space" invisible="not wash_space" string="Tvättstuga" />
                                     <field name="estate_code" invisible="1" string="Fastighetskod" />
-                                    <field name="address" invisible="not address" string="Adress" />
+                                    <field name="address" string="Adress" />
                                     <field name="estate" invisible="not estate" string="Tillhör fastighet" />
+                                    <field name="maintenance_unit_caption" invisible="not maintenance_unit_caption" string="Tvättstuga" />
                                     <field name="building_code" invisible="1" string="Byggnadskod" />
                                     <field name="building" invisible="1" string="Byggnad" />
                                 </group>
@@ -109,9 +109,11 @@
                                     
                                     <field name="tenant_id" invisible="not tenant_id" string="Hyresgäst" />
                                     <field name="national_registration_number" string="Personnummer" />
-                                    <field name="contact_code" string="Contact code" />
+                                    <field name="contact_code" string="Kundnummer" />
                                     <field name="phone_number" string="Telefon" />
                                     <field name="email_address" string="E-post" />
+                                    <field name="pet" string="Husdjur" />
+                                    <field name="hearing_impaired" string="Hörselnedsättning" />
                                     <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                 </group>
                             </div>
@@ -130,6 +132,7 @@
                           <div id="flush-collapse3" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group col="1">
+                                    <field name="request_date" string="Ärendedatum" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
                                     <field name="user_id" string="Responsible" />
                                     <field name="schedule_date" />
