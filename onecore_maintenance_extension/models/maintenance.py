@@ -202,6 +202,7 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
+        images = []
         for vals in vals_list:
             if 'rental_property_option_id' in vals:
                 vals['rental_property_id'] = self.rental_property_option_id.name
