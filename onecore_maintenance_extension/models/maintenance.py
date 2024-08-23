@@ -57,9 +57,9 @@ class OneCoreMaintenanceRequest(models.Model):
     lease_end_date = fields.Date('Lease End Date', store=True, readonly=True)
 
     # Comes from Mimer (Add more fields for these?)
-    pet=fields.Char('Pet', store=True, readonly=True)
-    call_between=fields.Char('Call Between', store=True, readonly=True)
-    hearing_impaired=fields.Boolean('Hearing Impaired', store=True, readonly=True)
+    pet=fields.Char('Pet', store=True)
+    call_between=fields.Char('Call Between', store=True)
+    hearing_impaired=fields.Boolean('Hearing Impaired', store=True)
     space_code=fields.Char('Space Code', store=True, readonly=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
@@ -180,6 +180,10 @@ class OneCoreMaintenanceRequest(models.Model):
             self.building_code = self.rental_property_option_id.building_code
             self.building = self.rental_property_option_id.building
 
+            lease_records = self.env['maintenance.lease.option'].search([('rental_property_option_id', '=', self.rental_property_option_id.id)])
+            if lease_records:
+                self.lease_option_id = lease_records[0].id
+
     @api.onchange('lease_option_id')
     def _onchange_lease_option_id(self):
         if self.lease_option_id:
@@ -188,6 +192,13 @@ class OneCoreMaintenanceRequest(models.Model):
             self.contract_date = self.lease_option_id.contract_date
             self.lease_start_date = self.lease_option_id.lease_start_date
             self.lease_end_date = self.lease_option_id.lease_end_date
+            
+            tenant_records = self.env['maintenance.tenant.option'].search([('tenant_option_id', '=', self.lease_option_id.id)])
+            if tenant_records:
+                self.tenant_option_id = tenant_records[0].id
+            rental_property_records = self.env['maintenance.rental.property.option'].search([('id', '=', self.lease_option_id.rental_property_option_id.id)])
+            if rental_property_records:
+                self.rental_property_option_id = rental_property_records[0].id
 
     @api.onchange('tenant_option_id')
     def _onchange_tenant_option_id(self):
