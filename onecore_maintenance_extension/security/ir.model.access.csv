@@ -1,4 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_maintenance_rental_property_option,maintenance.team.user,model_maintenance_rental_property_option,base.group_user,1,1,1,1
+access_maintenance_maintenance_unit_option,maintenance.team.user,model_maintenance_maintenance_unit_option,base.group_user,1,1,1,1
 access_maintenance_tenant_option,maintenance.team.user,model_maintenance_tenant_option,base.group_user,1,1,1,1
 access_maintenance_lease_option,maintenance.team.user,model_maintenance_lease_option,base.group_user,1,1,1,1
