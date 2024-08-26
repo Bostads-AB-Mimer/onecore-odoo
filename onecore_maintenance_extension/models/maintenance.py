@@ -22,6 +22,7 @@ class OneCoreMaintenanceRequest(models.Model):
     ], string='Search Type', default='leaseId', required=True)
 
     rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', store=True, readonly=False)
+    maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit', store=True, readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
 
@@ -40,6 +41,10 @@ class OneCoreMaintenanceRequest(models.Model):
     estate = fields.Char('Estate Caption', store=True)
     building_code = fields.Char('Block Code', store=True)
     building = fields.Char('Block Name', store=True)
+
+    # Dependent on maintenance_unit_id
+    maintenance_unit_id = fields.Char(string='Maintenance Unit', store=True, readonly=True)
+    maintenance_unit_type = fields.Char('Maintenance Unit Type', store=True)
 
     # Dependent on tenant_option_id
     contact_code = fields.Char(string='Contact Code', store=True)
@@ -90,6 +95,7 @@ class OneCoreMaintenanceRequest(models.Model):
     def update_form_options(self, search_by_number, search_type):
         _logger.info("Updating rental property options")
         data = self.fetch_property_data(search_by_number, search_type)
+
         if data:
             for property in data:
                 rental_property_option = self.env['maintenance.rental.property.option'].create({
@@ -109,6 +115,18 @@ class OneCoreMaintenanceRequest(models.Model):
                     'building_code': property['property'].get('buildingCode'),
                     'building': property['property'].get('building'),
                 })
+                if 'maintenanceUnits' in property and property['maintenanceUnits']:
+                    for maintenance_unit in property['maintenanceUnits']:
+                        if maintenance_unit['type'] == "Tvättstuga":
+                            maintenance_unit_option = self.env['maintenance.maintenance.unit.option'].create({
+                                'user_id': self.env.user.id,
+                                'name': maintenance_unit['caption'],
+                                'type': maintenance_unit['type'],
+                                'id': maintenance_unit['id'],
+                                'code': maintenance_unit['code'],
+                                'estate_code': maintenance_unit['estateCode'],
+                                'rental_property_option_id': rental_property_option.id,
+                            })
                 for lease in property['leases']:
                     lease_option = self.env['maintenance.lease.option'].create({
                         'user_id': self.env.user.id,
@@ -145,6 +163,7 @@ class OneCoreMaintenanceRequest(models.Model):
     def _compute_search(self):
         # Clear existing records for this user
         self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         for record in self:
@@ -155,6 +174,9 @@ class OneCoreMaintenanceRequest(models.Model):
             property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
             if property_records:
                 record.rental_property_option_id = property_records[0].id
+            maintenance_unit_records = self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)])
+            if maintenance_unit_records:
+                record.maintenance_unit_option_id = maintenance_unit_records[0].id
             lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
             if lease_records:
                 record.lease_option_id = lease_records[0].id
@@ -184,6 +206,12 @@ class OneCoreMaintenanceRequest(models.Model):
             if lease_records:
                 self.lease_option_id = lease_records[0].id
 
+    @api.onchange('maintenance_unit_option_id')
+    def _onchange_maintenance_unit_option_id(self):
+        if self.maintenance_unit_option_id:
+            self.maintenance_unit_id = self.maintenance_unit_option_id.name
+            self.maintenance_unit_type = self.maintenance_unit_option_id.type
+
     @api.onchange('lease_option_id')
     def _onchange_lease_option_id(self):
         if self.lease_option_id:
@@ -192,7 +220,7 @@ class OneCoreMaintenanceRequest(models.Model):
             self.contract_date = self.lease_option_id.contract_date
             self.lease_start_date = self.lease_option_id.lease_start_date
             self.lease_end_date = self.lease_option_id.lease_end_date
-            
+
             tenant_records = self.env['maintenance.tenant.option'].search([('tenant_option_id', '=', self.lease_option_id.id)])
             if tenant_records:
                 self.tenant_option_id = tenant_records[0].id
@@ -217,6 +245,8 @@ class OneCoreMaintenanceRequest(models.Model):
         for vals in vals_list:
             if 'rental_property_option_id' in vals:
                 vals['rental_property_id'] = self.rental_property_option_id.name
+            if 'maintenance_unit_option_id' in vals:
+                vals['maintenance_unit_id'] = self.maintenance_unit_option_id.name
             if 'lease_option_id' in vals:
                 vals['lease_id'] = self.lease_option_id.name
             if 'tenant_option_id' in vals:
@@ -392,6 +422,20 @@ class OnecoreMaintenanceRentalPropertyOption(models.Model):
     building_code = fields.Char('Block Code')
     building = fields.Char('Block Name')
     lease_ids = fields.One2many('maintenance.lease.option', 'rental_property_option_id', string='Leases')
+    maintenance_unit_ids = fields.One2many('maintenance.maintenance.unit.option', 'rental_property_option_id', string='Maintenance Units')
+
+
+class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
+    _name = 'maintenance.maintenance.unit.option'
+    _description = 'Maintenance Unit Option'
+
+    user_id = fields.Many2one('res.users', 'User', default=lambda self: self.env.user)
+    name = fields.Char('name', required=True)
+    type = fields.Char('Type', required=True)
+    code = fields.Char('Code', required=True)
+    estate_code = fields.Char('Estate Code', required=True)
+    rental_property_option_id = fields.Many2one('maintenance.rental.property.option', string='Rental Property Option')
+
 
 class OnecoreMaintenanceLeaseOption(models.Model):
     _name = 'maintenance.lease.option'
