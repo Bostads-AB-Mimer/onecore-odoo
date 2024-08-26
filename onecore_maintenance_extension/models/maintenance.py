@@ -21,10 +21,10 @@ class OneCoreMaintenanceRequest(models.Model):
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
     ], string='Search Type', default='leaseId', required=True)
 
-    rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', store=True, readonly=False)
-    maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit', store=True, readonly=False)
-    tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', store=True, readonly=False)
-    lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', store=True, readonly=False)
+    rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
+    maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
+    tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
+    lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
 
     # Dependent on rental_property_option_id
     rental_property_id = fields.Char(string='Rental Property ID', store=True)
