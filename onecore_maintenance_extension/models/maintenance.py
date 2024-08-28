@@ -85,7 +85,7 @@ class OneCoreMaintenanceRequest(models.Model):
         try:
             response = onecore_auth.onecore_request(url, params=params)
             response.raise_for_status()
-            return response.json().get('data', {})
+            return response.json().get('content', {})
         except requests.HTTPError as http_err:
             _logger.error(f"HTTP error occurred: {http_err}")
         except Exception as err:
