@@ -27,11 +27,12 @@ class OnecoreAuth(models.Model):
 
     def refresh_token(self):
         body = {
-            'username': self.env['ir.config_parameter'].get_param('onecore_body_username', ''),
-            'password': self.env['ir.config_parameter'].get_param('onecore_body_password', ''),
+            'username': self.env['ir.config_parameter'].get_param('onecore_username', ''),
+            'password': self.env['ir.config_parameter'].get_param('onecore_password', ''),
         }
+        base_url = self.env['ir.config_parameter'].get_param('onecore_base_url', '')
         response = requests.post(
-            self.env['ir.config_parameter'].get_param('onecore_generate_token_url', ''),
+            f"{base_url}/auth/generateToken",
             json=body
         )
         if response.status_code == 200:
