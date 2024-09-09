@@ -79,9 +79,9 @@ class OneCoreMaintenanceRequest(models.Model):
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
         base_url = self.env['ir.config_parameter'].get_param(
-            'onecore_base_url', '')
+            'onecore_propertyinfo_url', '')
         params = {'typeOfNumber': search_type}
-        url = f"{base_url}/propertyInfo/{quote(search_by_number, safe='')}"
+        url = f"{base_url}{quote(search_by_number, safe='')}"
         try:
             response = onecore_auth.onecore_request(url, params=params)
             response.raise_for_status()
