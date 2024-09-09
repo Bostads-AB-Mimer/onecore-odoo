@@ -22,44 +22,63 @@ class OneCoreMaintenanceRequest(models.Model):
     ], string='Search Type', default='leaseId', required=True)
 
     rental_property_option_id = fields.Many2one('maintenance.rental.property.option', compute='_compute_search', string='Rental Property Option Id', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
-    maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
+    maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit Option', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], store=True, readonly=False)
+    
+    
+    #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
-    # Dependent on rental_property_option_id
-    rental_property_id = fields.Char(string='Rental Property ID', store=True)
-    address = fields.Char('Address', store=True)
-    property_type = fields.Char('Property Type', store=True)
-    code = fields.Char('Code', store=True)
-    type = fields.Char('Type', store=True)
-    area = fields.Char('Size', store=True)
-    entrance = fields.Char('Entrance', store=True)
-    floor = fields.Char('Floor', store=True)
-    has_elevator = fields.Char('Has Elevator', store=True)
-    wash_space = fields.Char('Wash Space', store=True)
-    estate_code = fields.Char('Estate Code', store=True)
-    estate = fields.Char('Estate Caption', store=True)
-    building_code = fields.Char('Block Code', store=True)
-    building = fields.Char('Block Name', store=True)
+    rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Rental Property Id')
+    
+    rental_property_name = fields.Char('Hyresobjekt Namn', store=False, related='rental_property_id.name', depends=['rental_property_id'])
+    address = fields.Char('Address', store=False, related='rental_property_id.address', depends=['rental_property_id'])
+    property_type = fields.Char('Property Type', related='rental_property_id.property_type', depends=['rental_property_id'])
+    code = fields.Char('Code', store=False, related='rental_property_id.code', depends=['rental_property_id'])
+    type = fields.Char('Type', store=False, related='rental_property_id.type', depends=['rental_property_id'])
+    area = fields.Char('Size', store=False, related='rental_property_id.area', depends=['rental_property_id'])
+    entrance = fields.Char('Entrance', store=False, related='rental_property_id.entrance', depends=['rental_property_id'])
+    floor = fields.Char('Floor', store=False, related='rental_property_id.floor', depends=['rental_property_id'])
+    has_elevator = fields.Char('Has Elevator', store=False, related='rental_property_id.has_elevator', depends=['rental_property_id'])
+    wash_space = fields.Char('Wash Space', store=False, related='rental_property_id.wash_space', depends=['rental_property_id'])
+    estate_code = fields.Char('Estate Code', store=False, related='rental_property_id.estate_code', depends=['rental_property_id'])
+    estate = fields.Char('Estate Caption', store=False, related='rental_property_id.estate', depends=['rental_property_id'])
+    building_code = fields.Char('Block Code', store=False, related='rental_property_id.building_code', depends=['rental_property_id'])
+    building = fields.Char('Block Name', store=False, related='rental_property_id.building', depends=['rental_property_id'])
+   
+    #    MAINTENANCE UNIT ---------------------------------------------------------------------------------------------------------------------
 
-    # Dependent on maintenance_unit_id
-    maintenance_unit_id = fields.Char(string='Maintenance Unit', store=True, readonly=True)
-    maintenance_unit_type = fields.Char('Maintenance Unit Type', store=True)
+    maintenance_unit_id = fields.Many2one('maintenance.maintenance.unit', string='Maintenance Unit ID', store=True)
+    
+    maintenance_unit_type = fields.Char('Maintenance Unit Type', related='maintenance_unit_id.type', depends=['maintenance_unit_id'])
+    maintenance_unit_code=fields.Char('Maintenance Unit Code', readonly=True, related='maintenance_unit_id.code', depends=['maintenance_unit_id'])
+    maintenance_unit_caption=fields.Char('Maintenance Unit Caption', readonly=True, related='maintenance_unit_id.caption', depends=['maintenance_unit_id'])
+   
+    #   TENANT  ---------------------------------------------------------------------------------------------------------------------
 
-    # Dependent on tenant_option_id
-    contact_code = fields.Char(string='Contact Code', store=True)
-    tenant_id = fields.Char(string='Tenant Id', store=True)
-    national_registration_number = fields.Char('National Registration Number', store=True)
-    phone_number = fields.Char('Phone Number', store=True)
-    email_address = fields.Char('Email Address', store=True)
-    is_tenant = fields.Boolean('Is Tenant', store=True)
+    tenant_id = fields.Many2one('maintenance.tenant', string='Tenant ID', store=True)
 
-    # Dependent on lease_option_id
-    lease_id = fields.Char(string='Lease Id', store=True, readonly=True)
-    lease_type = fields.Char('Lease Type', store=True, readonly=True)
-    contract_date = fields.Date('Contract Date', store=True, readonly=True)
-    lease_start_date = fields.Date('Lease Start Date', store=True, readonly=True)
-    lease_end_date = fields.Date('Lease End Date', store=True, readonly=True)
+    tenant_name = fields.Char('Tenant Name', store=False, related='tenant_id.name', depends=['tenant_id'])
+    contact_code = fields.Char('Contact Code', store=False, related='tenant_id.contact_code', depends=['tenant_id'])
+    national_registration_number = fields.Char('National Registration Number', store=False, related='tenant_id.national_registration_number', depends=['tenant_id'])
+    phone_number = fields.Char('Phone Number', store=False, related='tenant_id.phone_number', depends=['tenant_id'])
+    email_address = fields.Char('Email Address', store=False, related='tenant_id.email_address', depends=['tenant_id'])
+    is_tenant = fields.Boolean('Is Tenant', store=False, related='tenant_id.is_tenant', depends=['tenant_id'])
+
+    option_contact_code = fields.Char('Contact Code', store=False, related='tenant_option_id.contact_code', depends=['tenant_option_id'])
+    option_national_registration_number = fields.Char('National Registration Number', store=False, related='tenant_option_id.national_registration_number', depends=['tenant_option_id'])
+    option_phone_number = fields.Char('Phone Number', store=False, related='tenant_option_id.phone_number', depends=['tenant_option_id'])
+    option_email_address = fields.Char('Email Address', store=False, related='tenant_option_id.email_address', depends=['tenant_option_id'])
+       
+    #   LEASE  ---------------------------------------------------------------------------------------------------------------------
+
+    lease_id = fields.Many2one('maintenance.lease', string='Lease id', store=True)
+
+    lease_name = fields.Char('Lease Name', store=False, related='lease_id.name', depends=['lease_id'])
+    lease_type = fields.Char('Lease Type', store=False, readonly=True, related='lease_id.lease_type', depends=['lease_id'])
+    contract_date = fields.Date('Contract Date', store=False, readonly=True, related='lease_id.contract_date', depends=['lease_id'])
+    lease_start_date = fields.Date('Lease Start Date', store=False, readonly=True, related='lease_id.lease_start_date', depends=['lease_id'])
+    lease_end_date = fields.Date('Lease End Date', store=False, readonly=True, related='lease_id.lease_end_date', depends=['lease_id'])
 
     # Comes from Mimer (Add more fields for these?)
     pet=fields.Char('Pet', store=True)
@@ -68,8 +87,6 @@ class OneCoreMaintenanceRequest(models.Model):
     space_code=fields.Char('Space Code', store=True, readonly=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
-    maintenance_unit_code=fields.Char('Maintenance Unit Code', store=True, readonly=True)
-    maintenance_unit_caption=fields.Char('Maintenance Unit Caption', store=True, readonly=True)
     master_key=fields.Boolean('Master Key', store=True, default=True)
 
     # New fields
@@ -122,6 +139,7 @@ class OneCoreMaintenanceRequest(models.Model):
                             maintenance_unit_option = self.env['maintenance.maintenance.unit.option'].create({
                                 'user_id': self.env.user.id,
                                 'name': maintenance_unit['caption'],
+                                'caption': maintenance_unit['caption'],
                                 'type': maintenance_unit['type'],
                                 'id': maintenance_unit['id'],
                                 'code': maintenance_unit['code'],
@@ -155,7 +173,6 @@ class OneCoreMaintenanceRequest(models.Model):
                             'email_address': tenant['emailAddress'],
                             'phone_number': phone_number,
                             'is_tenant': tenant['isTenant'],
-                            'tenant_option_id': lease_option.id,
                           })
         else:
             _logger.info("No data found in response.")
@@ -218,6 +235,8 @@ class OneCoreMaintenanceRequest(models.Model):
         if self.maintenance_unit_option_id:
             self.maintenance_unit_id = self.maintenance_unit_option_id.name
             self.maintenance_unit_type = self.maintenance_unit_option_id.type
+            self.maintenance_unit_code = self.maintenance_unit_option_id.code
+            self.maintenance_unit_caption = self.maintenance_unit_option_id.caption
 
     @api.onchange('lease_option_id')
     def _onchange_lease_option_id(self):
@@ -228,7 +247,7 @@ class OneCoreMaintenanceRequest(models.Model):
             self.lease_start_date = self.lease_option_id.lease_start_date
             self.lease_end_date = self.lease_option_id.lease_end_date
 
-            tenant_records = self.env['maintenance.tenant.option'].search([('tenant_option_id', '=', self.lease_option_id.id)])
+            tenant_records = self.env['maintenance.tenant.option'].search([('id', '=', self.tenant_option_id.id)])
             if tenant_records:
                 self.tenant_option_id = tenant_records[0].id
             rental_property_records = self.env['maintenance.rental.property.option'].search([('id', '=', self.lease_option_id.rental_property_option_id.id)])
@@ -250,18 +269,76 @@ class OneCoreMaintenanceRequest(models.Model):
         _logger.info(f"Creating maintenance requests: {vals_list}")
         images = []
         for vals in vals_list:
+            # SAVE RENTAL PROPERTY
             if 'rental_property_option_id' in vals:
-                vals['rental_property_id'] = self.rental_property_option_id.name
+                property_option_record = self.env['maintenance.rental.property.option'].search([('id', '=', vals.get('rental_property_option_id'))])
+                new_property_record = self.env['maintenance.rental.property'].create({
+                    'name': property_option_record.name,
+                    'rental_property_id': property_option_record.name,
+                    'property_type': property_option_record.property_type,
+                    'address': property_option_record.address,
+                    'code': property_option_record.code,
+                    'type': property_option_record.type,
+                    'area': property_option_record.area,
+                    'entrance': property_option_record.entrance,
+                    'floor': property_option_record.floor,
+                    'has_elevator': property_option_record.has_elevator,
+                    'wash_space': property_option_record.wash_space,
+                    'estate_code': property_option_record.estate_code,
+                    'estate': property_option_record.estate,
+                    'building_code': property_option_record.building_code,
+                    'building': property_option_record.building,
+                })
+                vals['rental_property_id'] = new_property_record.id
+            
+            # SAVE MAINTENANCE UNIT
             if 'maintenance_unit_option_id' in vals:
-                vals['maintenance_unit_id'] = self.maintenance_unit_option_id.name
+                maintenance_unit_option_record = self.env['maintenance.maintenance.unit.option'].search([('id', '=', vals.get('maintenance_unit_option_id'))])
+                new_maintenance_unit_record = self.env['maintenance.maintenance.unit'].create({
+                    #'mainentance_unit_id': maintenance_unit_option_record.name,
+                    'name': maintenance_unit_option_record.name,
+                    'caption': maintenance_unit_option_record.caption,
+                    'type': maintenance_unit_option_record.type,
+                    'code': maintenance_unit_option_record.code,
+                    'estate_code': maintenance_unit_option_record.estate_code,
+                })
+                vals['maintenance_unit_id'] = new_maintenance_unit_record.id
+            
+            # SAVE LEASE
             if 'lease_option_id' in vals:
-                vals['lease_id'] = self.lease_option_id.name
+                lease_option_record = self.env['maintenance.lease.option'].search([('id', '=', vals.get('lease_option_id'))])
+                new_lease_record = self.env['maintenance.lease'].create({
+                    'lease_id': lease_option_record.name,
+                    'name': lease_option_record.name,
+                    'lease_number': lease_option_record.lease_number,
+                    'lease_type': lease_option_record.lease_type,
+                    'lease_start_date': lease_option_record.lease_start_date,
+                    'lease_end_date': lease_option_record.lease_end_date,
+                    'contract_date': lease_option_record.contract_date,
+                    'approval_date': lease_option_record.approval_date,
+                })
+                
+                vals['lease_id'] = new_lease_record.id
+            
+            # SAVE TENANT
             if 'tenant_option_id' in vals:
-                vals['tenant_id'] = self.tenant_option_id.name
-                vals['contact_code'] = self.tenant_option_id.contact_code
+                tenant_option_record = self.env['maintenance.tenant.option'].search([('id', '=', vals.get('tenant_option_id'))])
+                new_tenant_record = self.env['maintenance.tenant'].create({
+                    'name': tenant_option_record.name,
+                    'contact_code': tenant_option_record.contact_code,
+                    'contact_key': tenant_option_record.contact_key,
+                    'national_registration_number': tenant_option_record.national_registration_number,
+                    'email_address': tenant_option_record.email_address,
+                    'phone_number': tenant_option_record.phone_number,
+                    'is_tenant': tenant_option_record.is_tenant,
+                })
+                
+                
+                vals['tenant_id'] = new_tenant_record.id
+            
             if 'images' in vals:
                 images = vals.pop('images')
-
+            
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             for image in images:
@@ -284,41 +361,48 @@ class OneCoreMaintenanceRequest(models.Model):
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
 
+            # Clear existing records for this user
+
+            self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
             # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
 
 
             # Only proceed if rental_property_option_id is present
-            if request.rental_property_option_id:
-                ICP = self.env['ir.config_parameter'].sudo()
-                token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
-                if not token:
-                    _logger.error("Bearer token is not set in system parameters.")
-                    return maintenance_requests
+            # if request.rental_property_option_id:
+            #     ICP = self.env['ir.config_parameter'].sudo()
+            #     token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
+            #     if not token:
+            #         _logger.error("Bearer token is not set in system parameters.")
+            #         return maintenance_requests
 
-                webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/createerrand"
-                headers = {
-                    'Authorization': f'Bearer {token}',
-                    'Content-Type': 'application/json'
-                }
+            #     webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/createerrand"
+            #     headers = {
+            #         'Authorization': f'Bearer {token}',
+            #         'Content-Type': 'application/json'
+            #     }
 
-                 # Convert HTML to plain text
-                description_text = html2plaintext(request.description) if request.description else ""
+            #      # Convert HTML to plain text
+            #     description_text = html2plaintext(request.description) if request.description else ""
 
-                data = {
-                    "rentalObjectId": request.rental_property_option_id.name,
-                    "title": request.name,
-                    "odooId": str(request.id),  # The unique Odoo ID
-                    "description": description_text,
-                    "state": request.stage_id.name,
-                }
-                try:
-                    response = requests.post(webhook_url, headers=headers, json=data)
-                    _logger.info(f"Webhook sent. Status Code: {response.status_code}, Response: {response.text}")
-                except Exception as e:
-                    _logger.error(f"Failed to send webhook: {e}")
-            else:
-                _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
+            #     data = {
+            #         "rentalObjectId": request.rental_property_option_id.name,
+            #         "title": request.name,
+            #         "odooId": str(request.id),  # The unique Odoo ID
+            #         "description": description_text,
+            #         "state": request.stage_id.name,
+            #     }
+            #     try:
+            #         response = requests.post(webhook_url, headers=headers, json=data)
+            #         _logger.info(f"Webhook sent. Status Code: {response.status_code}, Response: {response.text}")
+            #     except Exception as e:
+            #         _logger.error(f"Failed to send webhook: {e}")
+            # else:
+            #     _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return maintenance_requests
 
@@ -349,63 +433,63 @@ class OneCoreMaintenanceRequest(models.Model):
         # The below is  a Mimer added API-call to update errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
         # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/
 
-        for request in self:
-            # Only proceed if rental_property_option_id is present
-            if request.rental_property_option_id:
-                ICP = request.env['ir.config_parameter'].sudo()
-                token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
-                if not token:
-                    _logger.error("Bearer token is not set in system parameters.")
-                    continue  # Skip this iteration
+        # for request in self:
+        #     # Only proceed if rental_property_option_id is present
+        #     if request.rental_property_option_id:
+        #         ICP = request.env['ir.config_parameter'].sudo()
+        #         token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
+        #         if not token:
+        #             _logger.error("Bearer token is not set in system parameters.")
+        #             continue  # Skip this iteration
 
-                webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/updateErrand"
-                headers = {
-                    'Authorization': f'Bearer {token}',
-                    'Content-Type': 'application/json'
-                }
+        #         webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/updateErrand"
+        #         headers = {
+        #             'Authorization': f'Bearer {token}',
+        #             'Content-Type': 'application/json'
+        #         }
 
-                # Assuming you want to update the same fields as those you send when creating an errand
-                description_text = html2plaintext(request.description) if request.description else ""
-                data = {
-                    "odooId": str(request.id),
-                    "rentalObjectId": request.rental_property_option_id.name,
-                    "title": request.name,
-                    "description": description_text,
-                    "state": request.stage_id.name,
-                }
+        #         # Assuming you want to update the same fields as those you send when creating an errand
+        #         description_text = html2plaintext(request.description) if request.description else ""
+        #         data = {
+        #             "odooId": str(request.id),
+        #             "rentalObjectId": request.rental_property_option_id.name,
+        #             "title": request.name,
+        #             "description": description_text,
+        #             "state": request.stage_id.name,
+        #         }
 
-                try:
-                    response = requests.post(webhook_url, headers=headers, json=data)
-                    _logger.info(f"Webhook for update sent. Status Code: {response.status_code}, Response: {response.text}")
-                except Exception as e:
-                    _logger.error(f"Failed to send update webhook: {e}")
+        #         try:
+        #             response = requests.post(webhook_url, headers=headers, json=data)
+        #             _logger.info(f"Webhook for update sent. Status Code: {response.status_code}, Response: {response.text}")
+        #         except Exception as e:
+        #             _logger.error(f"Failed to send update webhook: {e}")
 
         return res
 
 
     #Mimer created webhook to delete errands from external testapp. https://apps.mimer.nu/version-test/odootest/
-    def unlink(self):
-        ICP = self.env['ir.config_parameter'].sudo()
-        token = ICP.get_param('x_webhook_bearer_token', default=None)
-        if not token:
-            _logger.error("Bearer token is not set in system parameters.")
-        else:
-            for request in self:
-                if request.rental_property_option_id:
-                    webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/deleteerrand"
-                    headers = {
-                        'Authorization': f'Bearer {token}',
-                        'Content-Type': 'application/json'
-                    }
-                    data = {"odooId": str(request.id)}
-                    try:
-                        response = requests.post(webhook_url, headers=headers, json=data)
-                        if response.status_code != 200:
-                            _logger.error(f"Webhook call failed: {response.text}")
-                    except Exception as e:
-                        _logger.error(f"Error calling webhook: {str(e)}")
-                else:
-                    _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
+    # def unlink(self):
+    #     ICP = self.env['ir.config_parameter'].sudo()
+    #     token = ICP.get_param('x_webhook_bearer_token', default=None)
+    #     if not token:
+    #         _logger.error("Bearer token is not set in system parameters.")
+    #     else:
+    #         for request in self:
+    #             if request.rental_property_option_id:
+    #                 webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/deleteerrand"
+    #                 headers = {
+    #                     'Authorization': f'Bearer {token}',
+    #                     'Content-Type': 'application/json'
+    #                 }
+    #                 data = {"odooId": str(request.id)}
+    #                 try:
+    #                     response = requests.post(webhook_url, headers=headers, json=data)
+    #                     if response.status_code != 200:
+    #                         _logger.error(f"Webhook call failed: {response.text}")
+    #                 except Exception as e:
+    #                     _logger.error(f"Error calling webhook: {str(e)}")
+    #             else:
+    #                 _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
-        return super().unlink()
+    #     return super().unlink()
 
