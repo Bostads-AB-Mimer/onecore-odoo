@@ -73,7 +73,8 @@ class OneCoreMaintenanceRequest(models.Model):
     master_key=fields.Boolean('Master Key', store=True, default=True)
 
     # New fields
-    priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', required=True, store=True, default='7')
+    priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', required=True, store=True)
+    due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
 
 
     def fetch_property_data(self, search_by_number, search_type):
@@ -183,6 +184,12 @@ class OneCoreMaintenanceRequest(models.Model):
             tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
             if tenant_records:
                 record.tenant_option_id = tenant_records[0].id
+
+    @api.depends('request_date', 'priority_expanded')
+    def _compute_due_date(self):
+        for record in self:
+            if record.request_date and record.priority_expanded:
+                record.due_date = fields.Date.add(record.request_date, days=int(record.priority_expanded))
 
     @api.onchange('rental_property_option_id')
     def _onchange_rental_property_option_id(self):

@@ -135,10 +135,11 @@
                             <div class="accordion-body">
                                 <group col="1">
                                     <field name="request_date" string="Ärendedatum" />
+                                    <field name="priority_expanded" string="Prioritet" />
+                                    <field name="due_date" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
                                     <field name="user_id" string="Responsible" />
                                     <field name="schedule_date" />
-                                    <field name="priority_expanded" string="Prioritet" />
                                     <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
                                     <field name="email_cc" string="Email cc" groups="base.group_no_one" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
