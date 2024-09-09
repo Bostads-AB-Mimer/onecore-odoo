@@ -73,7 +73,7 @@ class OneCoreMaintenanceRequest(models.Model):
     master_key=fields.Boolean('Master Key', store=True, default=True)
 
     # New fields
-    priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', required=True, store=True)
+    priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
     due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
 
 
