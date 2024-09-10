@@ -135,10 +135,11 @@
                             <div class="accordion-body">
                                 <group col="1">
                                     <field name="request_date" string="Ärendedatum" />
+                                    <field name="priority_expanded" string="Prioritet" />
+                                    <field name="due_date" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
                                     <field name="user_id" string="Responsible" />
                                     <field name="schedule_date" />
-                                    <field name="priority_expanded" string="Prioritet" />
                                     <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
                                     <field name="email_cc" string="Email cc" groups="base.group_no_one" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
@@ -174,6 +175,7 @@
                     <field name="stage_id" />
                     <field name="color" />
                     <field name="priority_expanded" />
+                    <field name="due_date" />
                     <field name="equipment_id" />
                     <field name="user_id" />
                     <field name="owner_user_id" />
@@ -222,10 +224,24 @@
                         <br/>
                     </span>
                     <span>
-                    Prioritet: <t t-esc="record.priority_expanded.value"/>
+                    Prioritet:
+                    <t t-if="record.priority_expanded.value">
+                        <t t-esc="record.priority_expanded.value"/>
+                    </t>
+                    <t t-else="">
+                        Ej angett
+                    </t>
                     <br/>
                     </span>
                     Skapad: <t t-esc="record.create_date.value"/>
+                    <br/>
+                    Förfallodatum:
+                    <t t-if="record.due_date.value">
+                        <t t-esc="record.due_date.value"/>
+                    </t>
+                    <t t-else="">
+                        Ej angett
+                    </t>
                 </xpath>
             </field>
         </record>
