@@ -10,6 +10,6 @@
       'security/ir.model.access.csv',
     ],
     'post_init_hook': '_post_init_hook',
-    'auto_install': False,
+    'auto_install': True,
     'license': 'LGPL-3',
 }
