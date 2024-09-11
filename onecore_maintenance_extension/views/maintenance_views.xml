@@ -1,6 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data>
+        <!-- This extends the search bar and what fields are searchable -->
+        <record id="hr_equipment_request_view_search_extension" model="ir.ui.view">
+            <field name="name">equipment.request.search</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_search" />
+            <field name="arch" type="xml">
+                <xpath expr="//search" position="inside">
+                    <field string="Personnummer" name="national_registration_number"/>
+                    <field string="Adress" name="address"/>
+                    <field string="Telefonnummer" name="phone_number"/>
+                    <field string="Kundnummer" name="contact_code"/>
+                </xpath>
+                <!-- Replace original priority filter with priority_expanded -->
+                <xpath expr="//filter[@name='high_priority']" position="replace">
+                    <filter string="1 dag" name="one_day" domain="[('priority_expanded', '=', '1')]" />
+                    <filter string="5 dagar" name="five_days" domain="[('priority_expanded', '=', '5')]" />
+                    <filter string="7 dagar" name="seven_days" domain="[('priority_expanded', '=', '7')]" />
+                    <filter string="10 dagar" name="ten_days" domain="[('priority_expanded', '=', '10')]" />
+                    <filter string="2 veckor" name="two_weeks" domain="[('priority_expanded', '=', '14')]" />
+                </xpath>
+            </field>
+        </record>
         <record id="hr_equipment_request_view_form_extension" model="ir.ui.view">
             <field name="name">equipment.request.form</field>
             <field name="model">maintenance.request</field>
