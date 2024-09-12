@@ -138,11 +138,11 @@
                                     <field name="tenant_name" string="Hyresgäst" invisible="not tenant_name and tenant_option_id" />
                                     <field name="national_registration_number" string="Personnummer" />
                                     <field name="contact_code" string="Kundnummer" />
-                                    <field name="phone_number" string="Telefon" />
-                                    <field name="email_address" string="E-post" />
+                                    <field name="phone_number" string="Telefon" readonly="create_date != False" />
+                                    <field name="email_address" string="E-post" readonly="create_date != False" />
 
-                                    <field name="pet" string="Husdjur" />
-                                    <field name="hearing_impaired" string="Hörselnedsättning" />
+                                    <field name="pet" string="Husdjur" readonly="create_date != False" />
+                                    <field name="hearing_impaired" string="Hörselnedsättning" readonly="create_date != False" />
                                     <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                 </group>
                             </div>

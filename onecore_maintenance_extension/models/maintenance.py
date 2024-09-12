@@ -61,8 +61,8 @@ class OneCoreMaintenanceRequest(models.Model):
     tenant_name = fields.Char('Tenant Name', related='tenant_id.name', depends=['tenant_id'])
     contact_code = fields.Char('Contact Code', related='tenant_id.contact_code', depends=['tenant_id'])
     national_registration_number = fields.Char('National Registration Number', related='tenant_id.national_registration_number', depends=['tenant_id'])
-    phone_number = fields.Char('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'])
-    email_address = fields.Char('Email Address', related='tenant_id.email_address', depends=['tenant_id'])
+    phone_number = fields.Char('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
+    email_address = fields.Char('Email Address', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
     is_tenant = fields.Boolean('Is Tenant', related='tenant_id.is_tenant', depends=['tenant_id'])
        
     #   LEASE  ---------------------------------------------------------------------------------------------------------------------
@@ -76,13 +76,13 @@ class OneCoreMaintenanceRequest(models.Model):
     lease_end_date = fields.Date('Lease End Date', related='lease_id.lease_end_date', depends=['lease_id'])
 
     # Comes from Mimer (Add more fields for these?)
-    pet=fields.Char('Pet', store=True, readonly=True)
-    call_between=fields.Char('Call Between', store=True, readonly=True)
-    hearing_impaired=fields.Boolean('Hearing Impaired', store=True, readonly=True)
-    space_code=fields.Char('Space Code', store=True, readonly=True)
+    pet=fields.Char('Pet', store=True)
+    call_between=fields.Char('Call Between', store=True)
+    hearing_impaired=fields.Boolean('Hearing Impaired', store=True)
+    space_code=fields.Char('Space Code', store=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
-    master_key=fields.Boolean('Master Key', store=True, default=True, readonly=True)
+    master_key=fields.Boolean('Master Key', store=True, default=True)
 
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
@@ -94,7 +94,8 @@ class OneCoreMaintenanceRequest(models.Model):
         base_url = self.env['ir.config_parameter'].get_param(
             'onecore_base_url', '')
         params = {'typeOfNumber': search_type}
-        url = f"{base_url}/propertyInfo/{quote(search_by_number, safe='')}"    
+        url = f"{base_url}/propertyInfo/{quote(str(search_by_number), safe='')}"
+
         try:
             response = onecore_auth.onecore_request(url, params=params)
             response.raise_for_status()
