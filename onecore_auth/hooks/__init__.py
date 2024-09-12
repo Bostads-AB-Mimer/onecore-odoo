@@ -19,7 +19,7 @@ def _insert_env_variables(env):
         env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
         env_config = dotenv_values(env_path)
 
-        for key, value in template_config.items():
+        for key, value in env_template_config.items():
             if key in env_config:
                 env['ir.config_parameter'].set_param(key, env_config[key])
             else:
