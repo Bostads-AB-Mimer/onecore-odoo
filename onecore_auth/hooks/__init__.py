@@ -7,7 +7,7 @@ def _post_init_hook(env):
 def _insert_env_variables(env):
     # Load variables from .env.template
     env_template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env.template')
-    env_template_config = dotenv_values(template_path)
+    env_template_config = dotenv_values(env_template_path)
 
     # Check if all variables from .env.template are present in odoo-env secret
     all_in_secret = all(var in os.environ for var in env_template_config)
