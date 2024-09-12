@@ -102,7 +102,7 @@
                                     <field name="building" invisible="1" string="Byggnad" />
                                     <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" groups="maintenance.group_equipment_manager" />
                                     <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" readonly="1" groups="!maintenance.group_equipment_manager" />
-                                    <field name="maintenance_unit_caption" string="Tvättstuga" invisible="not maintenance_unit_caption" />
+                                    <field name="maintenance_unit_caption" string="Tvättstuga" invisible="not maintenance_unit_caption and maintenance_unit_option_id" />
                                     <field name="maintenance_unit_type" string="Utrymme" invisible="not maintenance_unit_type" />
                                 </group>
                             </div>
@@ -121,8 +121,8 @@
                           <div id="flush-collapse2" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group>
-                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id" groups="maintenance.group_equipment_manager" />
-                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" invisible="not lease_option_id" groups="!maintenance.group_equipment_manager" />
+                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id and create_date" groups="maintenance.group_equipment_manager" />
+                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" invisible="not lease_option_id and create_date" groups="!maintenance.group_equipment_manager" />
                                     
                                     <field name="lease_name" string="Kontrakt" invisible="not lease_name" />
 
@@ -135,17 +135,11 @@
                                     <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" groups="maintenance.group_equipment_manager" />
                                     <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" groups="!maintenance.group_equipment_manager" />
 
-                                    <field name="tenant_name" invisible="not tenant_name" string="Hyresgäst" />
-                                    <field name="national_registration_number" invisible="not national_registration_number" string="Personnummer" />
-                                    <field name="contact_code" invisible="not contact_code" string="Kundnummer" />
-                                    <field name="phone_number" invisible="not phone_number" string="Telefon" />
-                                    <field name="email_address" invisible="not email_address" string="E-post" />
-
-                                    <!-- Added these because they are (for some reason) not populated before saving -->
-                                    <field name="option_national_registration_number" invisible="not option_national_registration_number and national_registration_number" string="Personnummer" />
-                                    <field name="option_contact_code" invisible="not option_contact_code and contact_code" string="Kundnummer" />
-                                    <field name="option_phone_number" invisible="not option_phone_number and phone_number" string="Telefon" />
-                                    <field name="option_email_address" invisible="not option_email_address and email_address" string="E-post" />
+                                    <field name="tenant_name" string="Hyresgäst" invisible="not tenant_name and tenant_option_id" />
+                                    <field name="national_registration_number" string="Personnummer" />
+                                    <field name="contact_code" string="Kundnummer" />
+                                    <field name="phone_number" string="Telefon" />
+                                    <field name="email_address" string="E-post" />
 
                                     <field name="pet" string="Husdjur" />
                                     <field name="hearing_impaired" string="Hörselnedsättning" />
