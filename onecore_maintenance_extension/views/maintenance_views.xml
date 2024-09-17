@@ -161,11 +161,11 @@
                           <div id="flush-collapse3" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group col="1">
-                                    <field name="request_date" string="Ärendedatum" />
-                                    <field name="priority_expanded" string="Prioritet" />
+                                    <field name="request_date" />
+                                    <field name="priority_expanded"  />
                                     <field name="due_date" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
-                                    <field name="user_id" string="Responsible" />
+                                    <field name="user_id" />
                                     <field name="schedule_date" />
                                     <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
                                     <field name="call_between" invisible="not call_between" string="Kund nås dessa tider" />
