@@ -12,6 +12,7 @@
                     <field string="Adress" name="address"/>
                     <field string="Telefonnummer" name="phone_number"/>
                     <field string="Kundnummer" name="contact_code"/>
+                    <field string="Tvättstuga" name="maintenance_unit_id"/>
                 </xpath>
                 <!-- Replace original priority filter with priority_expanded -->
                 <xpath expr="//filter[@name='high_priority']" position="replace">
