@@ -25,12 +25,12 @@ class OneCoreMaintenanceRequest(models.Model):
     maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit Option', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
-    
-    
+
+
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
     rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Rental Property Id')
-    
+
     rental_property_name = fields.Char('Hyresobjekt Namn', related='rental_property_id.name', depends=['rental_property_id'])
     address = fields.Char('Address', related='rental_property_id.address', depends=['rental_property_id'])
     property_type = fields.Char('Property Type', related='rental_property_id.property_type', depends=['rental_property_id'])
@@ -45,15 +45,15 @@ class OneCoreMaintenanceRequest(models.Model):
     estate = fields.Char('Estate Caption', related='rental_property_id.estate', depends=['rental_property_id'])
     building_code = fields.Char('Block Code', related='rental_property_id.building_code', depends=['rental_property_id'])
     building = fields.Char('Block Name', related='rental_property_id.building', depends=['rental_property_id'])
-   
+
     #    MAINTENANCE UNIT ---------------------------------------------------------------------------------------------------------------------
 
     maintenance_unit_id = fields.Many2one('maintenance.maintenance.unit', string='Maintenance Unit ID', store=True)
-    
+
     maintenance_unit_type = fields.Char('Maintenance Unit Type', related='maintenance_unit_id.type', depends=['maintenance_unit_id'])
     maintenance_unit_code=fields.Char('Maintenance Unit Code', related='maintenance_unit_id.code', depends=['maintenance_unit_id'])
     maintenance_unit_caption=fields.Char('Maintenance Unit Caption', related='maintenance_unit_id.caption', depends=['maintenance_unit_id'])
-   
+
     #   TENANT  ---------------------------------------------------------------------------------------------------------------------
 
     tenant_id = fields.Many2one('maintenance.tenant', string='Tenant ID', store=True)
@@ -64,7 +64,7 @@ class OneCoreMaintenanceRequest(models.Model):
     phone_number = fields.Char('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
     email_address = fields.Char('Email Address', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
     is_tenant = fields.Boolean('Is Tenant', related='tenant_id.is_tenant', depends=['tenant_id'])
-       
+
     #   LEASE  ---------------------------------------------------------------------------------------------------------------------
 
     lease_id = fields.Many2one('maintenance.lease', string='Lease id', store=True)
@@ -176,7 +176,7 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.depends('search_by_number', 'search_type')
     def _compute_search(self):
         if self.search_by_number and self.search_type:
-            # Clear existing records for this user
+            # Clear existing options for this user
             self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
             self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
             self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
@@ -195,6 +195,15 @@ class OneCoreMaintenanceRequest(models.Model):
                 tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
                 if tenant_records:
                     record.tenant_option_id = tenant_records[0].id
+
+    # Triggers upon creating a new request to clear existing options for this user
+    @api.onchange('search_by_number')
+    def _unlink_options(self):
+        if not self.search_by_number:
+            self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+            self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
 
     @api.depends('request_date', 'priority_expanded')
     def _compute_due_date(self):
@@ -289,7 +298,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     'building': property_option_record.building,
                 })
                 vals['rental_property_id'] = new_property_record.id
-            
+
             # SAVE MAINTENANCE UNIT
             if 'maintenance_unit_option_id' in vals:
                 maintenance_unit_option_record = self.env['maintenance.maintenance.unit.option'].search([('id', '=', vals.get('maintenance_unit_option_id'))])
@@ -301,7 +310,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     'estate_code': maintenance_unit_option_record.estate_code,
                 })
                 vals['maintenance_unit_id'] = new_maintenance_unit_record.id
-            
+
             # SAVE LEASE
             if 'lease_option_id' in vals:
                 lease_option_record = self.env['maintenance.lease.option'].search([('id', '=', vals.get('lease_option_id'))])
@@ -315,9 +324,9 @@ class OneCoreMaintenanceRequest(models.Model):
                     'contract_date': lease_option_record.contract_date,
                     'approval_date': lease_option_record.approval_date,
                 })
-                
+
                 vals['lease_id'] = new_lease_record.id
-            
+
             # SAVE TENANT
             if 'tenant_option_id' in vals:
                 tenant_option_record = self.env['maintenance.tenant.option'].search([('id', '=', vals.get('tenant_option_id'))])
@@ -330,13 +339,13 @@ class OneCoreMaintenanceRequest(models.Model):
                     'phone_number': tenant_option_record.phone_number,
                     'is_tenant': tenant_option_record.is_tenant,
                 })
-                
-                
+
+
                 vals['tenant_id'] = new_tenant_record.id
-            
+
             if 'images' in vals:
                 images = vals.pop('images')
-            
+
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             for image in images:
@@ -358,13 +367,6 @@ class OneCoreMaintenanceRequest(models.Model):
             if not request.close_date and request.stage_id.done:
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
-
-            # Clear existing records for this user
-
-            # self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            # self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            # self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            # self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
 
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
             # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
@@ -490,4 +492,3 @@ class OneCoreMaintenanceRequest(models.Model):
     #                 _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
     #     return super().unlink()
-
