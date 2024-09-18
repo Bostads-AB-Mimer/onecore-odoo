@@ -82,9 +82,8 @@
                             <div class="accordion-body">
                                 <group col="1">
                                     <field name="create_date" invisible="1" />
-                                    <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" groups="maintenance.group_equipment_manager" />
-                                    <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" readonly="1" groups="!maintenance.group_equipment_manager" />
-                                    
+                                    <field name="rental_property_option_id" string="Hyresobjekt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" />
+
                                     <field name="rental_property_name" string="Hyresobjekt" invisible="not rental_property_name" />
                                     <field name="property_type" invisible="not property_type" string="Fastighetstyp" />
                                     <field name="space_caption" invisible="not space_caption" string="Typ" />
@@ -100,8 +99,7 @@
                                     <field name="estate" invisible="not estate" string="Tillhör fastighet" />
                                     <field name="building_code" invisible="1" string="Byggnadskod" />
                                     <field name="building" invisible="1" string="Byggnad" />
-                                    <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" groups="maintenance.group_equipment_manager" />
-                                    <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" readonly="1" groups="!maintenance.group_equipment_manager" />
+                                    <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" />
                                     <field name="maintenance_unit_caption" string="Tvättstuga" invisible="not maintenance_unit_caption and maintenance_unit_option_id" />
                                     <field name="maintenance_unit_type" string="Utrymme" invisible="not maintenance_unit_type" />
                                 </group>
@@ -121,9 +119,8 @@
                           <div id="flush-collapse2" class="accordion-collapse collapse d-md-block" data-bs-parent="#accordionFlush">
                             <div class="accordion-body">
                                 <group>
-                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id and create_date" groups="maintenance.group_equipment_manager" />
-                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="1" invisible="not lease_option_id and create_date" groups="!maintenance.group_equipment_manager" />
-                                    
+                                    <field name="lease_option_id" string="Kontrakt" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not lease_option_id and create_date" />
+
                                     <field name="lease_name" string="Kontrakt" invisible="not lease_name" />
 
                                     <field name="lease_type" invisible="not lease_type" string="Kontraktstyp" />
@@ -132,8 +129,7 @@
                                     <field name="lease_start_date" invisible="1" string="Startdatum" />
                                     <field name="lease_end_date" invisible="1" string="Slutdatum" />
 
-                                    <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" groups="maintenance.group_equipment_manager" />
-                                    <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" groups="!maintenance.group_equipment_manager" />
+                                    <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" />
 
                                     <field name="tenant_name" string="Hyresgäst" invisible="not tenant_name and tenant_option_id" />
                                     <field name="national_registration_number" string="Personnummer" />
