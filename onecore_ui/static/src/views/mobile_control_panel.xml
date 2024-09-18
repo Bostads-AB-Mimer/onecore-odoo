@@ -14,4 +14,11 @@
       </t>
     </xpath>
   </t>
+
+  <!-- Hides cog wheel icons (åtgärder) from mobile view  -->
+  <t t-inherit="web.Breadcrumb.Actions" t-inherit-mode="extension">
+    <xpath expr="//div[1]" position="attributes">
+      <attribute name="class" add="d-none d-md-block" separator=" " />
+    </xpath>
+</t>
 </templates>
