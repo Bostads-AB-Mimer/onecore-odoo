@@ -1674,7 +1674,7 @@ msgstr "t.ex. Monitorer"
 #. module: maintenance
 #: model_terms:ir.ui.view,arch_db:maintenance.hr_equipment_request_view_form
 msgid "e.g. Screen not working"
-msgstr "t.ex. Skärmen fungerar inte"
+msgstr "t.ex. Tvättmaskinen läcker vatten"
 
 #. module: maintenance
 #: model_terms:ir.ui.view,arch_db:maintenance.hr_equipment_category_view_form
