@@ -94,7 +94,8 @@
                                     <field name="area" invisible="not area" string="Yta" />
                                     <field name="entrance" invisible="not entrance" string="Ingång" />
                                     <field name="floor" invisible="not floor" string="Våning" />
-                                    <field name="has_elevator" invisible="not has_elevator" string="Hiss" />
+                                    <field name="has_elevator" invisible="1" string="Hiss" />
+                                    <field name="display_has_elevator" string="Hiss" />
                                     <field name="estate_code" invisible="1" string="Fastighetskod" />
                                     <field name="address" string="Adress" />
                                     <field name="estate" invisible="not estate" string="Tillhör fastighet" />
