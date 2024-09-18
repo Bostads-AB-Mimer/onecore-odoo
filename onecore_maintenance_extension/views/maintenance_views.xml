@@ -190,6 +190,10 @@
                 <xpath expr="//field[@name='request_date']" position="attributes">
                     <attribute name="invisible">1</attribute>
                 </xpath>
+
+                <!-- Hides the instructions tab in the form view -->
+                <xpath expr="//notebook[1]/page[2]" position="replace" />
+
             </field>
         </record>
 
