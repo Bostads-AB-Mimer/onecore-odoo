@@ -88,6 +88,16 @@ class OneCoreMaintenanceRequest(models.Model):
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
     due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
 
+    @api.depends('has_elevator')
+    def _compute_display_has_elevator (self):
+        for record in self:
+            if record.has_elevator == 'True':
+                record.display_has_elevator = 'Ja'
+            elif record.has_elevator == 'False':
+                record.display_has_elevator = 'Nej'
+            else:
+                record.display_has_elevator = 'Ej angivet'
+
 
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
@@ -175,26 +185,25 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.depends('search_by_number', 'search_type')
     def _compute_search(self):
-        if self.search_by_number and self.search_type:
-            # Clear existing options for this user
-            self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            for record in self:
-                record.update_form_options(record.search_by_number, record.search_type)
-                property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
-                if property_records:
-                    record.rental_property_option_id = property_records[0].id
-                maintenance_unit_records = self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)])
-                if maintenance_unit_records:
-                    record.maintenance_unit_option_id = maintenance_unit_records[0].id
-                lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
-                if lease_records:
-                    record.lease_option_id = lease_records[0].id
-                tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
-                if tenant_records:
-                    record.tenant_option_id = tenant_records[0].id
+        # Clear existing records for this user
+        self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
+        for record in self:
+            record.update_form_options(record.search_by_number, record.search_type)
+            property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
+            if property_records:
+                record.rental_property_option_id = property_records[0].id
+            maintenance_unit_records = self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)])
+            if maintenance_unit_records:
+                record.maintenance_unit_option_id = maintenance_unit_records[0].id
+            lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
+            if lease_records:
+                record.lease_option_id = lease_records[0].id
+            tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
+            if tenant_records:
+                record.tenant_option_id = tenant_records[0].id
 
     # Triggers upon creating a new request to clear existing options for this user
     @api.onchange('search_by_number')
