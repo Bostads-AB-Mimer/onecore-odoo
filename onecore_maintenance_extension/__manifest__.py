@@ -19,6 +19,11 @@
       'data/maintenance.team.csv'
 
     ],
+    'assets': {
+        'web.assets_backend': [
+            'onecore_maintenance_extension/static/src/views/*.xml',
+        ],
+    },
     'post_init_hook': '_post_init_hook',
     'auto_install': True,
     'license': 'LGPL-3',
