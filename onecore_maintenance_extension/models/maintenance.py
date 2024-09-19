@@ -122,7 +122,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     'area': property['property'].get('area'),
                     'entrance': property['property'].get('entrance'),
                     'floor': property['property'].get('floor'),
-                    'has_elevator': property['property'].get('hasElevator'),
+                    'has_elevator': 'Ja' if property['property'].get('hasElevator') else 'Nej',
                     'wash_space': property['property'].get('washSpace'),
                     'estate_code': property['property'].get('estateCode'),
                     'estate': property['property'].get('estateName'),
