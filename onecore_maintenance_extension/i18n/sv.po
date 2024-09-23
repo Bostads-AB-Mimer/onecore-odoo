@@ -864,7 +864,7 @@ msgstr "Medeltid innan reparation"
 #: model_terms:ir.ui.view,arch_db:maintenance.hr_equipment_view_form
 #: model_terms:ir.ui.view,arch_db:maintenance.res_config_settings_view_form
 msgid "Maintenance"
-msgstr "Underhåll"
+msgstr "Ärendehantering"
 
 #. module: maintenance
 #: model:ir.ui.menu,name:maintenance.menu_m_request_calendar
