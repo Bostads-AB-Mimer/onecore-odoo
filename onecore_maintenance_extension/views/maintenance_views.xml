@@ -33,7 +33,7 @@
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
                     <div class="d-flex flex-nowrap align-items-center mb-4 border rounded" invisible="create_date != False">
-                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search" placeholder="Enter a Property Id, national registration number or phone number" />
+                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search" placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
                         <field class="w-25 my-0 p-2 border-start bg-light" name="search_type" />
                     </div>
                 </xpath>
