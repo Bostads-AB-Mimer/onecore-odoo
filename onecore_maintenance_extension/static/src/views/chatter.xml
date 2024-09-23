@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
     <t t-inherit="mail.Chatter" t-inherit-mode="extension">
         <xpath expr="//button[hasclass('o-mail-Chatter-sendMessage')]" position="attributes">
-            <attribute name="t-att-disabled" />
+            <attribute name="t-att-disabled">true</attribute>
         </xpath>
     </t>
 </templates>
