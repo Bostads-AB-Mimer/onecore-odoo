@@ -278,7 +278,7 @@ class OneCoreMaintenanceRequest(models.Model):
         images = []
         for vals in vals_list:
             # SAVE RENTAL PROPERTY
-            if 'rental_property_option_id' in vals:
+            if vals['rental_property_option_id']:
                 property_option_record = self.env['maintenance.rental.property.option'].search([('id', '=', vals.get('rental_property_option_id'))])
                 new_property_record = self.env['maintenance.rental.property'].create({
                     'name': property_option_record.name,
@@ -312,7 +312,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['maintenance_unit_id'] = new_maintenance_unit_record.id
 
             # SAVE LEASE
-            if 'lease_option_id' in vals:
+            if vals['lease_option_id']:
                 lease_option_record = self.env['maintenance.lease.option'].search([('id', '=', vals.get('lease_option_id'))])
                 new_lease_record = self.env['maintenance.lease'].create({
                     'lease_id': lease_option_record.name,
@@ -328,7 +328,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['lease_id'] = new_lease_record.id
 
             # SAVE TENANT
-            if 'tenant_option_id' in vals:
+            if vals['tenant_option_id']:
                 tenant_option_record = self.env['maintenance.tenant.option'].search([('id', '=', vals.get('tenant_option_id'))])
                 new_tenant_record = self.env['maintenance.tenant'].create({
                     'name': tenant_option_record.name,
