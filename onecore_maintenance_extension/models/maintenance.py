@@ -300,7 +300,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['rental_property_id'] = new_property_record.id
 
             # SAVE MAINTENANCE UNIT
-            if 'maintenance_unit_option_id' in vals:
+            if vals['maintenance_unit_option_id']:
                 maintenance_unit_option_record = self.env['maintenance.maintenance.unit.option'].search([('id', '=', vals.get('maintenance_unit_option_id'))])
                 new_maintenance_unit_record = self.env['maintenance.maintenance.unit'].create({
                     'name': maintenance_unit_option_record.name,
