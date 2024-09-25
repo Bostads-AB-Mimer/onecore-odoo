@@ -91,7 +91,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
-        base_url = self.env['ir.config_parameter'].sudo().get_param(
+        base_url = self.env['ir.config_parameter'].get_param(
             'onecore_base_url', '')
         params = {'typeOfNumber': search_type}
         url = f"{base_url}/propertyInfo/{quote(str(search_by_number), safe='')}"
