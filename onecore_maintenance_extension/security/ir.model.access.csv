@@ -7,4 +7,4 @@ access_maintenance_rental_property,maintenance.team.user,model_maintenance_renta
 access_maintenance_maintenance_unit,maintenance.team.user,model_maintenance_maintenance_unit,base.group_user,1,1,1,1
 access_maintenance_tenant,maintenance.team.user,model_maintenance_tenant,base.group_user,1,1,1,1
 access_maintenance_lease,maintenance.team.user,model_maintenance_lease,base.group_user,1,1,1,1
-
+access_ir_config_parameter,maintenance.team.user,base.model_ir_config_parameter,base.group_user,1,0,0,0
