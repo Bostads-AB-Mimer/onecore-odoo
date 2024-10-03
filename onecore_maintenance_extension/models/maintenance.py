@@ -109,6 +109,7 @@ class OneCoreMaintenanceRequest(models.Model):
     def update_form_options(self, search_by_number, search_type):
         _logger.info("Updating rental property options")
         data = self.fetch_property_data(search_by_number, search_type)
+        self._delete_options()
 
         if data:
             for property in data:
@@ -142,6 +143,7 @@ class OneCoreMaintenanceRequest(models.Model):
                                 'estate_code': maintenance_unit['estateCode'],
                                 'rental_property_option_id': rental_property_option.id,
                             })
+
                 for lease in property['leases']:
                     lease_option = self.env['maintenance.lease.option'].create({
                         'user_id': self.env.user.id,
@@ -154,13 +156,10 @@ class OneCoreMaintenanceRequest(models.Model):
                         'contract_date': lease['contractDate'],
                         'approval_date': lease['approvalDate'],
                     })
-                    for tenant in lease['tenants']:
-                        # Find the main phone number
-                        phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
-                        existing_tenant = self.env['maintenance.tenant.option'].search([('contact_code', '=', tenant['contactCode'])], limit=1)
 
-                        if not existing_tenant:
-                          self.env['maintenance.tenant.option'].create({
+                    for tenant in lease['tenants']:
+                        phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
+                        tenant_option = self.env['maintenance.tenant.option'].create({
                             'user_id': self.env.user.id,
                             'name': tenant['firstName'] + " " + tenant['lastName'],
                             'contact_code': tenant['contactCode'],
@@ -169,40 +168,35 @@ class OneCoreMaintenanceRequest(models.Model):
                             'email_address': tenant['emailAddress'],
                             'phone_number': phone_number,
                             'is_tenant': tenant['isTenant'],
-                          })
+                        })
         else:
             _logger.info("No data found in response.")
 
-    @api.depends('search_by_number', 'search_type')
+    @api.onchange('search_by_number', 'search_type')
     def _compute_search(self):
-        # Clear existing records for this user
+        if self.search_by_number:
+            for record in self:
+                record.update_form_options(record.search_by_number, record.search_type)
+                property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
+                if property_records:
+                    record.rental_property_option_id = property_records[0].id
+                maintenance_unit_records = self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)])
+                if maintenance_unit_records:
+                    record.maintenance_unit_option_id = maintenance_unit_records[0].id
+                lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
+                if lease_records:
+                    record.lease_option_id = lease_records[0].id
+                tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
+                if tenant_records:
+                    record.tenant_option_id = tenant_records[0].id
+        else:
+            self._delete_options()
+
+    def _delete_options(self):
         self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
         self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-        for record in self:
-            record.update_form_options(record.search_by_number, record.search_type)
-            property_records = self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)])
-            if property_records:
-                record.rental_property_option_id = property_records[0].id
-            maintenance_unit_records = self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)])
-            if maintenance_unit_records:
-                record.maintenance_unit_option_id = maintenance_unit_records[0].id
-            lease_records = self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)])
-            if lease_records:
-                record.lease_option_id = lease_records[0].id
-            tenant_records = self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)])
-            if tenant_records:
-                record.tenant_option_id = tenant_records[0].id
-
-    # Triggers upon creating a new request to clear existing options for this user
-    @api.onchange('search_by_number')
-    def _unlink_options(self):
-        if not self.search_by_number:
-            self.env['maintenance.rental.property.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.maintenance.unit.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.lease.option'].search([('user_id', '=', self.env.user.id)]).unlink()
-            self.env['maintenance.tenant.option'].search([('user_id', '=', self.env.user.id)]).unlink()
 
     @api.depends('request_date', 'priority_expanded')
     def _compute_due_date(self):
