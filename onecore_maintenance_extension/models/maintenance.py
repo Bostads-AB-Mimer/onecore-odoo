@@ -271,7 +271,7 @@ class OneCoreMaintenanceRequest(models.Model):
         images = []
         for vals in vals_list:
             # SAVE RENTAL PROPERTY
-            if vals['rental_property_option_id']:
+            if vals.get('rental_property_option_id'):
                 property_option_record = self.env['maintenance.rental.property.option'].search([('id', '=', vals.get('rental_property_option_id'))])
                 new_property_record = self.env['maintenance.rental.property'].create({
                     'name': property_option_record.name,
@@ -293,7 +293,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['rental_property_id'] = new_property_record.id
 
             # SAVE MAINTENANCE UNIT
-            if vals['maintenance_unit_option_id']:
+            if vals.get('maintenance_unit_option_id'):
                 maintenance_unit_option_record = self.env['maintenance.maintenance.unit.option'].search([('id', '=', vals.get('maintenance_unit_option_id'))])
                 new_maintenance_unit_record = self.env['maintenance.maintenance.unit'].create({
                     'name': maintenance_unit_option_record.name,
@@ -305,7 +305,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['maintenance_unit_id'] = new_maintenance_unit_record.id
 
             # SAVE LEASE
-            if vals['lease_option_id']:
+            if vals.get('lease_option_id'):
                 lease_option_record = self.env['maintenance.lease.option'].search([('id', '=', vals.get('lease_option_id'))])
                 new_lease_record = self.env['maintenance.lease'].create({
                     'lease_id': lease_option_record.name,
@@ -321,7 +321,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals['lease_id'] = new_lease_record.id
 
             # SAVE TENANT
-            if vals['tenant_option_id']:
+            if vals.get('tenant_option_id'):
                 tenant_option_record = self.env['maintenance.tenant.option'].search([('id', '=', vals.get('tenant_option_id'))])
                 new_tenant_record = self.env['maintenance.tenant'].create({
                     'name': tenant_option_record.name,
