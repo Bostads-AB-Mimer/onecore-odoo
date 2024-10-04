@@ -2,7 +2,7 @@
 
 {
     'name': 'ONECore Maintenance Extension',
-    'version': '1.0',
+    'version': '1.1',
     'sequence': 100,
     'category': 'Manufacturing/Maintenance',
     'description': 'Extends the maintenance module with ONECore features.',

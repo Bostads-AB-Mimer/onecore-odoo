@@ -9,7 +9,7 @@ class OnecoreMaintenanceTenantOption(models.Model):
     contact_code = fields.Char('Contact Code', required=True)
     contact_key = fields.Char('Contact Key', required=True)
     national_registration_number = fields.Char('National Registration Number', required=True)
-    phone_number = fields.Char('Phone Number', required=True)
+    phone_number = fields.Integer('Phone Number', required=True)
     email_address = fields.Char('Email Address', required=True)
     is_tenant = fields.Boolean('Is Tenant', default=True)
 
@@ -21,6 +21,6 @@ class OnecoreMaintenanceTenant(models.Model):
     contact_code = fields.Char('Contact Code', required=True)
     contact_key = fields.Char('Contact Key', required=True)
     national_registration_number = fields.Char('National Registration Number', required=True)
-    phone_number = fields.Char('Phone Number', required=True)
+    phone_number = fields.Integer('Phone Number', required=True)
     email_address = fields.Char('Email Address', required=True)
     is_tenant = fields.Boolean('Is Tenant', default=True)

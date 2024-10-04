@@ -61,7 +61,7 @@ class OneCoreMaintenanceRequest(models.Model):
     tenant_name = fields.Char('Tenant Name', related='tenant_id.name', depends=['tenant_id'])
     contact_code = fields.Char('Contact Code', related='tenant_id.contact_code', depends=['tenant_id'])
     national_registration_number = fields.Char('National Registration Number', related='tenant_id.national_registration_number', depends=['tenant_id'])
-    phone_number = fields.Char('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
+    phone_number = fields.Integer('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
     email_address = fields.Char('Email Address', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
     is_tenant = fields.Boolean('Is Tenant', related='tenant_id.is_tenant', depends=['tenant_id'])
 
