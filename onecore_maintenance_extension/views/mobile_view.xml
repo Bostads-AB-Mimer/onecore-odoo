@@ -42,6 +42,7 @@
         <field name="space_caption" />
         <field name="create_date" />
         <field name="master_key" />
+        <field name="due_date" />
       </mobile>
     </field>
   </record>
