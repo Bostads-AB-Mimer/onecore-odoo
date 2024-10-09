@@ -47,10 +47,13 @@
         <t t-else="">
             Ej angett
         </t>
-        <t t-if="record.user_id">
+        <t t-if="record.user_id.value">
             <br/>
             <div class="d-flex align-items-center my-2">
-                <field name="user_id" widget="many2one_avatar_user" />
+                <img
+                    class="o_avatar o_user_avatar rounded"
+                    t-att-src="'web/image?model=res.users&amp;field=avatar_128&amp;id=' + record.user_id.raw_value"
+                />
                 <div class="mx-2">
                     <t t-esc="record.user_id.value" />
                 </div>
