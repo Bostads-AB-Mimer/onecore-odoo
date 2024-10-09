@@ -29,6 +29,8 @@
             <field name="model">maintenance.request</field>
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form" />
             <field name="arch" type="xml">
+                <!-- Remove the Cancel button -->
+                <xpath expr="//header/button[1]" position="replace" />
 
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
