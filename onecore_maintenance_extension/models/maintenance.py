@@ -82,7 +82,7 @@ class OneCoreMaintenanceRequest(models.Model):
     space_code=fields.Char('Space Code', store=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
-    master_key=fields.Boolean('Master Key', store=True, default=True)
+    master_key=fields.Boolean('Master Key', store=True)
 
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)

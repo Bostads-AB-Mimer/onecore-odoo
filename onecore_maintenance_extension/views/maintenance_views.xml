@@ -58,7 +58,7 @@
                         <label class="me-1" for="priority_expanded" string="Prioritet" />
                         <field class="ms-1 text-end text-md-start" name="priority_expanded" readonly="1" />
                     </div>
-                    <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start">
+                    <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start" invisible="space_caption == 'Tvättstuga'">
                         <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
 
                         <div class="ms-1">
@@ -138,7 +138,7 @@
                                     <field name="phone_number" string="Telefon" readonly="create_date != False" />
                                     <field name="email_address" string="E-post" readonly="create_date != False" />
 
-                                    <field name="pet" string="Husdjur" readonly="create_date != False" />
+                                    <field name="pet" string="Husdjur" readonly="create_date != False" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="hearing_impaired" string="Hörselnedsättning" readonly="create_date != False" />
                                     <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                 </group>
@@ -164,7 +164,7 @@
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
                                     <field name="user_id" />
                                     <field name="schedule_date" />
-                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
+                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="call_between" invisible="not call_between" string="Kund nås dessa tider" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
                                 </group>
@@ -236,7 +236,7 @@
         /              <t t-esc="record.rental_property_id.raw_value"/>
                         <br/>
                     </span>
-                    <span>
+                    <span invisible="space_caption == 'Tvättstuga'">
                         Huvudnyckel:
                         <b>
                             <t t-if="record.master_key.raw_value === true">
