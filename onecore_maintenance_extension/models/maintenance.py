@@ -339,6 +339,10 @@ class OneCoreMaintenanceRequest(models.Model):
             if 'images' in vals:
                 images = vals.pop('images')
 
+            # Fix for now to hide stuff specific for tvättstugeärenden
+            if not vals.get('space_caption'):
+                vals['space_caption'] = "Tvättstuga"
+
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             for image in images:
