@@ -42,8 +42,16 @@
         <br/>
         Förfallodatum:
         <t t-if="record.due_date.value">
-            <t t-esc="record.due_date.value"/>
+            <t t-if="record.today_date.value > record.due_date.value">
+                <span class="text-danger">
+                    <t t-esc="record.due_date.value"/>
+                </span>
+            </t>
+            <t t-else="">
+                <t t-esc="record.due_date.value"/>
+            </t>
         </t>
+        
         <t t-else="">
             Ej angett
         </t>
