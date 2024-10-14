@@ -11,7 +11,7 @@
             </b>
           </div>
           <div class="o_kanban_record_body">
-            <t t-call="onecore_maintenance_extension.maintenance_request_kanban"/>
+            <t t-call="onecore_maintenance_extension.maintenance_request_item"/>
         </div>
       </div>
     </div>

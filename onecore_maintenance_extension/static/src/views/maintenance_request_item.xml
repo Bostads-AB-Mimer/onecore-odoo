@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
-    <t t-name="onecore_maintenance_extension.maintenance_request_kanban">
+    <t t-name="onecore_maintenance_extension.maintenance_request_item">
         <span class="oe_grey" t-if="record.address.raw_value">
             <span t-if="record.address.raw_value">
                 <t t-esc="record.address.raw_value"/>

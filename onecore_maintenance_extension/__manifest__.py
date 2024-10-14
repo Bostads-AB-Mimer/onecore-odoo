@@ -22,7 +22,7 @@
     'assets': {
         'web.assets_backend': [
             'onecore_maintenance_extension/static/src/views/chatter.xml',
-            'onecore_maintenance_extension/static/src/views/maintenance_request_kanban.xml',
+            'onecore_maintenance_extension/static/src/views/maintenance_request_item.xml',
         ],
     },
     'post_init_hook': '_post_init_hook',
