@@ -8,6 +8,7 @@
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_search" />
             <field name="arch" type="xml">
                 <xpath expr="//search" position="inside">
+                    <field string="Ärendenummer" name="id"/>
                     <field string="Personnummer" name="national_registration_number"/>
                     <field string="Adress" name="address"/>
                     <field string="Telefonnummer" name="phone_number"/>
