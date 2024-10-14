@@ -75,7 +75,7 @@ class OneCoreMaintenanceRequest(models.Model):
     lease_start_date = fields.Date('Lease Start Date', related='lease_id.lease_start_date', depends=['lease_id'])
     lease_end_date = fields.Date('Lease End Date', related='lease_id.lease_end_date', depends=['lease_id'])
 
-    # Comes from Mimer (Add more fields for these?)
+    # Comes from Mimer.nu
     pet=fields.Char('Pet', store=True)
     call_between=fields.Char('Call Between', store=True)
     hearing_impaired=fields.Boolean('Hearing Impaired', store=True)
@@ -87,6 +87,14 @@ class OneCoreMaintenanceRequest(models.Model):
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
     due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
+
+    # New fields for the form view only (not stored in the database)
+    today_date = fields.Date(string='Today', compute='_compute_today_date', store=False)
+
+    @api.model
+    def _compute_today_date(self):
+        for record in self:
+            record.today_date = fields.Date.context_today(self)
 
 
     def fetch_property_data(self, search_by_number, search_type):
