@@ -43,6 +43,7 @@
         <field name="create_date" />
         <field name="master_key" />
         <field name="due_date" />
+        <field name="today_date" />
       </mobile>
     </field>
   </record>
