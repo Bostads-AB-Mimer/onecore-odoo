@@ -82,7 +82,7 @@ class OneCoreMaintenanceRequest(models.Model):
     space_code=fields.Char('Space Code', store=True)
     space_caption=fields.Char('Space Caption', store=True, readonly=True)
     equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
-    master_key=fields.Boolean('Master Key', store=True, default=True)
+    master_key=fields.Boolean('Master Key', store=True)
 
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
@@ -338,6 +338,10 @@ class OneCoreMaintenanceRequest(models.Model):
 
             if 'images' in vals:
                 images = vals.pop('images')
+
+            # Fix for now to hide stuff specific for tvättstugeärenden
+            if not vals.get('space_caption'):
+                vals['space_caption'] = "Tvättstuga"
 
         maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:

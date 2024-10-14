@@ -29,6 +29,8 @@
             <field name="model">maintenance.request</field>
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form" />
             <field name="arch" type="xml">
+                <!-- Remove the Cancel button -->
+                <xpath expr="//header/button[1]" position="replace" />
 
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
@@ -58,7 +60,7 @@
                         <label class="me-1" for="priority_expanded" string="Prioritet" />
                         <field class="ms-1 text-end text-md-start" name="priority_expanded" readonly="1" />
                     </div>
-                    <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start">
+                    <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start" invisible="space_caption == 'Tvättstuga'">
                         <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
 
                         <div class="ms-1">
@@ -102,7 +104,7 @@
                                     <field name="building" invisible="1" string="Byggnad" />
                                     <field name="maintenance_unit_option_id" string="Tvättstuga" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" invisible="create_date != False" />
                                     <field name="maintenance_unit_caption" string="Tvättstuga" invisible="not maintenance_unit_caption and maintenance_unit_option_id" />
-                                    <field name="maintenance_unit_type" string="Utrymme" invisible="not maintenance_unit_type" />
+                                    <field name="maintenance_unit_type" string="Utrymme" invisible="1" />
                                 </group>
                             </div>
                           </div>
@@ -138,7 +140,7 @@
                                     <field name="phone_number" string="Telefon" readonly="create_date != False" />
                                     <field name="email_address" string="E-post" readonly="create_date != False" />
 
-                                    <field name="pet" string="Husdjur" readonly="create_date != False" />
+                                    <field name="pet" string="Husdjur" readonly="create_date != False" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="hearing_impaired" string="Hörselnedsättning" readonly="create_date != False" />
                                     <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                 </group>
@@ -164,7 +166,7 @@
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
                                     <field name="user_id" />
                                     <field name="schedule_date" />
-                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" />
+                                    <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="call_between" invisible="not call_between" string="Kund nås dessa tider" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
                                 </group>
