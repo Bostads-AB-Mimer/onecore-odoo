@@ -211,6 +211,7 @@
                     <field name="color" />
                     <field name="priority_expanded" />
                     <field name="due_date" />
+                    <field name="today_date" />
                     <field name="equipment_id" />
                     <field name="user_id" />
                     <field name="owner_user_id" />
@@ -231,52 +232,7 @@
                 <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace" />
                 <xpath expr="//div[@class='o_kanban_record_bottom']" position="replace" />
                 <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
-
-                    <span class="oe_grey" t-if="record.address.raw_value">
-                        <span t-if="record.address.raw_value">
-                        <t t-esc="record.address.raw_value"/>
-                        </span>
-                        <br/>
-                    </span>
-                    <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
-                        <t t-esc="record.space_caption.raw_value"/>
-        /              <t t-esc="record.rental_property_id.raw_value"/>
-                        <br/>
-                    </span>
-                    <span invisible="space_caption == 'Tvättstuga'">
-                        Huvudnyckel:
-                        <b>
-                            <t t-if="record.master_key.raw_value === true">
-                            Ja
-                            </t>
-                            <t t-elif="record.master_key.raw_value === false">
-                            Nej
-                            </t>
-                            <t t-else="">
-                            Ej angett
-                            </t>
-                        </b>
-                        <br/>
-                    </span>
-                    <span>
-                    Prioritet:
-                    <t t-if="record.priority_expanded.value">
-                        <t t-esc="record.priority_expanded.value"/>
-                    </t>
-                    <t t-else="">
-                        Ej angett
-                    </t>
-                    <br/>
-                    </span>
-                    Skapad: <t t-esc="record.create_date.value"/>
-                    <br/>
-                    Förfallodatum:
-                    <t t-if="record.due_date.value">
-                        <t t-esc="record.due_date.value"/>
-                    </t>
-                    <t t-else="">
-                        Ej angett
-                    </t>
+                    <t t-call="onecore_maintenance_extension.maintenance_request_item" />
                 </xpath>
             </field>
         </record>

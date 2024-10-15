@@ -11,37 +11,7 @@
             </b>
           </div>
           <div class="o_kanban_record_body">
-            <span class="oe_grey" t-if="record.address.raw_value">
-              <span t-if="record.address.raw_value">
-                <t t-esc="record.address.raw_value"/>
-              </span>
-              <br/>
-            </span>
-            <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
-              <t t-esc="record.space_caption.raw_value"/>
-/              <t t-esc="record.rental_property_id.raw_value"/>
-              <br/>
-            </span>
-            <span>
-            Huvudnyckel:
-              <b>
-                <t t-if="record.master_key.raw_value === true">
-                Ja
-                </t>
-                <t t-elif="record.master_key.raw_value === false">
-                Nej
-                </t>
-                <t t-else="">
-                Ej angett
-                </t>
-              </b>
-              <br/>
-            </span>
-            <span>
-            Prioritet: <t t-esc="record.priority_expanded.value"/>
-            <br/>
-          </span>
-          Skapad: <t t-esc="record.create_date.value"/>
+            <t t-call="onecore_maintenance_extension.maintenance_request_item"/>
         </div>
       </div>
     </div>
