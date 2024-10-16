@@ -7,21 +7,69 @@
             <field name="model">maintenance.request</field>
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_search" />
             <field name="arch" type="xml">
-                <xpath expr="//search" position="inside">
-                    <field string="Ärendenummer" name="id"/>
-                    <field string="Personnummer" name="national_registration_number"/>
-                    <field string="Adress" name="address"/>
-                    <field string="Telefonnummer" name="phone_number"/>
-                    <field string="Kundnummer" name="contact_code"/>
-                    <field string="Tvättstuga" name="maintenance_unit_id"/>
-                </xpath>
-                <!-- Replace original priority filter with priority_expanded -->
-                <xpath expr="//filter[@name='high_priority']" position="replace">
-                    <filter string="1 dag" name="one_day" domain="[('priority_expanded', '=', '1')]" />
-                    <filter string="5 dagar" name="five_days" domain="[('priority_expanded', '=', '5')]" />
-                    <filter string="7 dagar" name="seven_days" domain="[('priority_expanded', '=', '7')]" />
-                    <filter string="10 dagar" name="ten_days" domain="[('priority_expanded', '=', '10')]" />
-                    <filter string="2 veckor" name="two_weeks" domain="[('priority_expanded', '=', '14')]" />
+                <xpath expr="//search" position="replace">
+                    <search string="Maintenance Request Search">
+                        <field string="Ärendenummer" name="id"/>
+                        <field string="Personnummer" name="national_registration_number"/>
+                        <field string="Adress" name="address"/>
+                        <field string="Telefonnummer" name="phone_number"/>
+                        <field string="Kundnummer" name="contact_code"/>
+                        <field string="Tvättstuga" name="maintenance_unit_id"/>
+                        <field name="category_id" />
+                        <field name="user_id" />
+                        <field name="equipment_id" />
+                        <field name="owner_user_id" />
+                        <field name="stage_id" />
+                        <field name="maintenance_team_id" />
+                        <filter string="My Maintenances" name="my_maintenances"
+                            domain="[('user_id', '=', uid)]" />
+                        <separator />
+                        <filter string="To Do" name="todo" domain="[('stage_id.done', '=', False)]" />
+                        <filter string="Done" name="done" domain="[('stage_id.done', '=', True)]" />
+                        <separator />
+                        <filter string="Blocked" name="kanban_state_block"
+                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'blocked')]" />
+                        <filter string="Ready" name="done"
+                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'done')]" />
+                        <separator />
+                        <filter string="1 dag" name="one_day" domain="[('priority_expanded', '=', '1')]" />
+                        <filter string="5 dagar" name="five_days" domain="[('priority_expanded', '=', '5')]" />
+                        <filter string="7 dagar" name="seven_days" domain="[('priority_expanded', '=', '7')]" />
+                        <filter string="10 dagar" name="ten_days" domain="[('priority_expanded', '=', '10')]" />
+                        <filter string="2 veckor" name="two_weeks" domain="[('priority_expanded', '=', '14')]" />
+                        <separator />
+                        <filter string="Unscheduled" name="unscheduled"
+                            domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
+                        <separator />
+                        <filter name="filter_request_date" date="request_date" />
+                        <filter name="filter_schedule_date" date="schedule_date" />
+                        <filter name="filter_close_date" date="close_date" />
+                        <separator />
+                        <filter string="Unread Messages" name="message_needaction"
+                            domain="[('message_needaction', '=', True)]"
+                            groups="mail.group_mail_notification_type_inbox" />
+                        <separator />
+                        <filter invisible="1" string="Late Activities" name="activities_overdue"
+                            domain="[('my_activity_date_deadline', '&lt;', context_today().strftime('%Y-%m-%d'))]"
+                            help="Show all records which has next action date is before today" />
+                        <filter invisible="1" string="Today Activities" name="activities_today"
+                            domain="[('my_activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]" />
+                        <filter invisible="1" string="Future Activities" name="activities_upcoming_all"
+                            domain="[('my_activity_date_deadline', '&gt;', context_today().strftime('%Y-%m-%d'))]" />
+                        <separator />
+                        <filter string="Active" name="active" domain="[('archive', '=', False)]" />
+                        <filter string="Cancelled" name="inactive" domain="[('archive', '=', True)]" />
+                        <group expand='0' string='Group by...'>
+                            <filter string='Assigned to' name="assigned" domain="[]"
+                                context="{'group_by': 'user_id'}" />
+                            <filter string='Category' name="category" domain="[]"
+                                context="{'group_by' : 'category_id'}" />
+                            <filter string='Stage' name="stages" domain="[]"
+                                context="{'group_by' : 'stage_id'}" />
+                            <filter string='Created By' name='created_by' domain="[]"
+                                context="{'group_by': 'owner_user_id'}" />
+                        </group>
+                    </search>
                 </xpath>
             </field>
         </record>
