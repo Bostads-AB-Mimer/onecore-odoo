@@ -177,11 +177,6 @@
                       </div>
                 </xpath>
 
-                <!-- Move the notebook to below the header -->
-                <xpath expr="//h1" position="after">
-                    <xpath expr="//notebook" position="move" />
-                </xpath>
-
                 <!-- Hides the details group since we moved them to the accordion -->
                 <xpath expr="//group[1]/group[2]" position="replace" />
                 <!-- Hides existing fields from first group -->
