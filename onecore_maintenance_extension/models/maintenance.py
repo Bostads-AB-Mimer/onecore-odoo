@@ -26,7 +26,6 @@ class OneCoreMaintenanceRequest(models.Model):
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
 
-
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
     rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Rental Property Id')
@@ -90,6 +89,26 @@ class OneCoreMaintenanceRequest(models.Model):
 
     # New fields for the form view only (not stored in the database)
     today_date = fields.Date(string='Today', compute='_compute_today_date', store=False)
+    new_mimer_notification = fields.Boolean(
+        string='New Mimer Message',
+        compute='_compute_new_mimer_notification',
+        store=False,
+    )
+    # This functions searches for notifications from Mimer.nu that are unread for the logged in user.
+    @api.depends('message_ids.notification_ids.is_read', 'message_ids.notification_ids.notification_type')
+    def _compute_new_mimer_notification(self):
+        for record in self:
+            message_ids = record.message_ids.ids
+
+            unread_mimer_notifications = self.env['mail.notification'].search([
+                ('mail_message_id', 'in', message_ids),
+                ('res_partner_id', '=', self.env.user.partner_id.id),
+                ('is_read', '=', False),
+                ('notification_type', '=', 'inbox'),
+                ('mail_message_id.author_id.user_ids.login', '=', 'odoo@mimer.nu')
+            ])
+
+            record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
 
     @api.model
     def _compute_today_date(self):
