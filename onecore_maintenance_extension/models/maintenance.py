@@ -166,6 +166,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     })
 
                     for tenant in lease['tenants']:
+                        print(tenant)
                         phone_number = next((item['phoneNumber'] for item in tenant['phoneNumbers'] if item['isMainNumber'] == 1), None)
                         tenant_option = self.env['maintenance.tenant.option'].create({
                             'user_id': self.env.user.id,
