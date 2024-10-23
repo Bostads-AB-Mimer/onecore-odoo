@@ -100,8 +100,17 @@
                 </xpath>
 
                 <xpath expr="//group[1]" position="inside">
+                    <div invisible="not create_date"> 
+                        <field name="creation_origin" invisible="1" readonly="1"></field>
+
+                        <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
+                            <span invisible="creation_origin != 'internal'">Skapad internt</span>
+                            <span invisible="creation_origin != 'mimer-nu'">Från Mimer.nu</span>
+                        </div>
+
+                    </div>
                     <div invisible="description == False" >
-                        <p class="mb-1">Kort beskrivning av anmälan (från kund).</p>
+                        <p class="mb-1 fw-bold inline-block">Beskrivning:</p>
                         <field name="description" readonly="1"></field>
                     </div>
 
@@ -117,7 +126,7 @@
                             <span invisible="master_key == True">Nej</span>
                         </div>
                     </div>
-                    <div class="accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
+                    <div class="mt-3 accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
                         <!-- Block 1 -->
                         <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
                           <h2 class="accordion-header">
@@ -224,11 +233,6 @@
                         </div>
 
                       </div>
-                </xpath>
-
-                <!-- Move the notebook to below the header -->
-                <xpath expr="//h1" position="after">
-                    <xpath expr="//notebook" position="move" />
                 </xpath>
 
                 <!-- Hides the details group since we moved them to the accordion -->

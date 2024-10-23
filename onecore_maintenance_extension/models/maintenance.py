@@ -87,6 +87,7 @@ class OneCoreMaintenanceRequest(models.Model):
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
     due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
+    creation_origin=fields.Selection([('mimer-nu', 'Mimer.nu'), ('internal', 'Internt')], string='Skapad från', default='internal', store=True)
 
     # New fields for the form view only (not stored in the database)
     today_date = fields.Date(string='Today', compute='_compute_today_date', store=False)
