@@ -104,8 +104,8 @@
                         <field name="creation_origin" invisible="1" readonly="1"></field>
 
                         <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
-                            <span invisible="creation_origin == 'internal'">Från Mimer.nu</span>
-                            <span invisible="creation_origin == 'mimer-nu'">Skapad intert</span>
+                            <span invisible="creation_origin != 'internal'">Skapad internt</span>
+                            <span invisible="creation_origin != 'mimer-nu'">Från Mimer.nu</span>
                         </div>
 
                     </div>
