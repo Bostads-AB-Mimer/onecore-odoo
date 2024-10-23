@@ -99,7 +99,7 @@ class OneCoreMaintenanceRequest(models.Model):
         for record in self:
             if record.maintenance_team_id:
                 record.user_id = False
-                record.maintenance_team_domain = [("id", "in", record.maintenance_team_id.user_ids.ids)]
+                record.maintenance_team_domain = [("id", "in", record.maintenance_team_id.member_ids.ids)]
 
     @api.model
     def _compute_today_date(self):
