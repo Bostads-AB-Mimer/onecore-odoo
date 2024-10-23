@@ -98,8 +98,11 @@ class OneCoreMaintenanceRequest(models.Model):
     def _compute_maintenance_team_domain(self):
         for record in self:
             if record.maintenance_team_id:
-                record.user_id = False
-                record.maintenance_team_domain = [("id", "in", record.maintenance_team_id.member_ids.ids)]
+                ids = record.maintenance_team_id.member_ids.ids
+                record.maintenance_team_domain = [("id", "in", ids)]
+
+                if record.user_id.id not in ids:
+                    record.user_id = False
 
     @api.model
     def _compute_today_date(self):
