@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="web.KanbanHeader" t-inherit-mode="extension">
+        <!-- Hides +-symbols (buttons) in the Kanban view for quick create of a request -->
+        <xpath expr="//button[hasclass('o_kanban_quick_add')]" position="attributes">
+            <attribute name="class" add="d-none" separator=" " />
+        </xpath>
+    </t>
+</templates>
