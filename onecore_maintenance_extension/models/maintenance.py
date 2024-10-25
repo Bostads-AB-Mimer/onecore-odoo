@@ -110,7 +110,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 ('res_partner_id', '=', self.env.user.partner_id.id),
                 ('is_read', '=', False),
                 ('notification_type', '=', 'inbox'),
-                ('mail_message_id.author_id.user_ids.login', '=', 'admin' if is_local else 'odoo@mimer.nu')
+                ('mail_message_id.author_id.user_ids.login', '=', 'admin' if is_local() else 'odoo@mimer.nu')
             ])
 
             record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
