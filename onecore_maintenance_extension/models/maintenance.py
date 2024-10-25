@@ -167,17 +167,21 @@ class OneCoreMaintenanceRequest(models.Model):
                     })
 
                     for tenant in lease['tenants']:
-                        phone_number = next((item['phoneNumber'] for item in tenant.get('phoneNumbers') if item['isMainNumber'] == 1), None)
-                        tenant_option = self.env['maintenance.tenant.option'].create({
-                            'user_id': self.env.user.id,
-                            'name': tenant['firstName'] + " " + tenant['lastName'],
-                            'contact_code': tenant['contactCode'],
-                            'contact_key': tenant['contactKey'],
-                            'national_registration_number': tenant['nationalRegistrationNumber'],
-                            'email_address': tenant.get('emailAddress'),
-                            'phone_number': phone_number,
-                            'is_tenant': tenant['isTenant'],
-                        })
+                        # Check if a tenant with the same contact_code already exists
+                        existing_tenant = self.env['maintenance.tenant.option'].search([('contact_code', '=', tenant['contactCode'])], limit=1)
+                            
+                        if not existing_tenant:
+                            phone_number = next((item['phoneNumber'] for item in tenant.get('phoneNumbers') if item['isMainNumber'] == 1), None)
+                            tenant_option = self.env['maintenance.tenant.option'].create({
+                                'user_id': self.env.user.id,
+                                'name': tenant['firstName'] + " " + tenant['lastName'],
+                                'contact_code': tenant['contactCode'],
+                                'contact_key': tenant['contactKey'],
+                                'national_registration_number': tenant['nationalRegistrationNumber'],
+                                'email_address': tenant.get('emailAddress'),
+                                'phone_number': phone_number,
+                                'is_tenant': tenant['isTenant'],
+                            })
         else:
             _logger.info("No data found in response.")
 
