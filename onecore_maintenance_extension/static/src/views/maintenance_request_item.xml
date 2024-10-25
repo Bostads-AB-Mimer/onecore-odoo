@@ -28,18 +28,6 @@
             </b>
             <br/>
         </span>
-        <span>
-            Prioritet:
-            <t t-if="record.priority_expanded.value">
-                <t t-esc="record.priority_expanded.value"/>
-            </t>
-            <t t-else="">
-                Ej angett
-            </t>
-            <br/>
-        </span>
-        Skapad: <t t-esc="record.create_date.value"/>
-        <br/>
         Förfallodatum:
         <t t-if="record.due_date.value">
             <t t-if="record.today_date.value > record.due_date.value">
