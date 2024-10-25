@@ -51,7 +51,7 @@
                 <t t-esc="record.due_date.value"/>
             </t>
         </t>
-        
+
         <t t-else="">
             Ej angett
         </t>

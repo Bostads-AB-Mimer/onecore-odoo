@@ -100,7 +100,7 @@
                 </xpath>
 
                 <xpath expr="//group[1]" position="inside">
-                    <div invisible="not create_date"> 
+                    <div invisible="not create_date">
                         <field name="creation_origin" invisible="1" readonly="1"></field>
 
                         <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
@@ -279,11 +279,26 @@
                     <field name="space_caption" />
                     <field name="create_date" />
                     <field name="master_key" />
+                    <field name="new_mimer_notification" />
                 </xpath>
                 <!-- Remove existing fields regarding equipment -->
                 <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace" />
                 <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace" />
                 <xpath expr="//div[@class='o_kanban_record_bottom']" position="replace" />
+                <xpath expr="//div[@class='o_kanban_record_top']" position="replace">
+                  <div class="o_kanban_record_top">
+                    <div class="w-100 d-flex justify-content-between align-items-center">
+                        <b class="o_kanban_record_title py-1">
+                            <field name="name"/>
+                        </b>
+                        <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value">
+                            <span class="mimer-badge">
+                                Ny kundinfo
+                            </span>
+                        </div>
+                    </div>
+                  </div>
+                </xpath>
                 <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
                     <t t-call="onecore_maintenance_extension.maintenance_request_item" />
                 </xpath>
