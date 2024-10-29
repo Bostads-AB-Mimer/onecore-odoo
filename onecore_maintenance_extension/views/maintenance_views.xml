@@ -193,7 +193,7 @@
                                     <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" />
 
                                     <field name="tenant_name" string="Hyresgäst" invisible="not tenant_name and tenant_option_id" />
-                                    <field name="national_registration_number" string="Personnummer" />
+                                    <field name="national_registration_number" string="Person/Org. nr" />
                                     <field name="contact_code" string="Kundnummer" />
                                     <field name="phone_number" string="Telefon" readonly="create_date != False" />
                                     <field name="email_address" string="E-post" readonly="create_date != False" />
