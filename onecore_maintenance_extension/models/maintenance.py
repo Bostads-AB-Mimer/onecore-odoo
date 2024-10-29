@@ -451,6 +451,11 @@ class OneCoreMaintenanceRequest(models.Model):
 
         if vals.get('owner_user_id') or vals.get('user_id'):
             self._add_followers()
+        if vals.get('user_id') and self.stage_id.sequence == 1:
+            resource_allocated_stage = self.env['maintenance.stage'].search([('sequence', '=', 2)])
+            if resource_allocated_stage:
+                self.write({'stage_id': resource_allocated_stage.id})
+        
         if 'stage_id' in vals:
             self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
             self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
