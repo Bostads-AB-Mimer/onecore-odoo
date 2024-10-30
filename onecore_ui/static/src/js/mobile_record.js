@@ -68,7 +68,7 @@ export function getFormattedRecord(record) {
   return formattedRecord;
 }
 export class MobileRecord extends Component {
-  static template = 'onecore_ui.MobileRecord';
+  static template = "onecore_ui.MobileRecord";
 
   setup() {
     this.state = useState({ record: {}, widget: {} });
@@ -85,7 +85,8 @@ export class MobileRecord extends Component {
    * @param {MouseEvent} ev
    */
   onRecordClick(props) {
-    const { openRecord, record } = props;
+    const { openRecord, record, selectedGroup } = props;
+    sessionStorage.setItem("selectedGroupName", selectedGroup.displayName);
     openRecord(record);
   }
 }

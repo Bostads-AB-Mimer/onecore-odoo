@@ -1,5 +1,5 @@
 /** @odoo-module **/
-import { Component, useState } from '@odoo/owl';
+import { Component, useState, onMounted } from '@odoo/owl';
 import { View } from '@web/views/view';
 import { Field } from '@web/views/fields/field';
 import { isNull } from '@web/views/utils';
@@ -14,6 +14,15 @@ export class MobileRenderer extends Component {
     this.state = useState({
       selectedGroup: false,
     });
+
+    onMounted(() => {
+      const storedSelectedGroupName = sessionStorage.getItem('selectedGroupName');
+      if (storedSelectedGroupName) {
+        this.state.selectedGroup = this.props.list.groups.find(
+          (group) => group.displayName === storedSelectedGroupName
+        ) || false;
+      }
+    })
   }
 
   getGroupsOrRecords() {
@@ -42,6 +51,7 @@ export class MobileRenderer extends Component {
   }
 
   onBackClick() {
+    sessionStorage.removeItem("selectedGroupName");
     this.state.selectedGroup = false;
   }
 

@@ -20,7 +20,7 @@
             </h2>
           </div>
           <t t-foreach="this.state.selectedGroup.records" t-as="record" t-key="record.id">
-            <MobileRecord record="record" list="props.list" openRecord="props.openRecord"/>
+            <MobileRecord record="record" list="props.list" openRecord="props.openRecord" selectedGroup="this.state.selectedGroup"/>
           </t>
         </t>
       </div>

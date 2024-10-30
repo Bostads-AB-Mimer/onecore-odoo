@@ -2,8 +2,8 @@
 <templates xml:space="preserve">
 
   <t t-name="onecore_ui.MobileRecord">
-    <div class="d-flex flex-row m-2 p-2 align-items-center bg-white" style="border: 0.5px solid #989898;" t-on-click="() => onRecordClick(this.props)">
+    <div class="d-flex flex-row m-2 p-2 align-items-center bg-white" style="border: 0.5px solid #989898;" t-on-click="() => onRecordClick(this.props, this.state.selectedGroup)">
       <t t-call="onecore_maintenance_extension.maintenance_request_item"/>
-  </div>
-</t>
+    </div>
+  </t>
 </templates>
