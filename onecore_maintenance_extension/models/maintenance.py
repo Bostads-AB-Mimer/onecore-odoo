@@ -301,6 +301,11 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.email_address = record.tenant_option_id.email_address
                 record.is_tenant = record.tenant_option_id.is_tenant
 
+    def _resource_assigned(self):
+        resource_allocated_stage = self.env['maintenance.stage'].search([('sequence', '=', 2)])
+        if resource_allocated_stage:
+            self.write({'stage_id': resource_allocated_stage.id})
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -393,6 +398,8 @@ class OneCoreMaintenanceRequest(models.Model):
               })
             if request.owner_user_id or request.user_id:
                 request._add_followers()
+            if request.user_id:
+                request._resource_assigned()
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
             if request.close_date and not request.stage_id.done:
@@ -452,10 +459,7 @@ class OneCoreMaintenanceRequest(models.Model):
         if vals.get('owner_user_id') or vals.get('user_id'):
             self._add_followers()
         if vals.get('user_id') and self.stage_id.sequence == 1:
-            resource_allocated_stage = self.env['maintenance.stage'].search([('sequence', '=', 2)])
-            if resource_allocated_stage:
-                self.write({'stage_id': resource_allocated_stage.id})
-        
+            self._resource_assigned()
         if 'stage_id' in vals:
             self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
             self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})
