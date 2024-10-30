@@ -398,7 +398,7 @@ class OneCoreMaintenanceRequest(models.Model):
               })
             if request.owner_user_id or request.user_id:
                 request._add_followers()
-            if request.user_id:
+            if request.user_id and request.stage_id.sequence == 1:
                 request._resource_assigned()
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
