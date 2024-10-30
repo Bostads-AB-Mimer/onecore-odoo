@@ -3,18 +3,7 @@
 
   <t t-name="onecore_ui.MobileRecord">
     <div class="d-flex flex-row m-2 p-2 align-items-center bg-white" style="border: 0.5px solid #989898;" t-on-click="() => onRecordClick(this.props)">
-      <div class="o_kanban_record d-flex" role="article" t-att-data-id="record.id" t-ref="root">
-        <div class="oe_kanban_content" tooltip="kanban-tooltip">
-          <div class="o_kanban_record_top">
-            <b class="o_kanban_record_title">
-              <t t-esc="record.name.raw_value"/>
-            </b>
-          </div>
-          <div class="o_kanban_record_body">
-            <t t-call="onecore_maintenance_extension.maintenance_request_item"/>
-        </div>
-      </div>
-    </div>
+      <t t-call="onecore_maintenance_extension.maintenance_request_item"/>
   </div>
 </t>
 </templates>
