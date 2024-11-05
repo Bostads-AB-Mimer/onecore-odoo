@@ -116,6 +116,19 @@ class OneCoreMaintenanceRequest(models.Model):
 
             record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
 
+    # Domain for including users in the selected maintenance team
+    maintenance_team_domain = fields.Binary(string="Maintenance team domain", compute="_compute_maintenance_team_domain")
+
+    @api.depends('maintenance_team_id')
+    def _compute_maintenance_team_domain(self):
+        for record in self:
+            if record.maintenance_team_id:
+                ids = record.maintenance_team_id.member_ids.ids
+                record.maintenance_team_domain = [("id", "in", ids)]
+
+                if record.user_id.id not in ids:
+                    record.user_id = False
+
     @api.model
     def _compute_today_date(self):
         for record in self:

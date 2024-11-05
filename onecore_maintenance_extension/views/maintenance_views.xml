@@ -222,11 +222,12 @@
                                     <field name="priority_expanded"  />
                                     <field name="due_date" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
-                                    <field name="user_id" />
+                                    <field name="user_id" domain="maintenance_team_domain" />
                                     <field name="schedule_date" />
                                     <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="call_between" invisible="not call_between" string="Kund nås dessa tider" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
+                                    <field name="maintenance_team_domain" invisible="True" />
                                 </group>
                             </div>
                           </div>
