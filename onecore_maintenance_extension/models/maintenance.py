@@ -321,7 +321,9 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.is_tenant = record.tenant_option_id.is_tenant
 
     def _resource_assigned(self):
-        resource_allocated_stage = self.env['maintenance.stage'].search([('sequence', '=', 2)])
+        resource_allocated_stage = self.env['maintenance.stage'].search([
+            ('name', '=', "Resurs tilldelad")
+        ])
         if resource_allocated_stage:
             self.write({'stage_id': resource_allocated_stage.id})
 
@@ -417,7 +419,7 @@ class OneCoreMaintenanceRequest(models.Model):
               })
             if request.owner_user_id or request.user_id:
                 request._add_followers()
-            if request.user_id and request.stage_id.sequence == 1:
+            if request.user_id and request.stage_id.name == "Väntar på handläggning":
                 request._resource_assigned()
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
@@ -477,7 +479,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
         if vals.get('owner_user_id') or vals.get('user_id'):
             self._add_followers()
-        if vals.get('user_id') and self.stage_id.sequence == 1:
+        if vals.get('user_id') and self.stage_id.name == "Väntar på handläggning":
             self._resource_assigned()
         if 'stage_id' in vals:
             self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
