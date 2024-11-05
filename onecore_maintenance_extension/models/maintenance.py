@@ -400,6 +400,14 @@ class OneCoreMaintenanceRequest(models.Model):
                 request._add_followers()
             if request.user_id and request.stage_id.sequence == 1:
                 request._resource_assigned()
+            if request.user_id and request.due_date:
+                activity_type_id = self.env['mail.activity.type'].search([('name', '=', 'To-Do')], limit=1).id
+                request.activity_schedule(
+                    activity_type_id=activity_type_id,
+                    summary=request.name,
+                    date_deadline=request.due_date,
+                    user_id=request.user_id.id
+                )
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
             if request.close_date and not request.stage_id.done:
