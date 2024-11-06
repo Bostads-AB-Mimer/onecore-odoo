@@ -44,6 +44,7 @@
         <field name="master_key" />
         <field name="due_date" />
         <field name="today_date" />
+        <field name="new_mimer_notification" />
       </mobile>
     </field>
   </record>

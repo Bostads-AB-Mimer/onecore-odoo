@@ -1,71 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
     <t t-name="onecore_maintenance_extension.maintenance_request_item">
-        <span class="oe_grey" t-if="record.address.raw_value">
-            <span t-if="record.address.raw_value">
-                <t t-esc="record.address.raw_value"/>
+        <div class="oe_kanban_content w-100" tooltip="kanban-tooltip">
+            <div class="o_kanban_record_top d-flex justify-content-between">
+                <b class="o_kanban_record_title">
+                    <t t-esc="record.name.raw_value"/>
+                </b>
+                <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value">
+                    <span class="mimer-badge">
+                        Ny kundinfo
+                    </span>
+                </div>
+            </div>
+
+            <span class="oe_grey" t-if="record.address.raw_value">
+                <span t-if="record.address.raw_value">
+                    <t t-esc="record.address.raw_value"/>
+                </span>
+                <br/>
             </span>
-            <br/>
-        </span>
-        <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
-            <t t-esc="record.space_caption.raw_value"/>
-            /
-            <t t-esc="record.rental_property_id.raw_value"/>
-            <br/>
-        </span>
-        <span t-if="record.space_caption.raw_value != 'Tvättstuga'">
-            Huvudnyckel:
-            <b>
-                <t t-if="record.master_key.raw_value === true">
-                    Ja
-                </t>
-                <t t-elif="record.master_key.raw_value === false">
-                    Nej
+            <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
+                <t t-esc="record.space_caption.raw_value"/>
+                /
+                <t t-esc="record.rental_property_id.raw_value"/>
+                <br/>
+            </span>
+            <span t-if="record.space_caption.raw_value != 'Tvättstuga'">
+                Huvudnyckel:
+                <b>
+                    <t t-if="record.master_key.raw_value === true">
+                        Ja
+                    </t>
+                    <t t-elif="record.master_key.raw_value === false">
+                        Nej
+                    </t>
+                    <t t-else="">
+                        Ej angett
+                    </t>
+                </b>
+                <br/>
+            </span>
+            Förfallodatum:
+            <t t-if="record.due_date.value">
+                <t t-if="record.today_date.value > record.due_date.value">
+                    <span class="text-danger">
+                        <t t-esc="record.due_date.value"/>
+                    </span>
                 </t>
                 <t t-else="">
-                    Ej angett
+                    <t t-esc="record.due_date.value"/>
                 </t>
-            </b>
-            <br/>
-        </span>
-        <span>
-            Prioritet:
-            <t t-if="record.priority_expanded.value">
-                <t t-esc="record.priority_expanded.value"/>
             </t>
+
             <t t-else="">
                 Ej angett
             </t>
-            <br/>
-        </span>
-        Skapad: <t t-esc="record.create_date.value"/>
-        <br/>
-        Förfallodatum:
-        <t t-if="record.due_date.value">
-            <t t-if="record.today_date.value > record.due_date.value">
-                <span class="text-danger">
-                    <t t-esc="record.due_date.value"/>
-                </span>
-            </t>
-            <t t-else="">
-                <t t-esc="record.due_date.value"/>
-            </t>
-        </t>
-        
-        <t t-else="">
-            Ej angett
-        </t>
-        <t t-if="record.user_id.value">
-            <br/>
-            <div class="d-flex align-items-center my-2">
-                <img
-                    class="o_avatar o_user_avatar rounded"
-                    t-att-src="'web/image?model=res.users&amp;field=avatar_128&amp;id=' + record.user_id.raw_value"
-                />
-                <div class="mx-2">
-                    <t t-esc="record.user_id.value" />
+            <t t-if="record.user_id.value">
+                <br/>
+                <div class="d-flex align-items-center my-2">
+                    <img
+                        class="o_avatar o_user_avatar rounded"
+                        t-att-src="'web/image?model=res.users&amp;field=avatar_128&amp;id=' + record.user_id.raw_value"
+                    />
+                    <div class="mx-2">
+                        <t t-esc="record.user_id.value" />
+                    </div>
                 </div>
-            </div>
-        </t>
+            </t>
+        </div>
     </t>
 </templates>

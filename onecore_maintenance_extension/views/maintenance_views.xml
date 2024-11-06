@@ -7,20 +7,69 @@
             <field name="model">maintenance.request</field>
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_search" />
             <field name="arch" type="xml">
-                <xpath expr="//search" position="inside">
-                    <field string="Personnummer" name="national_registration_number"/>
-                    <field string="Adress" name="address"/>
-                    <field string="Telefonnummer" name="phone_number"/>
-                    <field string="Kundnummer" name="contact_code"/>
-                    <field string="Tvättstuga" name="maintenance_unit_id"/>
-                </xpath>
-                <!-- Replace original priority filter with priority_expanded -->
-                <xpath expr="//filter[@name='high_priority']" position="replace">
-                    <filter string="1 dag" name="one_day" domain="[('priority_expanded', '=', '1')]" />
-                    <filter string="5 dagar" name="five_days" domain="[('priority_expanded', '=', '5')]" />
-                    <filter string="7 dagar" name="seven_days" domain="[('priority_expanded', '=', '7')]" />
-                    <filter string="10 dagar" name="ten_days" domain="[('priority_expanded', '=', '10')]" />
-                    <filter string="2 veckor" name="two_weeks" domain="[('priority_expanded', '=', '14')]" />
+                <xpath expr="//search" position="replace">
+                    <search string="Maintenance Request Search">
+                        <field string="Ärendenummer" name="id"/>
+                        <field string="Personnummer" name="national_registration_number"/>
+                        <field string="Adress" name="address"/>
+                        <field string="Telefonnummer" name="phone_number"/>
+                        <field string="Kundnummer" name="contact_code"/>
+                        <field string="Tvättstuga" name="maintenance_unit_id"/>
+                        <field name="category_id" />
+                        <field name="user_id" />
+                        <field name="equipment_id" />
+                        <field name="owner_user_id" />
+                        <field name="stage_id" />
+                        <field name="maintenance_team_id" />
+                        <filter string="My Maintenances" name="my_maintenances"
+                            domain="[('user_id', '=', uid)]" />
+                        <separator />
+                        <filter string="To Do" name="todo" domain="[('stage_id.done', '=', False)]" />
+                        <filter string="Done" name="done" domain="[('stage_id.done', '=', True)]" />
+                        <separator />
+                        <filter string="Blocked" name="kanban_state_block"
+                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'blocked')]" />
+                        <filter string="Ready" name="done"
+                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'done')]" />
+                        <separator />
+                        <filter string="1 dag" name="one_day" domain="[('priority_expanded', '=', '1')]" />
+                        <filter string="5 dagar" name="five_days" domain="[('priority_expanded', '=', '5')]" />
+                        <filter string="7 dagar" name="seven_days" domain="[('priority_expanded', '=', '7')]" />
+                        <filter string="10 dagar" name="ten_days" domain="[('priority_expanded', '=', '10')]" />
+                        <filter string="2 veckor" name="two_weeks" domain="[('priority_expanded', '=', '14')]" />
+                        <separator />
+                        <filter string="Unscheduled" name="unscheduled"
+                            domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
+                        <separator />
+                        <filter name="filter_request_date" date="request_date" />
+                        <filter name="filter_schedule_date" date="schedule_date" />
+                        <filter name="filter_close_date" date="close_date" />
+                        <separator />
+                        <filter string="Unread Messages" name="message_needaction"
+                            domain="[('message_needaction', '=', True)]"
+                            groups="mail.group_mail_notification_type_inbox" />
+                        <separator />
+                        <filter invisible="1" string="Late Activities" name="activities_overdue"
+                            domain="[('my_activity_date_deadline', '&lt;', context_today().strftime('%Y-%m-%d'))]"
+                            help="Show all records which has next action date is before today" />
+                        <filter invisible="1" string="Today Activities" name="activities_today"
+                            domain="[('my_activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]" />
+                        <filter invisible="1" string="Future Activities" name="activities_upcoming_all"
+                            domain="[('my_activity_date_deadline', '&gt;', context_today().strftime('%Y-%m-%d'))]" />
+                        <separator />
+                        <filter string="Active" name="active" domain="[('archive', '=', False)]" />
+                        <filter string="Cancelled" name="inactive" domain="[('archive', '=', True)]" />
+                        <group expand='0' string='Group by...'>
+                            <filter string='Assigned to' name="assigned" domain="[]"
+                                context="{'group_by': 'user_id'}" />
+                            <filter string='Category' name="category" domain="[]"
+                                context="{'group_by' : 'category_id'}" />
+                            <filter string='Stage' name="stages" domain="[]"
+                                context="{'group_by' : 'stage_id'}" />
+                            <filter string='Created By' name='created_by' domain="[]"
+                                context="{'group_by': 'owner_user_id'}" />
+                        </group>
+                    </search>
                 </xpath>
             </field>
         </record>
@@ -51,8 +100,17 @@
                 </xpath>
 
                 <xpath expr="//group[1]" position="inside">
+                    <div invisible="not create_date">
+                        <field name="creation_origin" invisible="1" readonly="1"></field>
+
+                        <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
+                            <span invisible="creation_origin != 'internal'">Skapad internt</span>
+                            <span invisible="creation_origin != 'mimer-nu'">Från Mimer.nu</span>
+                        </div>
+
+                    </div>
                     <div invisible="description == False" >
-                        <p class="mb-1">Kort beskrivning av anmälan (från kund).</p>
+                        <p class="mb-1 fw-bold inline-block">Beskrivning:</p>
                         <field name="description" readonly="1"></field>
                     </div>
 
@@ -68,7 +126,7 @@
                             <span invisible="master_key == True">Nej</span>
                         </div>
                     </div>
-                    <div class="accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
+                    <div class="mt-3 accordion accordion-flush d-md-flex flex-wrap justify-content-between mb-3" id="accordionFlush">
                         <!-- Block 1 -->
                         <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
                           <h2 class="accordion-header">
@@ -135,7 +193,7 @@
                                     <field name="tenant_option_id" string="Hyresgäst" options="{'no_create_edit': True, 'no_create':True, 'no_open': True}" readonly="create_date != False" invisible="not tenant_option_id" />
 
                                     <field name="tenant_name" string="Hyresgäst" invisible="not tenant_name and tenant_option_id" />
-                                    <field name="national_registration_number" string="Personnummer" />
+                                    <field name="national_registration_number" string="Person/Org. nr" />
                                     <field name="contact_code" string="Kundnummer" />
                                     <field name="phone_number" string="Telefon" readonly="create_date != False" />
                                     <field name="email_address" string="E-post" readonly="create_date != False" />
@@ -164,11 +222,12 @@
                                     <field name="priority_expanded"  />
                                     <field name="due_date" />
                                     <field name="maintenance_team_id" options="{'no_create': True, 'no_open': True}" />
-                                    <field name="user_id" />
+                                    <field name="user_id" domain="maintenance_team_domain" />
                                     <field name="schedule_date" />
                                     <field name="master_key" string="Huvudnyckel" widget="boolean_toggle" invisible="space_caption == 'Tvättstuga'"/>
                                     <field name="call_between" invisible="not call_between" string="Kund nås dessa tider" />
                                     <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company" />
+                                    <field name="maintenance_team_domain" invisible="True" />
                                 </group>
                             </div>
                           </div>
@@ -221,12 +280,10 @@
                     <field name="space_caption" />
                     <field name="create_date" />
                     <field name="master_key" />
+                    <field name="new_mimer_notification" />
                 </xpath>
-                <!-- Remove existing fields regarding equipment -->
-                <xpath expr="//div[@class='o_kanban_record_body']/span[1]" position="replace" />
-                <xpath expr="//div[@class='o_kanban_record_body']/span[2]" position="replace" />
-                <xpath expr="//div[@class='o_kanban_record_bottom']" position="replace" />
-                <xpath expr="//div[@class='o_kanban_record_body']" position="inside">
+
+                <xpath expr="//div[@class='oe_kanban_content']" position="replace">
                     <t t-call="onecore_maintenance_extension.maintenance_request_item" />
                 </xpath>
             </field>

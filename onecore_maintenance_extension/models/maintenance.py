@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, tools
 from urllib.parse import quote
 
 import base64
@@ -6,8 +6,12 @@ import uuid
 import requests
 import json
 import logging
+import os
 
 _logger = logging.getLogger(__name__)
+
+def is_local():
+    return os.getenv('ENV') == 'local'
 
 class OneCoreMaintenanceRequest(models.Model):
     _inherit = 'maintenance.request'
@@ -17,6 +21,7 @@ class OneCoreMaintenanceRequest(models.Model):
     search_type = fields.Selection([
         ('leaseId', 'Kontraktsnummer'),
         ('rentalPropertyId', 'Hyresobjekt'),
+        ('contactCode', 'Kundnummer'),
         ('pnr', 'Personnummer (12 siffror)'),
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
     ], string='Search Type', default='pnr', required=True, store=False)
@@ -25,7 +30,6 @@ class OneCoreMaintenanceRequest(models.Model):
     maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit Option', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
-
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
@@ -87,9 +91,43 @@ class OneCoreMaintenanceRequest(models.Model):
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
     due_date=fields.Date('Förfallodatum', compute='_compute_due_date', store=True)
+    creation_origin=fields.Selection([('mimer-nu', 'Mimer.nu'), ('internal', 'Internt')], string='Skapad från', default='internal', store=True)
 
     # New fields for the form view only (not stored in the database)
     today_date = fields.Date(string='Today', compute='_compute_today_date', store=False)
+    new_mimer_notification = fields.Boolean(
+        string='New Mimer Message',
+        compute='_compute_new_mimer_notification',
+        store=False,
+    )
+    # This functions searches for notifications from Mimer.nu that are unread for the logged in user.
+    @api.depends('message_ids.notification_ids.is_read', 'message_ids.notification_ids.notification_type')
+    def _compute_new_mimer_notification(self):
+        for record in self:
+            message_ids = record.message_ids.ids
+
+            unread_mimer_notifications = self.env['mail.notification'].search([
+                ('mail_message_id', 'in', message_ids),
+                ('res_partner_id', '=', self.env.user.partner_id.id),
+                ('is_read', '=', False),
+                ('notification_type', '=', 'inbox'),
+                ('mail_message_id.author_id.user_ids.login', '=', 'admin' if is_local() else 'odoo@mimer.nu')
+            ])
+
+            record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
+
+    # Domain for including users in the selected maintenance team
+    maintenance_team_domain = fields.Binary(string="Maintenance team domain", compute="_compute_maintenance_team_domain")
+
+    @api.depends('maintenance_team_id')
+    def _compute_maintenance_team_domain(self):
+        for record in self:
+            if record.maintenance_team_id:
+                ids = record.maintenance_team_id.member_ids.ids
+                record.maintenance_team_domain = [("id", "in", ids)]
+
+                if record.user_id.id not in ids:
+                    record.user_id = False
 
     @api.model
     def _compute_today_date(self):
@@ -166,17 +204,26 @@ class OneCoreMaintenanceRequest(models.Model):
                     })
 
                     for tenant in lease['tenants']:
-                        phone_number = next((item['phoneNumber'] for item in tenant.get('phoneNumbers') if item['isMainNumber'] == 1), None)
-                        tenant_option = self.env['maintenance.tenant.option'].create({
-                            'user_id': self.env.user.id,
-                            'name': tenant['firstName'] + " " + tenant['lastName'],
-                            'contact_code': tenant['contactCode'],
-                            'contact_key': tenant['contactKey'],
-                            'national_registration_number': tenant['nationalRegistrationNumber'],
-                            'email_address': tenant.get('emailAddress'),
-                            'phone_number': phone_number,
-                            'is_tenant': tenant['isTenant'],
-                        })
+                        # Check if a tenant with the same contact_code already exists
+                        existing_tenant = self.env['maintenance.tenant.option'].search([('contact_code', '=', tenant['contactCode'])], limit=1)
+
+                        if not existing_tenant:
+                            if tenant.get('firstName') and tenant.get('lastName'):
+                                name = tenant['firstName'] + " " + tenant['lastName']
+                            else:
+                                name = tenant.get('fullName', '')
+
+                            phone_number = next((item['phoneNumber'] for item in tenant.get('phoneNumbers') if item['isMainNumber'] == 1), None)
+                            tenant_option = self.env['maintenance.tenant.option'].create({
+                                'user_id': self.env.user.id,
+                                'name': name,
+                                'contact_code': tenant['contactCode'],
+                                'contact_key': tenant['contactKey'],
+                                'national_registration_number': tenant['nationalRegistrationNumber'],
+                                'email_address': tenant.get('emailAddress'),
+                                'phone_number': phone_number,
+                                'is_tenant': tenant['isTenant'],
+                            })
         else:
             _logger.info("No data found in response.")
 
@@ -273,6 +320,13 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.email_address = record.tenant_option_id.email_address
                 record.is_tenant = record.tenant_option_id.is_tenant
 
+    def _resource_assigned(self):
+        resource_allocated_stage = self.env['maintenance.stage'].search([
+            ('name', '=', "Resurs tilldelad")
+        ])
+        if resource_allocated_stage:
+            self.write({'stage_id': resource_allocated_stage.id})
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -365,6 +419,8 @@ class OneCoreMaintenanceRequest(models.Model):
               })
             if request.owner_user_id or request.user_id:
                 request._add_followers()
+            if request.user_id and request.stage_id.name == "Väntar på handläggning":
+                request._resource_assigned()
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
             if request.close_date and not request.stage_id.done:
@@ -423,6 +479,8 @@ class OneCoreMaintenanceRequest(models.Model):
 
         if vals.get('owner_user_id') or vals.get('user_id'):
             self._add_followers()
+        if vals.get('user_id') and self.stage_id.name == "Väntar på handläggning":
+            self._resource_assigned()
         if 'stage_id' in vals:
             self.filtered(lambda m: m.stage_id.done).write({'close_date': fields.Date.today()})
             self.filtered(lambda m: not m.stage_id.done).write({'close_date': False})

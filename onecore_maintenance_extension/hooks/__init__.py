@@ -7,7 +7,8 @@ def _update_maintenance_stages(env):
         'stage_1': {'name': 'Resurs tilldelad', 'fold': False, 'done': False, 'sequence': 2},
         'stage_3': {'name': 'Påbörjad', 'fold': False, 'done': False, 'sequence': 3},
         'stage_4': {'name': 'Väntar på beställda varor', 'fold': False, 'done': False, 'sequence': 4},
-        'stage_5': {'name': 'Avslutad', 'fold': True, 'done': True, 'sequence': 5},
+        'stage_5': {'name': 'Utförd', 'fold': False, 'done': False, 'sequence': 5},
+        'stage_6': {'name': 'Avslutad', 'fold': False, 'done': True, 'sequence': 6},
     }
 
     existing_stages = env['maintenance.stage'].search([])
