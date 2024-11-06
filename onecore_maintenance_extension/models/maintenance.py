@@ -128,6 +128,8 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if record.user_id.id not in ids:
                     record.user_id = False
+            else:
+                record.maintenance_team_domain = []
 
     @api.model
     def _compute_today_date(self):
