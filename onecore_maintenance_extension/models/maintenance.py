@@ -33,7 +33,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
-    rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Hyresobjekt ID')
+    rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Hyresobjekt')
 
     rental_property_name = fields.Char('Hyresobjekt Namn', related='rental_property_id.name', depends=['rental_property_id'])
     address = fields.Char('Adress', related='rental_property_id.address', depends=['rental_property_id'])
