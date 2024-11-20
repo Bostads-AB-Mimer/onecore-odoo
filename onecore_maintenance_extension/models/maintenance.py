@@ -343,6 +343,30 @@ class OneCoreMaintenanceRequest(models.Model):
         if resource_allocated_stage:
             self.write({'stage_id': resource_allocated_stage.id})
 
+    def _send_sms(self, phone_number, message):
+        onecore_auth = self.env['onecore.auth']
+        base_url = self.env['ir.config_parameter'].get_param(
+            'onecore_base_url', '')
+        data = {
+            'phoneNumber': phone_number,
+            'message': message
+        }
+        url = f"{base_url}/sendTicketMessageSms"
+
+        try:
+            response = onecore_auth.onecore_request('POST', url, data=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.HTTPError as http_err:
+            _logger.error(f"HTTP error occurred: {http_err}")
+        except Exception as err:
+            _logger.error(f"An error occurred: {err}")
+        return None
+
+    def _send_created_sms(self, phone_number):
+        message = f"Hej {self.tenant_name}!\n\nTack för din serviceanmälan. Du kan följa, uppdatera och prata med oss om ditt ärende på Mina sidor."
+        return self._send_sms(phone_number, message)
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -444,6 +468,10 @@ class OneCoreMaintenanceRequest(models.Model):
             if not request.close_date and request.stage_id.done:
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
+
+            if request.phone_number:
+                request._send_created_sms(request.phone_number)
+
 
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
             # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
