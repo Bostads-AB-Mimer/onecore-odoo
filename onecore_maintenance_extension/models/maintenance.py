@@ -82,7 +82,7 @@ class OneCoreMaintenanceRequest(models.Model):
     # Comes from Mimer.nu
     pet=fields.Char('Husdjur', store=True)
     call_between=fields.Char('Nås mellan', store=True)
-    hearing_impaired=fields.Boolean('Hörselskadad', store=True)
+    hearing_impaired=fields.Boolean('Hörselnedsättning', store=True)
     space_code=fields.Char('Utrymmeskod', store=True)
     space_caption=fields.Char('Utrymme', store=True, readonly=True)
     equipment_code=fields.Char('Utrustningskod', store=True, readonly=True)
