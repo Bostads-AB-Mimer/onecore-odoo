@@ -50,7 +50,7 @@ class OnecoreAuth(models.Model):
         if response.status_code == 401:
             token = self.refresh_token()
             headers['Authorization'] = f'Bearer {token}'
-            response = requests.post(url, headers=headers, **kwargs)
+            response = requests.request(method, url, headers=headers, **kwargs)
 
             if response.status_code == 401:
                 _logger.error('Unauthorized request after token refresh: %s', response.text)
