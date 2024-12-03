@@ -1,16 +1,12 @@
-# -*- coding: utf-8 -*-
-# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
+from odoo import _, api, fields, models, tools
+from odoo.tools import clean_context
 
 import logging
 import re
-import textwrap
 from binascii import Error as binascii_error
 from collections import defaultdict
 
-from odoo import _, api, Command, fields, models, modules, tools
-from odoo.exceptions import AccessError
-from odoo.osv import expression
-from odoo.tools import clean_context, groupby as tools_groupby, SQL
 
 _logger = logging.getLogger(__name__)
 _image_dataurl = re.compile(r'(data:image/[a-z]+?);base64,([a-z0-9+/\n]{3,}=*)\n*([\'"])(?: data-filename="([^"]*)")?', re.I)
@@ -44,6 +40,7 @@ class OneCoreMailMessage(models.Model):
     def create(self, values_list):
         tracking_values_list = []
         _logger.info("-----------------------> Creating mail.message with values_list: %s", values_list)
+        # Send email and sms here
         for values in values_list:
             if 'email_from' not in values:  # needed to compute reply_to
                 _author_id, email_from = self.env['mail.thread']._message_compute_author(values.get('author_id'), email_from=None, raise_on_email=False)
