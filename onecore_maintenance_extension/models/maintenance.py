@@ -30,6 +30,7 @@ class OneCoreMaintenanceRequest(models.Model):
     maintenance_unit_option_id = fields.Many2one('maintenance.maintenance.unit.option', compute='_compute_search', string='Maintenance Unit Option', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     tenant_option_id = fields.Many2one('maintenance.tenant.option', compute='_compute_search', string='Tenant', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
     lease_option_id = fields.Many2one('maintenance.lease.option', compute='_compute_search', string='Lease', domain=lambda self: [('user_id', '=', self.env.user.id)], readonly=False)
+    maintenance_request_category_id = fields.Many2one('maintenance.request.category', string='Ärendekategori')
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
