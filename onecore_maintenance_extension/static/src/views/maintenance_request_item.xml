@@ -13,16 +13,16 @@
                 </div>
             </div>
 
+            <span t-if="record.id.raw_value">
+                od-<t t-esc="record.id.raw_value"/>
+                <br/>
+            </span>
             <span class="oe_grey" t-if="record.address.raw_value">
-                <span t-if="record.address.raw_value">
-                    <t t-esc="record.address.raw_value"/>
-                </span>
+                <t t-esc="record.address.raw_value"/>
                 <br/>
             </span>
             <span t-if="record.space_caption.raw_value || record.rental_property_id.raw_value">
                 <t t-esc="record.space_caption.raw_value"/>
-                /
-                <t t-esc="record.rental_property_id.raw_value"/>
                 <br/>
             </span>
             <span t-if="record.space_caption.raw_value != 'Tvättstuga'">
