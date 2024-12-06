@@ -1,19 +1,10 @@
 
-from odoo import _, api, fields, models, tools
-from odoo.tools import clean_context
-from urllib.parse import quote
-from binascii import Error as binascii_error
-from collections import defaultdict
+from odoo import _, api, fields, models
 
 import logging
-import re
 import requests
 
-
-
-
 _logger = logging.getLogger(__name__)
-_image_dataurl = re.compile(r'(data:image/[a-z]+?);base64,([a-z0-9+/\n]{3,}=*)\n*([\'"])(?: data-filename="([^"]*)")?', re.I)
 
 class OneCoreMailMessage(models.Model):
     _inherit = "mail.message"
@@ -39,6 +30,8 @@ class OneCoreMailMessage(models.Model):
             "tenant_sms_error": "set default",
             "tenant_mail_error": "set default",
             "tenant_mail_and_sms_error": "set default",
+            "tenant_mail_ok_and_sms_error": "set default",
+            "tenant_mail_error_and_sms_ok": "set default",
         },
     )
 
