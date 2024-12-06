@@ -299,44 +299,15 @@
                                             groups="base.group_multi_company" />
                                         <field name="maintenance_team_domain" invisible="True" />
                                     </group>
-                                    <!-- <Composer composer="state.thread.composer" autofocus="true"
-                                    className="state.composerType === 'message' ? '' : 'pt-4'"
-                                    mode="'extended'" onPostCallback.bind="onPostCallback"
-                                    dropzoneRef="rootRef" type="state.composerType"
-                                    t-key="props.threadId"/> -->
-
                                 </div>
 
                             </div>
                         </div>
 
                     </div>
-                    <!-- <xpath expr="//div[hasclass('oe_chatter')]" position="replace">
-                        <div class="o-mail-ChatterContainer o-mail-Form-chatter oe_chatter"
-                        t-attf-class="{{ __comp__.uiService.size &gt;= 6 ? &quot;o-aside&quot; : &quot;mt-4 mt-md-0&quot; }}">
-                        <t t-component="__comp__.mailComponents.Chatter" hasActivities="true"
-                            hasFollowers="true" hasMessageList="true"
-                            hasParentReloadOnAttachmentsChanged="false"
-                            hasParentReloadOnFollowersUpdate="false"
-                            hasParentReloadOnMessagePosted="false"
-                            isAttachmentBoxVisibleInitially="false"
-                            threadId="__comp__.props.record.resId or undefined"
-                            threadModel="__comp__.props.record.resModel"
-                            webRecord="__comp__.props.record" saveRecord="__comp__.props.saveRecord"
-                            isChatterAside="__comp__.uiService.size &gt;= 6" isInFormSheetBg="false" />
-                    </div>
-                    </xpath> -->
-                    <xpath expr="//div[hasclass('oe_chatter')]" position="replace">
-                        <!-- <field name="message_follower_ids"/> -->
-                        <field name="activity_ids" />
-                        <field name="message_ids" />
-                    </xpath>
+
                     
-                    <!-- <div class="oe_chatter">
-                        <field name="message_follower_ids"/>
-                        <field name="activity_ids"/>
-                        <field name="message_ids"/>
-                    </div> -->
+
                 </xpath>
 
                 <!-- Hides the details group since we moved them to the accordion -->

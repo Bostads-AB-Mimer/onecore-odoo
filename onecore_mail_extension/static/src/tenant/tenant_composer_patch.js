@@ -32,6 +32,12 @@ patch(Composer.prototype, {
     }
     return super.placeholder
   },
+  get isSendButtonDisabled() {
+    if (this.props.type === 'message' && (!this.state.sendSMS && !this.state.sendEmail)) {
+      return true
+    }
+    return super.isSendButtonDisabled
+  },
   async sendMessage() {
 
     await this.processMessage(async (value) => {
