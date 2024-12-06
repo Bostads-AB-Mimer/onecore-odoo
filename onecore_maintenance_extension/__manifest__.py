@@ -21,10 +21,8 @@
     ],
     'assets': {
         'web.assets_backend': [
-            'onecore_maintenance_extension/static/src/views/chatter.xml',
-            'onecore_maintenance_extension/static/src/views/kanban_header.xml',
-            'onecore_maintenance_extension/static/src/views/maintenance_request_item.xml',
-            'onecore_maintenance_extension/static/src/scss/mimer_styles.scss',
+            'onecore_maintenance_extension/static/src/views/*.xml',
+            'onecore_maintenance_extension/static/src/scss/*.scss',
         ],
     },
     'post_init_hook': '_post_init_hook',

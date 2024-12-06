@@ -42,15 +42,14 @@ class OnecoreAuth(models.Model):
         else:
             response.raise_for_status()
 
-    def onecore_request(self, url, params):
+    def onecore_request(self, method, url, **kwargs):
         token = self.get_token()
         headers = {'Authorization': f'Bearer {token}'}
-        response = requests.get(url, params=params, headers=headers)
-
+        response = requests.request(method, url, headers=headers, **kwargs)
         if response.status_code == 401:
             token = self.refresh_token()
             headers['Authorization'] = f'Bearer {token}'
-            response = requests.post(url, params=params, headers=headers)
+            response = requests.request(method, url, headers=headers, **kwargs)
 
             if response.status_code == 401:
                 _logger.error('Unauthorized request after token refresh: %s', response.text)
