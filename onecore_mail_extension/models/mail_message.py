@@ -15,11 +15,11 @@ class OneCoreMailMessage(models.Model):
             ("tenant_sms", "Sent to tenant by SMS"),
             ("tenant_mail", "Sent to tenant by email"),
             ("tenant_mail_and_sms", "Sent to tenant by email and SMS"),
-            ("tenant_sms_error", "Sent to tenant by SMS, but sending failed"),
-            ("tenant_mail_error", "Sent to tenant by email, but sending failed"),
-            ("tenant_mail_and_sms_error", "Sent to tenant by email and SMS, but sending failed"),
-            ("tenant_mail_ok_and_sms_error", "Sent to tenant by email and SMS, but sending failed"),
-            ("tenant_mail_error_and_sms_ok", "Sent to tenant by email and SMS, but sending failed"),
+            ("failed_tenant_sms", "Sent to tenant by SMS, but sending failed"),
+            ("failed_tenant_mail", "Sent to tenant by email, but sending failed"),
+            ("failed_tenant_mail_and_sms", "Sent to tenant by email and SMS, but both sending failed"),
+            ("tenant_mail_ok_and_sms_failed", "Sent to tenant by email and SMS, but sending SMS failed"),
+            ("tenant_mail_failed_and_sms_ok", "Sent to tenant by email and SMS, but sending email failed"),
 
         ],
         ondelete={
@@ -27,11 +27,11 @@ class OneCoreMailMessage(models.Model):
             "tenant_sms": "set default",
             "tenant_mail": "set default",
             "tenant_mail_and_sms": "set default",
-            "tenant_sms_error": "set default",
-            "tenant_mail_error": "set default",
-            "tenant_mail_and_sms_error": "set default",
-            "tenant_mail_ok_and_sms_error": "set default",
-            "tenant_mail_error_and_sms_ok": "set default",
+            "failed_tenant_sms": "set default",
+            "failed_tenant_mail": "set default",
+            "failed_tenant_mail_and_sms": "set default",
+            "tenant_mail_ok_and_sms_failed": "set default",
+            "tenant_mail_failed_and_sms_ok": "set default",
         },
     )
 
@@ -81,36 +81,36 @@ class OneCoreMailMessage(models.Model):
     @api.model_create_multi
     def create(self, values_list):
         for values in values_list:
-            the_record = self.env['maintenance.request'].search([('id', '=', values['res_id'])])
-            
-            if values['message_type'] == 'tenant_sms':
-                send_sms_result = self._send_sms(the_record.tenant_id.phone_number, values['body'].replace('<br>', '\n'))
-                
-                if send_sms_result is None:
-                    values['message_type'] = 'tenant_sms_error'
-            
-            if values['message_type'] == 'tenant_mail':
+            if values['message_type'].startswith('tenant_'):
+                the_record = self.env['maintenance.request'].search([('id', '=', values['res_id'])])
                 subject = f"Ang. serviceanmälan: {the_record.name}"
                 body = values['body'].replace('<br>', '\\n')
                 
-                send_email_result = self._send_email(the_record.tenant_id.email_address, subject, body)
+                # send by sms
+                if values['message_type'] == 'tenant_sms':
+                    send_sms_result = self._send_sms(the_record.tenant_id.phone_number, body)
+                    
+                    if send_sms_result is None:
+                        values['message_type'] = 'failed_tenant_sms'
                 
-                if send_email_result is None:
-                    values['message_type'] = 'tenant_mail_error'
-            
-            if values['message_type'] == 'tenant_mail_and_sms':
-                subject = f"Ang. serviceanmälan: {the_record.name}"
-                body = values['body'].replace('<br>', '\\n')
+                # send by email
+                if values['message_type'] == 'tenant_mail':
+                    send_email_result = self._send_email(the_record.tenant_id.email_address, subject, body)
+                    
+                    if send_email_result is None:
+                        values['message_type'] = 'failed_tenant_mail'
                 
-                send_email_result = self._send_email(the_record.tenant_id.email_address, subject, body)
-                send_sms_result = self._send_sms(the_record.tenant_id.phone_number, body)
-                
-                if send_email_result is None and send_sms_result is not None:
-                    values['message_type'] = 'tenant_mail_error_and_sms_ok'
-                if send_sms_result is None and send_email_result is not None:
-                    values['message_type'] = 'tenant_mail_ok_and_sms_error'
-                if send_email_result is None and send_sms_result is None:
-                    values['message_type'] = 'tenant_mail_and_sms_error'           
+                # send by email and sms
+                if values['message_type'] == 'tenant_mail_and_sms':
+                    send_email_result = self._send_email(the_record.tenant_id.email_address, subject, body)
+                    send_sms_result = self._send_sms(the_record.tenant_id.phone_number, body)
+                    
+                    if send_email_result is None and send_sms_result is not None:
+                        values['message_type'] = 'tenant_mail_failed_and_sms_ok'
+                    if send_sms_result is None and send_email_result is not None:
+                        values['message_type'] = 'tenant_mail_ok_and_sms_failed'
+                    if send_email_result is None and send_sms_result is None:
+                        values['message_type'] = 'failed_tenant_mail_and_sms'           
 
         messages = super(OneCoreMailMessage, self).create(values_list)
 
