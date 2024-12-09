@@ -159,7 +159,7 @@ class OneCoreMaintenanceRequest(models.Model):
         url = f"{base_url}/propertyInfo/{quote(str(search_by_number), safe='')}"
 
         try:
-            response = onecore_auth.onecore_request(url, params=params)
+            response = onecore_auth.onecore_request('GET', url, params=params)
             response.raise_for_status()
             return response.json().get('content', {})
         except requests.HTTPError as http_err:
