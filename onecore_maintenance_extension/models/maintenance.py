@@ -343,29 +343,10 @@ class OneCoreMaintenanceRequest(models.Model):
         if resource_allocated_stage:
             self.write({'stage_id': resource_allocated_stage.id})
 
-    def _send_sms(self, phone_number, message):
-        onecore_auth = self.env['onecore.auth']
-        base_url = self.env['ir.config_parameter'].get_param(
-            'onecore_base_url', '')
-        data = {
-            'phoneNumber': phone_number,
-            'message': message
-        }
-        url = f"{base_url}/sendTicketMessageSms"
-
-        try:
-            response = onecore_auth.onecore_request('POST', url, data=data)
-            response.raise_for_status()
-            return response.json()
-        except requests.HTTPError as http_err:
-            _logger.error(f"HTTP error occurred: {http_err}")
-        except Exception as err:
-            _logger.error(f"An error occurred: {err}")
-        return None
-
     def _send_created_sms(self, phone_number):
+        mail_message = self.env['mail.message']
         message = f"Hej {self.tenant_name}!\n\nTack för din serviceanmälan. Du kan följa, uppdatera och prata med oss om ditt ärende på Mina sidor."
-        return self._send_sms(phone_number, message)
+        return mail_message._send_sms(phone_number, message)
 
     @api.model_create_multi
     def create(self, vals_list):
