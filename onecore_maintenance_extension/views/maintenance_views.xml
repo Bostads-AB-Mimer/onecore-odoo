@@ -300,14 +300,27 @@
                                         <field name="maintenance_team_domain" invisible="True" />
                                     </group>
                                 </div>
-
                             </div>
                         </div>
 
+                        <div class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none">
+                            <h2 class="accordion-header">
+                                <button name="accordion-button-4"
+                                    class="accordion-button collapsed fs-3 fw-bold"
+                                    type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#flush-collapse4" aria-expanded="false"
+                                    aria-controls="flush-collapse4">
+                                    Anteckningar
+                                </button>
+                            </h2>
+                            <div id="flush-collapse4" class="accordion-collapse collapse"
+                                data-bs-parent="#accordionFlush">
+                                <div class="accordion-body">
+                                    <field name='description' placeholder="Internal Notes" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
-
-                    
-
                 </xpath>
 
                 <!-- Hides the details group since we moved them to the accordion -->
@@ -323,9 +336,13 @@
                     <attribute name="invisible">1</attribute>
                 </xpath>
 
-                <!-- Hides the instructions tab in the form view -->
-                <xpath expr="//notebook[1]/page[2]" position="replace" />
-
+                <xpath expr="//notebook" position="replace">
+                    <notebook class="d-none d-md-block">
+                        <page string="Notes">
+                            <field name='description' placeholder="Internal Notes" />
+                        </page>
+                    </notebook>
+                </xpath>
             </field>
         </record>
 
