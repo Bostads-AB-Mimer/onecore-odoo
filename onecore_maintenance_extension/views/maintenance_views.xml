@@ -316,7 +316,7 @@
                             <div id="flush-collapse4" class="accordion-collapse collapse"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
-                                    <field name='description' placeholder="Internal Notes" />
+                                    <field name='description' placeholder="Ärendebeskrivning" />
                                 </div>
                             </div>
                         </div>
@@ -338,8 +338,8 @@
 
                 <xpath expr="//notebook" position="replace">
                     <notebook class="d-none d-md-block">
-                        <page string="Notes">
-                            <field name='description' placeholder="Internal Notes" />
+                        <page string="Ärendebeskrivning">
+                            <field name='description' placeholder="Ärendebeskrivning" />
                         </page>
                     </notebook>
                 </xpath>
