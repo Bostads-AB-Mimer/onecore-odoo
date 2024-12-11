@@ -155,9 +155,9 @@ class OneCoreMaintenanceRequest(models.Model):
     def fetch_tenant_contact_data(self, thread_id):
         record = self.env['maintenance.request'].search([('id', '=', thread_id)])
         return {
-        'has_email': record.tenant_id.email_address is not None and record.tenant_id.email_address != 'redacted',
-        'has_phone_number': record.tenant_id.phone_number is not None
-    }
+            'has_email': record.tenant_id.email_address is not None and record.tenant_id.email_address != 'redacted',
+            'has_phone_number': record.tenant_id.phone_number is not None
+        }
     
     @api.model
     def fetch_property_data(self, search_by_number, search_type):
