@@ -9,12 +9,25 @@ patch(ThreadService.prototype, {
   setup(env, services) {
     super.setup(env, services)
   },
+  async getTenantContacts(threadId) {
+    try {
+      const result = await this.rpc('/web/dataset/call_kw', {
+          model: 'maintenance.request',
+          method: 'fetch_tenant_contact_data',
+          args: [threadId],
+          kwargs: {}
+      });
+      return result;
+  } catch (error) {
+      console.error('Error fetching tenant data:', error);
+      return null;
+  }
+  },
   /**
    * Get the parameters to pass to the message post route.
    */
   async getMessagePostParams({ body, isNote, thread, sendSMS, sendEmail }) {
     let messageType
-
     if (sendSMS && sendEmail) {
       messageType = 'tenant_mail_and_sms'
     } else if (sendSMS && !sendEmail) {

@@ -12,10 +12,10 @@
             <t t-if="props.type === 'message'">
                 <p class="mt-3"><strong>Skicka som</strong></p>
                 <div class="d-flex mb-3">
-                    <CheckBox className="'me-3'" id="send_sms" value="state.sendSMS" onChange.bind="onSMSCheckboxChange">
+                    <CheckBox disabled="!state.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="state.sendSMS" onChange.bind="onSMSCheckboxChange">
                         SMS
                     </CheckBox>
-                    <CheckBox id="send_email" value="state.sendEmail" onChange.bind="onEMailCheckboxChange">
+                    <CheckBox disabled="!state.tenantHasEmail" id="send_email" value="state.sendEmail" onChange.bind="onEMailCheckboxChange">
                         E-post
                     </CheckBox>
                 </div>
