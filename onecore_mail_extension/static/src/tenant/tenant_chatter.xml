@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="onecore_mail_extension.TenantChatter" t-inherit="mail.Chatter" t-inherit-mode="extension" owl="1">
+     <!-- Hides the Send to and recipients list - dropdown in the chatter/composer -->
+    <xpath expr="//div[hasclass('flex-shrink-0', 'text-truncate')]" position="replace">
+        <div class="mb-4" />
+    </xpath>
+</t>
+
+<t t-name="onecore_mail_extension.TenantMessageNotification" t-inherit="mail.Message.notification" t-inherit-mode="extension" owl="1">
+    <!-- Hides the Envelope-icon by each message -->
+    <xpath expr="//span[hasclass('o-mail-Message-notification')]" position="replace" />
+</t>
+
+</templates>
