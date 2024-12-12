@@ -150,7 +150,16 @@ class OneCoreMaintenanceRequest(models.Model):
             if res.get(field):
                 res[field]['searchable'] = False
         return res
-
+    
+    @api.model
+    def fetch_tenant_contact_data(self, thread_id):
+        record = self.env['maintenance.request'].search([('id', '=', thread_id)])
+        return {
+            'has_email': record.tenant_id.email_address is not None and record.tenant_id.email_address != 'redacted',
+            'has_phone_number': record.tenant_id.phone_number is not None
+        }
+    
+    @api.model
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
         base_url = self.env['ir.config_parameter'].get_param(

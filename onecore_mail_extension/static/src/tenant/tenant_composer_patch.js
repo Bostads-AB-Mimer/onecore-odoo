@@ -3,7 +3,7 @@
 import { CheckBox } from '@web/core/checkbox/checkbox'
 import { Composer } from '@mail/core/common/composer'
 import { patch } from '@web/core/utils/patch'
-import { useState } from '@odoo/owl'
+import { useState, onMounted } from '@odoo/owl'
 
 patch(Composer, {
   components: { ...Composer.components, CheckBox },
@@ -15,9 +15,16 @@ patch(Composer.prototype, {
     this.state = useState({
       sendSMS: false,
       sendEmail: false,
+      tenantHasEmail: false,
+      tenantHasPhoneNumber: false,
     })
     this.state.active = true
 
+    onMounted(async () => {
+      const tenantResult = await this.threadService.getTenantContacts(this.thread.id)
+      this.state.tenantHasEmail = tenantResult.has_email
+      this.state.tenantHasPhoneNumber = tenantResult.has_phone_number
+    })
   },
   onSMSCheckboxChange(checked) {
     this.state.sendSMS = checked
