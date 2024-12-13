@@ -20,7 +20,7 @@ class OneCoreMaintenanceRequest(models.Model):
     search_by_number = fields.Char('Search', store=False)
     search_type = fields.Selection([
         ('leaseId', 'Kontraktsnummer'),
-        ('rentalPropertyId', 'Hyresobjekt'),
+        ('rentalObjectId', 'Hyresobjekt'),
         ('contactCode', 'Kundnummer'),
         ('pnr', 'Personnummer (12 siffror)'),
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
@@ -135,14 +135,14 @@ class OneCoreMaintenanceRequest(models.Model):
     def _compute_today_date(self):
         for record in self:
             record.today_date = fields.Date.context_today(self)
-    
-    
+
+
     @api.model
     def fields_get(self, allfields=None, attributes=None):
         # Hide filterable/searchable fields
         fields_to_hide = [
-            'lease_number', 
-            'notice_given_by', 
+            'lease_number',
+            'notice_given_by',
             'preferred_move_out_date',
             ]
         res = super().fields_get(allfields, attributes)
@@ -150,7 +150,7 @@ class OneCoreMaintenanceRequest(models.Model):
             if res.get(field):
                 res[field]['searchable'] = False
         return res
-    
+
     @api.model
     def fetch_tenant_contact_data(self, thread_id):
         record = self.env['maintenance.request'].search([('id', '=', thread_id)])
@@ -158,14 +158,14 @@ class OneCoreMaintenanceRequest(models.Model):
             'has_email': record.tenant_id.email_address is not None and record.tenant_id.email_address != 'redacted',
             'has_phone_number': record.tenant_id.phone_number is not None
         }
-    
+
     @api.model
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
         base_url = self.env['ir.config_parameter'].get_param(
             'onecore_base_url', '')
-        params = {'typeOfNumber': search_type}
-        url = f"{base_url}/propertyInfo/{quote(str(search_by_number), safe='')}"
+        params = {'handler': search_type}
+        url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
 
         try:
             response = onecore_auth.onecore_request('GET', url, params=params)
