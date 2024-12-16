@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="onecore_mail_extension.Message" t-inherit="mail.Message" t-inherit-mode="extension" owl="1">
+        <!-- Can't target the <small> tag directly for some reason -->
+        <xpath expr="//div[hasclass('o-mail-Message-header')]//small" position="inside">
+            <t t-if="['tenant_sms', 'tenant_mail_failed_and_sms_ok'].includes(message.type)"> (via sms)</t>
+            <t t-elif="['tenant_mail', 'tenant_mail_ok_and_sms_failed'].includes(message.type)"> (via mejl)</t>
+            <t t-elif="['tenant_mail_and_sms'].includes(message.type)"> (via sms och mejl)</t>
+        </xpath>
+    </t>
+</templates>
