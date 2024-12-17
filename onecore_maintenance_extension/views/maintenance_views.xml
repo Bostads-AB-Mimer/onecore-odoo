@@ -96,7 +96,7 @@
                     </div>
                 </xpath>
 
-                <!-- Add ticket number before header -->
+                <!-- Add work order number before header -->
                 <xpath expr="//h1" position="before">
                     <div invisible="id == False" class="mb-0 mt-2 d-flex fs-4 fw-semibold ms-1">od-<field
                             class="mb-0" name="id"
