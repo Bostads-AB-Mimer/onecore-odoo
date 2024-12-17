@@ -7,5 +7,14 @@
             <t t-elif="['tenant_mail', 'tenant_mail_ok_and_sms_failed'].includes(message.type)"> (via mejl)</t>
             <t t-elif="['tenant_mail_and_sms'].includes(message.type)"> (via sms och mejl)</t>
         </xpath>
+
+        <!-- Can't target the <div> tag directly for some reason -->
+        <xpath expr="//div[hasclass('o-mail-Message-bubble')]/following-sibling::div" position="attributes">
+            <!-- Remove the styling from the message body -->
+            <attribute name="t-att-class" />
+        </xpath>
+
+        <!-- Remove the bubble styling -->
+        <xpath expr="//div[hasclass('o-mail-Message-bubble')]" position="replace" />
     </t>
 </templates>
