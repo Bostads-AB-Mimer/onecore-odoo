@@ -154,9 +154,6 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.model
     def fetch_tenant_contact_data(self, thread_id):
         record = self.env['maintenance.request'].search([('id', '=', thread_id)])
-        _logger.info(f"Fetching tenant contact data for thread ID: {thread_id}")
-        _logger.info(f"Tenant Email: {record.tenant_id.email_address}")
-        _logger.info(f"Tenant Phone: {record.tenant_id.phone_number}")
         
         def is_valid(value):
             return value not in [None, False, '', 'redacted']
