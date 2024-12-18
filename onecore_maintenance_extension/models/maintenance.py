@@ -154,9 +154,13 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.model
     def fetch_tenant_contact_data(self, thread_id):
         record = self.env['maintenance.request'].search([('id', '=', thread_id)])
+        
+        def is_valid(value):
+            return value not in [None, False, '', 'redacted']
+    
         return {
-            'has_email': record.tenant_id.email_address is not None and record.tenant_id.email_address != 'redacted',
-            'has_phone_number': record.tenant_id.phone_number is not None
+            'has_email': is_valid(record.tenant_id.email_address),
+            'has_phone_number': is_valid(record.tenant_id.phone_number)
         }
 
     @api.model
