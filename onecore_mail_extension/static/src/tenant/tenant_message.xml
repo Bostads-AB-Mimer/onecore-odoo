@@ -16,5 +16,21 @@
 
         <!-- Remove the bubble styling -->
         <xpath expr="//div[hasclass('o-mail-Message-bubble')]" position="replace" />
+
+        <xpath expr="//div[hasclass('o-mail-Message')]" position="inside">
+            <button t-if="isCollapsible" class="toggle" t-on-click="toggleIsCollapsed">
+                <i t-if="isCollapsed" class="oi oi-arrow-down"/>
+                <i t-else="" class="oi oi-arrow-up"/>
+            </button>
+        </xpath>
+
+        <xpath expr="//div[hasclass('o-mail-Message')]" position="attributes">
+            <attribute name="t-att-class">
+                {
+                    'collapsed': isCollapsed
+                }
+            </attribute>
+            <attribute name="t-ref">messageRef</attribute>
+        </xpath>
     </t>
 </templates>
