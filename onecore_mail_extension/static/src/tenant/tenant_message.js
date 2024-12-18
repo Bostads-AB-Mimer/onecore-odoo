@@ -14,7 +14,7 @@ patch(Message.prototype, {
 
         useExternalListener(browser, "resize", this.setIsCollapsible);
 
-        onMounted(async () => {
+        onMounted(() => {
             this.setIsCollapsible();
             this.isCollapsed = this.isCollapsible;
         });
