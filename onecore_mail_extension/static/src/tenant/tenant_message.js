@@ -25,4 +25,16 @@ patch(Message.prototype, {
     toggleIsCollapsed() {
         this.isCollapsed = !this.isCollapsed;
     },
+    getSentAsString(){
+        switch (this.message.type) {
+            case "tenant_sms":
+            case "tenant_mail_failed_and_sms_ok":
+                return " (via sms)";
+            case "tenant_mail":
+            case "tenant_mail_ok_and_sms_failed":
+                return " (via mejl)";
+            default:
+                return "";
+        }
+    }
 });
