@@ -372,9 +372,14 @@
                     <field name="new_mimer_notification" />
                 </xpath>
 
+
+                <!-- TODO: This is totally restructured in Odoo 18 and is made up of templates 
+                instead. I think we need to extend a template called "card" to get a similar 
+                solution here 
+                
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
                     <t t-call="onecore_maintenance_extension.maintenance_request_item" />
-                </xpath>
+                </xpath> -->
             </field>
         </record>
     </data>
