@@ -1,5 +1,5 @@
 /** @odoo-module **/
-import { _lt } from '@web/core/l10n/translation'
+import { _t } from '@web/core/l10n/translation'
 import { RelationalModel } from '@web/model/relational_model/relational_model'
 import { registry } from '@web/core/registry'
 import { MobileRenderer } from './mobile_renderer'
@@ -8,7 +8,7 @@ import { MobileArchParser } from './mobile_arch_parser'
 
 export const mobileView = {
   type: 'mobile',
-  display_name: _lt('Mobile'),
+  display_name: _t('Mobile'),
   icon: 'fa fa-mobile',
   multiRecord: true,
   Controller: MobileController,
