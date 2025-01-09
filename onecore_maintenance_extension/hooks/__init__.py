@@ -19,7 +19,8 @@ def _update_maintenance_stages(env):
         xml_id = env['ir.model.data'].search([('res_id', '=', stage.id), ('model', '=', 'maintenance.stage')]).name
         if xml_id in stage_data:
             stage.write(stage_data[xml_id])
-            stage.with_context(lang='sv_SE').write(stage_data[xml_id])
+            # TODO: Do we need to update the translations here?
+            # stage.with_context(lang='sv').write(stage_data[xml_id])
             del stage_data[xml_id]
 
     # Add new stages
@@ -31,4 +32,6 @@ def _update_maintenance_stages(env):
             'module': 'maintenance',
             'res_id': stage.id,
         })
-        new_stage.with_context(lang='sv_SE').write({'name': stage_values['name']})
+        # TODO: Do we need to update the translations here?
+        # new_stage.with_context(lang='sv').write({'name': stage_values['name']})
+        new_stage.write({'name': stage_values['name']})
