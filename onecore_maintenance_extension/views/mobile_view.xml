@@ -5,7 +5,7 @@
   <record id="maintenance.hr_equipment_request_action" model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
-    <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
+    <field name="view_mode">kanban,mobile,list,form,pivot,graph,calendar,activity</field>
     <field name="mobile_view_mode">mobile</field>
   </record>
 
@@ -14,7 +14,7 @@
     model="ir.actions.act_window">
     <field name="name">Maintenance Requests</field>
     <field name="res_model">maintenance.request</field>
-    <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
+    <field name="view_mode">kanban,mobile,list,form,pivot,graph,calendar,activity</field>
     <field name="mobile_view_mode">mobile</field>
   </record>
 
@@ -52,7 +52,7 @@
   <!-- Adds mobile action to the db -->
   <record id="hr_equipment_action_view_mobile" model="ir.actions.act_window.view">
     <!-- Sequence overrides the order of view_modes:
-      <field name="view_mode">kanban,mobile,tree,form,pivot,graph,calendar,activity</field>
+      <field name="view_mode">kanban,mobile,list,form,pivot,graph,calendar,activity</field>
 
       When adding a new action it seems to add a sequence of 0 by default, so we need to set it to 1
       to make sure Kanban has lower sequence and becomes the default view_mode on desktop.

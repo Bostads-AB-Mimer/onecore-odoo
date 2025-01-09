@@ -11,7 +11,7 @@ import { extractFieldsFromArchInfo } from '@web/model/relational_model/utils'
 import { session } from '@web/session'
 import { useBus, useService } from '@web/core/utils/hooks'
 import { useSearchBarToggler } from '@web/search/search_bar/search_bar_toggler'
-import { useSetupView } from '@web/views/view_hook'
+// import { useSetupView } from '@web/views/view_hook'
 import { MobileRenderer } from './mobile_renderer'
 import { standardViewProps } from '@web/views/standard_view_props'
 
@@ -37,25 +37,26 @@ export class MobileController extends Component {
     )
     this.searchBarToggler = useSearchBarToggler()
 
-    useSetupView({
-      rootRef: this.rootRef,
-      beforeLeave: async () => {
-        return this.model.root.leaveEditMode()
-      },
-      beforeUnload: async (ev) => {
-        const editedRecord = this.model.root.editedRecord
-        if (editedRecord) {
-          const isValid = await editedRecord.urgentSave()
-          if (!isValid) {
-            ev.preventDefault()
-            ev.returnValue = 'Unsaved changes'
-          }
-        }
-      },
-      getOrderBy: () => {
-        return this.model.root.orderBy
-      },
-    })
+    // TODO: How do we replace this?
+    // useSetupView({
+    //   rootRef: this.rootRef,
+    //   beforeLeave: async () => {
+    //     return this.model.root.leaveEditMode()
+    //   },
+    //   beforeUnload: async (ev) => {
+    //     const editedRecord = this.model.root.editedRecord
+    //     if (editedRecord) {
+    //       const isValid = await editedRecord.urgentSave()
+    //       if (!isValid) {
+    //         ev.preventDefault()
+    //         ev.returnValue = 'Unsaved changes'
+    //       }
+    //     }
+    //   },
+    //   getOrderBy: () => {
+    //     return this.model.root.orderBy
+    //   },
+    // })
   }
 
   get modelParams() {

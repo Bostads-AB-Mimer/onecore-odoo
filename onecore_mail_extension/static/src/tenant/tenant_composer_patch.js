@@ -21,7 +21,7 @@ patch(Composer.prototype, {
     this.state.active = true
 
     onMounted(async () => {
-      const tenantResult = await this.threadService.getTenantContacts(this.thread.id)
+      const tenantResult = await this.store.getTenantContacts(this.thread.id)
       this.state.tenantHasEmail = tenantResult.has_email
       this.state.tenantHasPhoneNumber = tenantResult.has_phone_number
     })

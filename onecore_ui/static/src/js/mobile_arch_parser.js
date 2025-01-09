@@ -1,13 +1,12 @@
 /** @odoo-module **/
 import { visitXML } from '@web/core/utils/xml'
-import { _lt } from '@web/core/l10n/translation'
 import { Field } from '@web/views/fields/field'
 import {
   addFieldDependencies,
-  archParseBoolean,
   getActiveActions,
   processButton,
 } from '@web/views/utils'
+import { exprToBoolean } from "@web/core/utils/strings";
 import { Widget } from '@web/views/widgets/widget'
 
 export class GroupListArchParser {
@@ -148,7 +147,7 @@ export class MobileArchParser {
           optional: node.getAttribute('optional') || false,
           type: 'field',
           hasLabel: !(
-            archParseBoolean(fieldInfo.attrs.nolabel) || fieldInfo.field.noLabel
+            exprToBoolean(fieldInfo.attrs.nolabel) || fieldInfo.field.noLabel
           ),
           label:
             (fieldInfo.widget && label && label.toString()) || fieldInfo.string,
