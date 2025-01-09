@@ -4,9 +4,6 @@
     <t t-name="onecore_mail_extension.TenantComposer" t-inherit="mail.Composer" t-inherit-mode="extension" owl="1">
         
         <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
-        <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
-            <attribute name="t-if">props.type != 'message'</attribute>    
-        </xpath>
 
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
             <t t-if="props.type === 'message'">
@@ -21,6 +18,14 @@
                 </div>
             </t>
         </xpath>      
+            
+    </t>
+
+    <t t-name="onecore_mail_extension.TenantComposer.actions" t-inherit="mail.Composer.actions" t-inherit-mode="extension" owl="1">
+        
+        <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
+            <attribute name="t-if">props.type != 'message'</attribute>    
+        </xpath>
             
     </t>
 
