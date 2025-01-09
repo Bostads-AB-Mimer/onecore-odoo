@@ -11,6 +11,8 @@ patch(Store.prototype, {
     super.setup(env, services)
     this.rpc = rpc;
 
+    // TODO: Find a way to inject the notification service
+    // this.notificationService = services['notification']
   },
   async getTenantContacts(threadId) {
     try {
@@ -77,6 +79,65 @@ patch(Store.prototype, {
     const data = await this.rpc('/mail/message/post', params)
     const message = this.store.Message.insert(data, { html: true })
 
+    // switch (data.message_type) {
+    //   case 'tenant_sms' || 'tenant_mail_failed_and_sms_ok':
+    //     this.notificationService.add('SMS skickades till hyresgästen.', {
+    //       title: 'Skickat!',
+    //       type: 'info',
+    //       sticky: true,
+    //     })
+    //     break
+    //   case 'tenant_mail' || 'tenant_mail_ok_and_sms_failed':
+    //     this.notificationService.add('E-post skickades till hyresgästen.', {
+    //       title: 'Skickat!',
+    //       type: 'info',
+    //       sticky: true,
+    //     })
+    //     break
+    //   case 'tenant_mail_and_sms':
+    //     this.notificationService.add(
+    //       'E-post och SMS skickades till hyresgästen.',
+    //       {
+    //         title: 'Skickat!',
+    //         type: 'info',
+    //         sticky: true,
+    //       }
+    //     )
+    //     break
+    //   case 'failed_tenant_sms' || 'tenant_mail_ok_and_sms_failed':
+    //     this.notificationService.add(
+    //       'Kunde inte skicka SMS till hyresgästen. Kontrollera så att telefonnumret stämmer.',
+    //       {
+    //         title: 'Misslyckades',
+    //         type: 'warning',
+    //         sticky: true,
+    //       }
+    //     )
+    //     break
+    //   case 'failed_tenant_mail' || 'tenant_mail_failed_and_sms_ok':
+    //     this.notificationService.add(
+    //       'Kunde inte skicka e-post till hyresgästen. Kontrollera så att e-postadressen stämmer.',
+    //       {
+    //         title: 'Misslyckades',
+    //         type: 'warning',
+    //         sticky: true,
+    //       }
+    //     )
+    //     break
+    //   case 'failed_tenant_mail_and_sms':
+    //     this.notificationService.add(
+    //       'Kunde inte skicka e-post och SMS till hyresgästen. Kontrollera så att telefonnummer och e-postadress stämmer.',
+    //       {
+    //         title: 'Misslyckades',
+    //         type: 'warning',
+    //         sticky: true,
+    //       }
+    //     )
+    //     break
+
+    //   default:
+    //     break
+    // }
 
     return message
   },
