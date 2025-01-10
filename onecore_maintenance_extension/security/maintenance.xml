@@ -1,12 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- <data>
-    <record id="external_contractor" model="res.groups">
-      <field name="name">Maintenance external contractor</field>
-      <field name="category_id" ref="base.module_category_manufacturing_maintenance"/>
-      <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
-      <field name="users" eval="[(4, ref('base.user_root'))]"/>
-      <field name="comment">The user will be able to manage requests but not change all fields.</field>
+
+  <record id="group_external_contractor" model="res.groups">
+    <field name="name">External contractor</field>
+    <field name="category_id" ref="base.module_category_manufacturing_maintenance" />
+    <field name="implied_ids" eval="[(4, ref('base.group_user'))]" />
+    <field name="users" eval="[(4, ref('base.user_root'))]" />
+    <field name="comment">The user will be able to manage requests but not change all fields.</field>
+  </record>
+
+  <data noupdate="1">
+
+    <!-- Rules -->
+
+    <record id="equipment_request_rule_external_contractor" model="ir.rule">
+      <field name="name">External contractor can administrate maintenance requests</field>
+      <field name="model_id" ref="model_maintenance_request" />
+      <field name="domain_force">[(1, '=', 1)]</field>
+      <field name="groups" eval="[(4, ref('group_external_contractor'))]" />
     </record>
-  </data> -->
+
+  </data>
+
 </odoo>
