@@ -284,6 +284,7 @@
                                         <field name="request_date" />
                                         <field name="priority_expanded" />
                                         <field name="due_date" />
+                                        <field name="maintenance_request_category_id" options="{'no_create': True, 'no_open': True}" />
                                         <field name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}" />
                                         <field name="user_id" domain="maintenance_team_domain" />
@@ -377,5 +378,20 @@
                 </xpath>
             </field>
         </record>
+
+        <record id="maintenance_request_category_action" model="ir.actions.act_window">
+            <field name="name">Ärendekategorier</field>
+            <field name="res_model">maintenance.request.category</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <menuitem
+            id="menu_maintenance_request_category"
+            name="Ärendekategorier"
+            parent="maintenance.menu_maintenance_configuration"
+            action="maintenance_request_category_action"
+            groups="maintenance.group_equipment_manager,base.group_user"
+            sequence="2"
+        />
     </data>
 </odoo>
