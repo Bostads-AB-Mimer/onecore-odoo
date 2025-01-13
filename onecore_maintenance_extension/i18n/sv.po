@@ -1533,7 +1533,7 @@ msgstr "Användaren kommer att kunna hantera utrustning."
 #. module: maintenance
 #: model:res.groups,comment:maintenance.group_external_contractor
 msgid "The user will be able to manage requests but not change all fields."
-msgstr "Användaren kommer att kunna hantera ärenden men inte alla fält."
+msgstr "Användaren kommer att kunna hantera ärenden men inte ändra alla fält."
 
 #. module: maintenance
 #: model:ir.model.fields,help:maintenance.field_maintenance_equipment__effective_date
