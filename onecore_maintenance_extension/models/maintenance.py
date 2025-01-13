@@ -65,7 +65,12 @@ class OneCoreMaintenanceRequest(models.Model):
 
     tenant_name = fields.Char('Namn', related='tenant_id.name', depends=['tenant_id'])
     contact_code = fields.Char('Kundnummer', related='tenant_id.contact_code', depends=['tenant_id'])
-    national_registration_number = fields.Char('Personnummer', related='tenant_id.national_registration_number', depends=['tenant_id'])
+    national_registration_number = fields.Char(
+        'Personnummer',
+        related='tenant_id.national_registration_number',
+        depends=['tenant_id'],
+        groups="maintenance.group_equipment_manager"
+    )
     phone_number = fields.Char('Telefonnummer', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
     email_address = fields.Char('E-postadress', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
     is_tenant = fields.Boolean('Är hyresgäst', related='tenant_id.is_tenant', depends=['tenant_id'])
