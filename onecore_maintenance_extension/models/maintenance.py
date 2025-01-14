@@ -1,4 +1,4 @@
-from odoo import models, fields, api, tools
+from odoo import models, fields, api, exceptions
 from urllib.parse import quote
 
 import base64
@@ -507,6 +507,19 @@ class OneCoreMaintenanceRequest(models.Model):
         return maintenance_requests
 
     def write(self, vals):
+        if 'stage_id' in vals:
+            external_contractor_group = self.env["res.groups"].search([("name", "=", "External contractor")])
+
+            if external_contractor_group in self.env.user.groups_id:
+                if self.stage_id.name == "Utförd":
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Utförd")
+
+                restricted_stages = self.env['maintenance.stage'].search([
+                    ('name', '=', 'Avslutad')
+                ])
+                if vals['stage_id'] in restricted_stages.ids:
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende till Avslutad")
+
         if 'kanban_state' not in vals and 'stage_id' in vals:
             vals['kanban_state'] = 'normal'
         if 'stage_id' in vals and self.maintenance_type == 'preventive' and self.recurring_maintenance and self.env['maintenance.stage'].browse(vals['stage_id']).done:
