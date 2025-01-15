@@ -103,6 +103,10 @@
                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True, 'type': 'number'}" /></div>
                 </xpath>
 
+                <xpath expr="//h1/field" position="attributes">
+                    <attribute name="readonly">read_only_fields</attribute>
+                </xpath>
+
                 <!-- Add just one column to the group that wraps the form -->
                 <xpath expr="//group[1]" position="attributes">
                     <attribute name="col">1</attribute>
@@ -287,22 +291,23 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <group col="1">
-                                        <field name="request_date" />
-                                        <field name="priority_expanded" />
-                                        <field name="due_date" />
-                                        <field name="maintenance_request_category_id" options="{'no_create': True, 'no_open': True}" />
+                                        <field name="request_date" readonly="read_only_fields" />
+                                        <field name="priority_expanded" readonly="read_only_fields" />
+                                        <field name="due_date" readonly="read_only_fields" />
+                                        <field name="maintenance_request_category_id" options="{'no_create': True, 'no_open': True}" readonly="read_only_fields" />
                                         <field name="maintenance_team_id"
-                                            options="{'no_create': True, 'no_open': True}" />
-                                        <field name="user_id" domain="maintenance_team_domain" />
-                                        <field name="schedule_date" />
+                                            options="{'no_create': True, 'no_open': True}" readonly="read_only_fields" />
+                                        <field name="user_id" domain="maintenance_team_domain" readonly="read_only_fields" />
+                                        <field name="schedule_date" readonly="read_only_fields" />
                                         <field name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption == 'Tvättstuga'" />
+                                            invisible="space_caption == 'Tvättstuga'" readonly="read_only_fields" />
                                         <field name="call_between" invisible="not call_between"
-                                            string="Kund nås dessa tider" />
+                                            string="Kund nås dessa tider" readonly="read_only_fields" />
                                         <field name="company_id" options="{'no_create': True}"
-                                            groups="base.group_multi_company" />
+                                            groups="base.group_multi_company" readonly="read_only_fields" />
                                         <field name="maintenance_team_domain" invisible="True" />
+                                        <field name="read_only_fields" invisible="True" />
                                     </group>
                                 </div>
                             </div>

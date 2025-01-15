@@ -120,6 +120,19 @@ class OneCoreMaintenanceRequest(models.Model):
     # Domain for including users in the selected maintenance team
     maintenance_team_domain = fields.Binary(string="Maintenance team domain", compute="_compute_maintenance_team_domain")
 
+    # Fields that are read only for external contractors
+    read_only_fields = fields.Binary(string="Read only fields", compute="_compute_read_only_fields")
+
+    def _compute_read_only_fields(self):
+        if self.env.user.has_group('onecore_maintenance_extension.group_external_contractor'):
+            restricted_stage_ids = self.env['maintenance.stage'].search([('name', 'in', ['Utförd', 'Avslutad'])])
+
+            for record in self:
+                record.read_only_fields = record.stage_id in restricted_stage_ids
+        else:
+            self.read_only_fields = False
+
+
     @api.depends('maintenance_team_id')
     def _compute_maintenance_team_domain(self):
         for record in self:
