@@ -521,9 +521,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
     def write(self, vals):
         if 'stage_id' in vals:
-            external_contractor_group = self.env["res.groups"].search([("name", "=", "External contractor")])
-
-            if external_contractor_group in self.env.user.groups_id:
+            if self.env.user.has_group('onecore_maintenance_extension.group_external_contractor'):
                 if self.stage_id.name == "Utförd":
                     raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Utförd")
 
