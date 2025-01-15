@@ -714,6 +714,13 @@ msgid "<strong>Address block</strong>"
 msgstr "<strong>Adressbok</strong>"
 
 #. module: web
+#. odoo-javascript
+#: code:addons/web/static/src/search/custom_favorite_item/custom_favorite_item.xml:0
+#, python-format
+msgid "Save current search"
+msgstr "Spara aktuell sökning"
+
+#. module: web
 #: model_terms:ir.ui.view,arch_db:web.external_layout_bold
 #: model_terms:ir.ui.view,arch_db:web.external_layout_boxed
 #: model_terms:ir.ui.view,arch_db:web.external_layout_standard

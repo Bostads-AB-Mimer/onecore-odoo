@@ -20,7 +20,7 @@ class OneCoreMaintenanceRequest(models.Model):
     search_by_number = fields.Char('Search', store=False)
     search_type = fields.Selection([
         ('leaseId', 'Kontraktsnummer'),
-        ('rentalPropertyId', 'Hyresobjekt'),
+        ('rentalObjectId', 'Hyresobjekt'),
         ('contactCode', 'Kundnummer'),
         ('pnr', 'Personnummer (12 siffror)'),
         ('phoneNumber', 'Telefonnummer (10 siffror)'),
@@ -33,60 +33,60 @@ class OneCoreMaintenanceRequest(models.Model):
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
-    rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Rental Property Id')
+    rental_property_id = fields.Many2one('maintenance.rental.property', store=True, string='Hyresobjekt')
 
     rental_property_name = fields.Char('Hyresobjekt Namn', related='rental_property_id.name', depends=['rental_property_id'])
-    address = fields.Char('Address', related='rental_property_id.address', depends=['rental_property_id'])
-    property_type = fields.Char('Property Type', related='rental_property_id.property_type', depends=['rental_property_id'])
-    code = fields.Char('Code', related='rental_property_id.code', depends=['rental_property_id'])
-    type = fields.Char('Type', related='rental_property_id.type', depends=['rental_property_id'])
-    area = fields.Char('Size', related='rental_property_id.area', depends=['rental_property_id'])
-    entrance = fields.Char('Entrance', related='rental_property_id.entrance', depends=['rental_property_id'])
-    floor = fields.Char('Floor', related='rental_property_id.floor', depends=['rental_property_id'])
-    has_elevator = fields.Char('Has Elevator', related='rental_property_id.has_elevator', depends=['rental_property_id'])
-    wash_space = fields.Char('Wash Space', related='rental_property_id.wash_space', depends=['rental_property_id'])
-    estate_code = fields.Char('Estate Code', related='rental_property_id.estate_code', depends=['rental_property_id'])
-    estate = fields.Char('Estate Caption', related='rental_property_id.estate', depends=['rental_property_id'])
-    building_code = fields.Char('Block Code', related='rental_property_id.building_code', depends=['rental_property_id'])
-    building = fields.Char('Block Name', related='rental_property_id.building', depends=['rental_property_id'])
+    address = fields.Char('Adress', related='rental_property_id.address', depends=['rental_property_id'])
+    property_type = fields.Char('Fastighetstyp', related='rental_property_id.property_type', depends=['rental_property_id'])
+    code = fields.Char('Kod', related='rental_property_id.code', depends=['rental_property_id'])
+    type = fields.Char('Typ', related='rental_property_id.type', depends=['rental_property_id'])
+    area = fields.Char('Yta', related='rental_property_id.area', depends=['rental_property_id'])
+    entrance = fields.Char('Ingång', related='rental_property_id.entrance', depends=['rental_property_id'])
+    floor = fields.Char('Våning', related='rental_property_id.floor', depends=['rental_property_id'])
+    has_elevator = fields.Char('Hiss', related='rental_property_id.has_elevator', depends=['rental_property_id'])
+    wash_space = fields.Char('Tvättutrymme', related='rental_property_id.wash_space', depends=['rental_property_id'])
+    estate_code = fields.Char('Fastighetskod', related='rental_property_id.estate_code', depends=['rental_property_id'])
+    estate = fields.Char('Fastighet', related='rental_property_id.estate', depends=['rental_property_id'])
+    building_code = fields.Char('Kvarterskod', related='rental_property_id.building_code', depends=['rental_property_id'])
+    building = fields.Char('Kvarter', related='rental_property_id.building', depends=['rental_property_id'])
 
     #    MAINTENANCE UNIT ---------------------------------------------------------------------------------------------------------------------
 
     maintenance_unit_id = fields.Many2one('maintenance.maintenance.unit', string='Maintenance Unit ID', store=True)
 
-    maintenance_unit_type = fields.Char('Maintenance Unit Type', related='maintenance_unit_id.type', depends=['maintenance_unit_id'])
-    maintenance_unit_code=fields.Char('Maintenance Unit Code', related='maintenance_unit_id.code', depends=['maintenance_unit_id'])
-    maintenance_unit_caption=fields.Char('Maintenance Unit Caption', related='maintenance_unit_id.caption', depends=['maintenance_unit_id'])
+    maintenance_unit_type = fields.Char('Utrymmestyp', related='maintenance_unit_id.type', depends=['maintenance_unit_id'])
+    maintenance_unit_code=fields.Char('Utrymmeskod', related='maintenance_unit_id.code', depends=['maintenance_unit_id'])
+    maintenance_unit_caption=fields.Char('Utrymme', related='maintenance_unit_id.caption', depends=['maintenance_unit_id'])
 
     #   TENANT  ---------------------------------------------------------------------------------------------------------------------
 
-    tenant_id = fields.Many2one('maintenance.tenant', string='Tenant ID', store=True)
+    tenant_id = fields.Many2one('maintenance.tenant', string='Hyresgäst ID', store=True)
 
-    tenant_name = fields.Char('Tenant Name', related='tenant_id.name', depends=['tenant_id'])
-    contact_code = fields.Char('Contact Code', related='tenant_id.contact_code', depends=['tenant_id'])
-    national_registration_number = fields.Char('National Registration Number', related='tenant_id.national_registration_number', depends=['tenant_id'])
-    phone_number = fields.Char('Phone Number', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
-    email_address = fields.Char('Email Address', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
-    is_tenant = fields.Boolean('Is Tenant', related='tenant_id.is_tenant', depends=['tenant_id'])
+    tenant_name = fields.Char('Namn', related='tenant_id.name', depends=['tenant_id'])
+    contact_code = fields.Char('Kundnummer', related='tenant_id.contact_code', depends=['tenant_id'])
+    national_registration_number = fields.Char('Personnummer', related='tenant_id.national_registration_number', depends=['tenant_id'])
+    phone_number = fields.Char('Telefonnummer', related='tenant_id.phone_number', depends=['tenant_id'], readonly=False)
+    email_address = fields.Char('E-postadress', related='tenant_id.email_address', depends=['tenant_id'], readonly=False)
+    is_tenant = fields.Boolean('Är hyresgäst', related='tenant_id.is_tenant', depends=['tenant_id'])
 
     #   LEASE  ---------------------------------------------------------------------------------------------------------------------
 
     lease_id = fields.Many2one('maintenance.lease', string='Lease id', store=True)
 
-    lease_name = fields.Char('Lease Name', related='lease_id.name', depends=['lease_id'])
-    lease_type = fields.Char('Lease Type', related='lease_id.lease_type', depends=['lease_id'])
-    contract_date = fields.Date('Contract Date', related='lease_id.contract_date', depends=['lease_id'])
-    lease_start_date = fields.Date('Lease Start Date', related='lease_id.lease_start_date', depends=['lease_id'])
-    lease_end_date = fields.Date('Lease End Date', related='lease_id.lease_end_date', depends=['lease_id'])
+    lease_name = fields.Char('Kontrakt', related='lease_id.name', depends=['lease_id'])
+    lease_type = fields.Char('Typ av kontrakt', related='lease_id.lease_type', depends=['lease_id'])
+    contract_date = fields.Date('Kontraktsdatum', related='lease_id.contract_date', depends=['lease_id'])
+    lease_start_date = fields.Date('Kontrakt Startdatum', related='lease_id.lease_start_date', depends=['lease_id'])
+    lease_end_date = fields.Date('Kontrakt Slutdatum', related='lease_id.lease_end_date', depends=['lease_id'])
 
     # Comes from Mimer.nu
-    pet=fields.Char('Pet', store=True)
-    call_between=fields.Char('Call Between', store=True)
-    hearing_impaired=fields.Boolean('Hearing Impaired', store=True)
-    space_code=fields.Char('Space Code', store=True)
-    space_caption=fields.Char('Space Caption', store=True, readonly=True)
-    equipment_code=fields.Char('Equipment Code', store=True, readonly=True)
-    master_key=fields.Boolean('Master Key', store=True)
+    pet=fields.Char('Husdjur', store=True)
+    call_between=fields.Char('Nås mellan', store=True)
+    hearing_impaired=fields.Boolean('Hörselnedsättning', store=True)
+    space_code=fields.Char('Utrymmeskod', store=True)
+    space_caption=fields.Char('Utrymme', store=True, readonly=True)
+    equipment_code=fields.Char('Utrustningskod', store=True, readonly=True)
+    master_key=fields.Boolean('Huvudnyckel', store=True)
 
     # New fields
     priority_expanded=fields.Selection([('1', '1 dag'), ('5', '5 dagar'), ('7', '7 dagar'), ('10', '10 dagar'), ('14', '2 veckor')], string='Prioritet', store=True)
@@ -137,15 +137,42 @@ class OneCoreMaintenanceRequest(models.Model):
             record.today_date = fields.Date.context_today(self)
 
 
+    @api.model
+    def fields_get(self, allfields=None, attributes=None):
+        # Hide filterable/searchable fields
+        fields_to_hide = [
+            'lease_number',
+            'notice_given_by',
+            'preferred_move_out_date',
+            ]
+        res = super().fields_get(allfields, attributes)
+        for field in fields_to_hide:
+            if res.get(field):
+                res[field]['searchable'] = False
+        return res
+
+    @api.model
+    def fetch_tenant_contact_data(self, thread_id):
+        record = self.env['maintenance.request'].search([('id', '=', thread_id)])
+        
+        def is_valid(value):
+            return value not in [None, False, '', 'redacted']
+    
+        return {
+            'has_email': is_valid(record.tenant_id.email_address),
+            'has_phone_number': is_valid(record.tenant_id.phone_number)
+        }
+
+    @api.model
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env['onecore.auth']
         base_url = self.env['ir.config_parameter'].get_param(
             'onecore_base_url', '')
-        params = {'typeOfNumber': search_type}
-        url = f"{base_url}/propertyInfo/{quote(str(search_by_number), safe='')}"
+        params = {'handler': search_type}
+        url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
 
         try:
-            response = onecore_auth.onecore_request(url, params=params)
+            response = onecore_auth.onecore_request('GET', url, params=params)
             response.raise_for_status()
             return response.json().get('content', {})
         except requests.HTTPError as http_err:
@@ -329,6 +356,11 @@ class OneCoreMaintenanceRequest(models.Model):
         if resource_allocated_stage:
             self.write({'stage_id': resource_allocated_stage.id})
 
+    def _send_created_sms(self, phone_number):
+        mail_message = self.env['mail.message']
+        message = f"Hej {self.tenant_name}!\n\nTack för din serviceanmälan. Du kan följa, uppdatera och prata med oss om ditt ärende på Mina sidor."
+        return mail_message._send_sms(phone_number, message)
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -430,6 +462,10 @@ class OneCoreMaintenanceRequest(models.Model):
             if not request.close_date and request.stage_id.done:
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
+
+            if request.phone_number:
+                request._send_created_sms(request.phone_number)
+
 
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
             # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''

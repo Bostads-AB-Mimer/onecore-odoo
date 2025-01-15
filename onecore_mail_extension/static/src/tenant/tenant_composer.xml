@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_mail_extension.TenantComposer" t-inherit="mail.Composer" t-inherit-mode="extension" owl="1">
+        
+        <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
+        <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
+            <attribute name="t-if">props.type != 'message'</attribute>    
+        </xpath>
+
+        <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
+            <t t-if="props.type === 'message'">
+                <p class="mt-3"><strong>Skicka som</strong></p>
+                <div class="d-flex mb-3">
+                    <CheckBox disabled="!state.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="state.sendSMS" onChange.bind="onSMSCheckboxChange">
+                        SMS
+                    </CheckBox>
+                    <CheckBox disabled="!state.tenantHasEmail" id="send_email" value="state.sendEmail" onChange.bind="onEMailCheckboxChange">
+                        E-post
+                    </CheckBox>
+                </div>
+            </t>
+        </xpath>      
+            
+    </t>
+
+</templates>

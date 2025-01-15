@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="onecore_mail_extension.Message" t-inherit="mail.Message" t-inherit-mode="extension" owl="1">
+        <!-- Can't target the <small> tag directly for some reason -->
+        <xpath expr="//div[hasclass('o-mail-Message-header')]//small" position="inside">
+            <span t-esc="getSentAsString()" />
+        </xpath>
+
+        <!-- Can't target the <div> tag directly for some reason -->
+        <xpath expr="//div[hasclass('o-mail-Message-bubble')]/following-sibling::div" position="attributes">
+            <!-- Remove the styling from the message body -->
+            <attribute name="t-att-class" />
+        </xpath>
+
+        <!-- Remove the bubble styling -->
+        <xpath expr="//div[hasclass('o-mail-Message-bubble')]" position="replace" />
+
+        <xpath expr="//div[hasclass('o-mail-Message')]" position="inside">
+            <button t-if="isCollapsible" class="toggle" t-on-click="toggleIsCollapsed">
+                <i t-if="isCollapsed" class="oi oi-arrow-down"/>
+                <i t-else="" class="oi oi-arrow-up"/>
+            </button>
+        </xpath>
+
+        <xpath expr="//div[hasclass('o-mail-Message')]" position="attributes">
+            <attribute name="t-att-class">
+                {
+                    'collapsed': isCollapsed
+                }
+            </attribute>
+            <attribute name="t-ref">messageRef</attribute>
+        </xpath>
+    </t>
+</templates>

@@ -8030,7 +8030,7 @@ msgstr "Valda användare:"
 #: model_terms:ir.ui.view,arch_db:mail.email_compose_message_wizard_form
 #, python-format
 msgid "Send"
-msgstr "Skicka"
+msgstr "Skicka meddelande"
 
 #. module: mail
 #: model_terms:ir.ui.view,arch_db:mail.mail_resend_message_view_form
@@ -8058,7 +8058,7 @@ msgstr "Skicka e-post (%s)"
 #. module: mail
 #: model:ir.model.fields,field_description:mail.field_mail_wizard_invite__notify
 msgid "Send Notification"
-msgstr ""
+msgstr "Meddelande hyresgäst"
 
 #. module: mail
 #. odoo-javascript
