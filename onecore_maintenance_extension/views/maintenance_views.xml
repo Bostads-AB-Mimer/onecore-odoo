@@ -249,8 +249,14 @@
                                         <field name="national_registration_number"
                                             string="Person/Org. nr" />
                                         <field name="contact_code" string="Kundnummer" />
-                                        <field name="phone_number" string="Telefon" help="Här ändrar du telefonnummer i ärendet"/>
-                                        <field name="email_address" string="E-post" help="Här ändrar du mailadress i ärendet"/>
+                                        
+                                        <!-- Phone number and email address should only be editable for equipment managers -->
+                                        <field name="phone_number" string="Telefon" help="Här ändrar du telefonnummer i ärendet" groups="maintenance.group_equipment_manager"/>
+                                        <field name="phone_number" string="Telefon" readonly="1" groups="!maintenance.group_equipment_manager"/>
+                                        
+                                        <field name="email_address" string="E-post" help="Här ändrar du mailadress i ärendet" groups="maintenance.group_equipment_manager"/>
+                                        <field name="email_address" string="E-post" readonly="1" groups="!maintenance.group_equipment_manager"/>
+
 
                                         <field name="pet" string="Husdjur"
                                             readonly="create_date != False"
