@@ -11,6 +11,7 @@
     'assets': {
         'web.assets_backend': [
             'onecore_web_extension/static/src/views/*.xml',
+            'onecore_web_extension/static/src/js/*.js',
         ],
     },
     'auto_install': True,

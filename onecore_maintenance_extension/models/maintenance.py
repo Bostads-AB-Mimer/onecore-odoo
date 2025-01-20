@@ -1,4 +1,4 @@
-from odoo import models, fields, api, tools
+from odoo import models, fields, api, exceptions
 from urllib.parse import quote
 
 import base64
@@ -124,6 +124,27 @@ class OneCoreMaintenanceRequest(models.Model):
 
     # Domain for including users in the selected maintenance team
     maintenance_team_domain = fields.Binary(string="Maintenance team domain", compute="_compute_maintenance_team_domain")
+
+    # Whether some actions are restricted for external contractors
+    restricted_external = fields.Boolean(string="Restricted external contractors", compute="_compute_restricted_external")
+
+    def _compute_restricted_external(self):
+        if self.env.user.has_group('onecore_maintenance_extension.group_external_contractor'):
+            restricted_stage_ids = self.env['maintenance.stage'].search([('name', 'in', ['Utförd', 'Avslutad'])])
+
+            for record in self:
+                record.restricted_external = record.stage_id in restricted_stage_ids
+        else:
+            self.restricted_external = False
+
+    # Whether the user is an external contractor
+    # Used by js components since user.hasGroup() can't always be used in js because it is async
+    user_is_external_contractor = fields.Boolean(string="User is external contractor", compute="_compute_user_is_external_contractor")
+
+    def _compute_user_is_external_contractor(self):
+        for record in self:
+            record.user_is_external_contractor = self.env.user.has_group('onecore_maintenance_extension.group_external_contractor')
+
 
     @api.depends('maintenance_team_id')
     def _compute_maintenance_team_domain(self):
@@ -512,6 +533,19 @@ class OneCoreMaintenanceRequest(models.Model):
         return maintenance_requests
 
     def write(self, vals):
+        if 'stage_id' in vals:
+            if self.env.user.has_group('onecore_maintenance_extension.group_external_contractor'):
+                if self.stage_id.name == "Utförd":
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Utförd")
+                if self.stage_id.name == "Avslutad":
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Avslutad")
+
+                restricted_stages = self.env['maintenance.stage'].search([
+                    ('name', '=', 'Avslutad')
+                ])
+                if vals['stage_id'] in restricted_stages.ids:
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende till Avslutad")
+
         if 'kanban_state' not in vals and 'stage_id' in vals:
             vals['kanban_state'] = 'normal'
         if 'stage_id' in vals and self.maintenance_type == 'preventive' and self.recurring_maintenance and self.env['maintenance.stage'].browse(vals['stage_id']).done:
