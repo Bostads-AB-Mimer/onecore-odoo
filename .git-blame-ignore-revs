@@ -1,3 +1,4 @@
 # Run git config blame.ignoreRevsFile .git-blame-ignore-revs to use this file
 
 58022f71717a7581bace3f0d06147e0ec46e4e40 # Format all python files
+2aa917cbb31dc91022965fc15cf1fb75f0d57e2f # Format all js files
