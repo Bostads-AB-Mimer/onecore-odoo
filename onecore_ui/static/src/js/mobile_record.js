@@ -1,13 +1,13 @@
 /** @odoo-module **/
 
-import { _t } from '@web/core/l10n/translation';
-import { Component, useRef, useState } from '@odoo/owl';
-import { registry } from '@web/core/registry';
-import { isRelational } from '@web/model/relational_model/utils';
-import { useRecordObserver } from '@web/model/relational_model/utils';
-import { isNull } from '@web/views/utils';
+import { _t } from "@web/core/l10n/translation";
+import { Component, useRef, useState } from "@odoo/owl";
+import { registry } from "@web/core/registry";
+import { isRelational } from "@web/model/relational_model/utils";
+import { useRecordObserver } from "@web/model/relational_model/utils";
+import { isNull } from "@web/views/utils";
 
-const formatters = registry.category('formatters');
+const formatters = registry.category("formatters");
 
 /**
  * Returns a "raw" version of the field value on a given record.
@@ -20,15 +20,15 @@ export function getRawValue(record, fieldName) {
   const field = record.fields[fieldName];
   const value = record.data[fieldName];
   switch (field.type) {
-    case 'one2many':
-    case 'many2many': {
+    case "one2many":
+    case "many2many": {
       return value.count ? value.currentIds : [];
     }
-    case 'many2one': {
+    case "many2one": {
       return (value && value[0]) || false;
     }
-    case 'date':
-    case 'datetime': {
+    case "date":
+    case "datetime": {
       return value && value.toISO();
     }
     default: {
@@ -95,17 +95,17 @@ MobileRecord.defaultProps = {
   openRecord: () => {},
 };
 MobileRecord.props = [
-  'archInfo?',
-  'canResequence?',
-  'colors?',
-  'Compiler?',
-  'forceGlobalClick?',
-  'group?',
-  'list',
-  'deleteRecord?',
-  'openRecord?',
-  'readonly?',
-  'record',
-  'templates?',
-  'progressBarState?',
+  "archInfo?",
+  "canResequence?",
+  "colors?",
+  "Compiler?",
+  "forceGlobalClick?",
+  "group?",
+  "list",
+  "deleteRecord?",
+  "openRecord?",
+  "readonly?",
+  "record",
+  "templates?",
+  "progressBarState?",
 ];

@@ -1,12 +1,12 @@
 /** @odoo-module **/
 
-import { _t } from '@web/core/l10n/translation';
-import { Component, useRef } from '@odoo/owl';
-import { isRelational } from '@web/model/relational_model/utils';
-import { isNull } from '@web/views/utils';
+import { _t } from "@web/core/l10n/translation";
+import { Component, useRef } from "@odoo/owl";
+import { isRelational } from "@web/model/relational_model/utils";
+import { isNull } from "@web/views/utils";
 
 export class MobileGroup extends Component {
-  static template = 'onecore_ui.MobileGroup';
+  static template = "onecore_ui.MobileGroup";
   static props = {
     group: { type: Object },
     list: { type: Object },
@@ -21,19 +21,19 @@ export class MobileGroup extends Component {
   }
 
   _getEmptyGroupLabel(fieldName) {
-    return _t('None');
+    return _t("None");
   }
 
   get groupName() {
     const { groupByField, displayName } = this.group;
     let name = displayName;
-    if (groupByField.type === 'boolean') {
-      name = name ? _t('Yes') : _t('No');
+    if (groupByField.type === "boolean") {
+      name = name ? _t("Yes") : _t("No");
     } else if (!name) {
       if (
         isRelational(groupByField) ||
-        groupByField.type === 'date' ||
-        groupByField.type === 'datetime' ||
+        groupByField.type === "date" ||
+        groupByField.type === "datetime" ||
         isNull(name)
       ) {
         name = this._getEmptyGroupLabel(groupByField.name);
