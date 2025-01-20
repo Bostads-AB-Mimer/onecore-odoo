@@ -524,6 +524,8 @@ class OneCoreMaintenanceRequest(models.Model):
             if self.env.user.has_group('onecore_maintenance_extension.group_external_contractor'):
                 if self.stage_id.name == "Utförd":
                     raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Utförd")
+                if self.stage_id.name == "Avslutad":
+                    raise exceptions.UserError("Du har inte behörighet att flytta detta ärende från Avslutad")
 
                 restricted_stages = self.env['maintenance.stage'].search([
                     ('name', '=', 'Avslutad')
