@@ -132,6 +132,14 @@ class OneCoreMaintenanceRequest(models.Model):
         else:
             self.restricted_external = False
 
+    # Whether the user is an external contractor
+    # Used by js components since user.hasGroup() can't always be used in js because it is async
+    user_is_external_contractor = fields.Boolean(string="User is external contractor", compute="_compute_user_is_external_contractor")
+
+    def _compute_user_is_external_contractor(self):
+        for record in self:
+            record.user_is_external_contractor = self.env.user.has_group('onecore_maintenance_extension.group_external_contractor')
+
 
     @api.depends('maintenance_team_id')
     def _compute_maintenance_team_domain(self):

@@ -308,6 +308,8 @@
                                             groups="base.group_multi_company" readonly="restricted_external" />
                                         <field name="maintenance_team_domain" invisible="True" />
                                         <field name="restricted_external" invisible="True" />
+                                        <!-- Used by statusbar_field_patch -->
+                                        <field name="user_is_external_contractor" invisible="True" />
                                     </group>
                                 </div>
                             </div>
