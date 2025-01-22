@@ -9,16 +9,19 @@
     <field name="comment">The user will be able to manage requests but not change all fields.</field>
   </record>
 
-  <data noupdate="1">
+  <data>
 
     <!-- Rules -->
 
-    <record id="equipment_request_rule_external_contractor" model="ir.rule">
-      <field name="name">External contractor can administrate maintenance requests</field>
+    <record id="maintenance_request_rule_external_contractor_group_readonly" model="ir.rule">
+      <field name="name">Readonly External contractor</field>
       <field name="model_id" ref="model_maintenance_request" />
       <field name="domain_force">[('maintenance_team_id.member_ids', 'in', [user.id])]</field>
       <field name="groups" eval="[(4, ref('group_external_contractor'))]" />
+      <field name="perm_write" eval="True" />
+      <field name="perm_read" eval="True" />
       <field name="perm_unlink" eval="False" />
+      <field name="perm_create" eval="False" />
     </record>
 
   </data>
