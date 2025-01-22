@@ -23,6 +23,7 @@
         'web.assets_backend': [
             'onecore_maintenance_extension/static/src/views/*.xml',
             'onecore_maintenance_extension/static/src/scss/*.scss',
+            'onecore_maintenance_extension/static/src/js/*.js',
         ],
     },
     'post_init_hook': '_post_init_hook',
