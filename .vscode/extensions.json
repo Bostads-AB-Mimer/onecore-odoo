@@ -1,3 +1,7 @@
 {
-    "recommendations": ["ms-python.black-formatter", "esbenp.prettier-vscode"]
+    "recommendations": [
+        "ms-python.black-formatter",
+        "esbenp.prettier-vscode",
+        "redhat.vscode-xml"
+    ]
 }
