@@ -1,5 +1,5 @@
 /** @odoo-module **/
-import { Component, useState, reactive } from '@odoo/owl'
+import { Component, useState, onWillStart } from '@odoo/owl'
 import { Layout } from '@web/search/layout'
 import { useModelWithSampleData } from '@web/model/model'
 import { CogMenu } from '@web/search/cog_menu/cog_menu'
@@ -28,10 +28,12 @@ export class MobileController extends Component {
   async setup() {
     this.viewService = useService('view')
     this.dataSearch = []
+    this.isExternalContractor
     this.ui = useService('ui')
     useBus(this.ui.bus, 'resize', this.render)
     this.archInfo = this.props.archInfo
     const fields = this.props.fields
+    this.rpc = useService('rpc')
     this.model = useState(
       useModelWithSampleData(this.props.Model, this.modelParams)
     )
@@ -55,6 +57,15 @@ export class MobileController extends Component {
       getOrderBy: () => {
         return this.model.root.orderBy
       },
+    })
+    onWillStart(async () => {
+      const isExternalContractor = await this.rpc('/web/dataset/call_kw', {
+        model: 'maintenance.request',
+        method: 'is_user_external_contractor',
+        args: [],
+        kwargs: {},
+      })
+      this.isExternalContractor = isExternalContractor
     })
   }
 
@@ -98,6 +109,7 @@ export class MobileController extends Component {
   get canCreate() {
     const { create, createGroup } = this.archInfo.activeActions
     const list = this.model.root
+    if (this.isExternalContractor) return false
     if (!create) {
       return false
     }

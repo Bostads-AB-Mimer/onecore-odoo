@@ -189,6 +189,11 @@ class OneCoreMaintenanceRequest(models.Model):
             'has_email': is_valid(record.tenant_id.email_address),
             'has_phone_number': is_valid(record.tenant_id.phone_number)
         }
+    
+    @api.model
+    def is_user_external_contractor(self):
+        is_external_contractor = self.env.user.has_group('onecore_maintenance_extension.group_external_contractor')    
+        return is_external_contractor
 
     @api.model
     def fetch_property_data(self, search_by_number, search_type):
