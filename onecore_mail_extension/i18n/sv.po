@@ -5237,7 +5237,7 @@ msgstr "Registrera en aktivitet"
 #: code:addons/mail/static/src/views/web/composer_patch.js:0
 #, python-format
 msgid "Log an internal note…"
-msgstr "Lägg till en intern notering"
+msgstr "Skriv en notering som inte är synlig för hyresgäst"
 
 #. module: mail
 #. odoo-javascript
@@ -5245,7 +5245,7 @@ msgstr "Lägg till en intern notering"
 #: code:addons/mail/static/src/core/web/chatter.xml:0
 #, python-format
 msgid "Log note"
-msgstr "Lägg till en intern notering"
+msgstr "Notering om ärende"
 
 #. module: mail
 #. odoo-javascript
