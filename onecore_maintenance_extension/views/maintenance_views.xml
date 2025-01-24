@@ -337,7 +337,8 @@
                         </div>
 
                         <div
-                            class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none">
+                            class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none"
+                            groups="maintenance.group_equipment_manager">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-4"
                                     class="accordion-button collapsed fs-3 fw-bold"
@@ -371,7 +372,7 @@
                 </xpath>
 
                 <xpath expr="//notebook" position="replace">
-                    <notebook class="d-none d-md-block">
+                    <notebook class="d-none d-md-block" groups="maintenance.group_equipment_manager">
                         <page string="Ärendebeskrivning">
                             <field name='description' placeholder="Ärendebeskrivning" />
                         </page>
