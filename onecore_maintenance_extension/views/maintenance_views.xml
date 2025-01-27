@@ -264,16 +264,11 @@
                                         for equipment managers -->
                                         <field name="phone_number" string="Telefon"
                                             help="Här ändrar du telefonnummer i ärendet"
-                                            groups="maintenance.group_equipment_manager" />
-                                        <field name="phone_number" string="Telefon" readonly="1"
-                                            groups="!maintenance.group_equipment_manager" />
+                                            readonly="user_is_external_contractor" />
 
                                         <field name="email_address" string="E-post"
                                             help="Här ändrar du mailadress i ärendet"
-                                            groups="maintenance.group_equipment_manager" />
-                                        <field name="email_address" string="E-post" readonly="1"
-                                            groups="!maintenance.group_equipment_manager" />
-
+                                            readonly="user_is_external_contractor" />
 
                                         <field name="pet" string="Husdjur"
                                             readonly="create_date != False"
@@ -304,33 +299,53 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <group col="1">
-                                        <field name="request_date" readonly="restricted_external" />
-                                        <field name="priority_expanded"
-                                            readonly="restricted_external" />
-                                        <field name="due_date" readonly="restricted_external" />
-                                        <field name="maintenance_request_category_id"
+                                        <field name="request_date"
+                                            help="Datumet då ärendet skapades"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="start_date"
+                                            help="Anger vilket datum ärendet kan påbörjas"
+                                            readonly="user_is_external_contractor"
+                                        />
+                                        <field
+                                            name="priority_expanded"
+                                            readonly="user_is_external_contractor" />
+                                        <field name="due_date"
+                                            help="Det datum ärendet ska vara utfört"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
-                                            readonly="restricted_external" />
-                                        <field name="maintenance_team_id"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
-                                            readonly="restricted_external" />
-                                        <field name="user_id" domain="maintenance_team_domain"
-                                            readonly="restricted_external" />
-                                        <field name="schedule_date" readonly="restricted_external" />
-                                        <field name="master_key" string="Huvudnyckel"
+                                            readonly="user_is_external_contractor" />
+                                        <field name="user_id"
+                                            domain="maintenance_team_domain" />
+                                        <field
+                                            name="schedule_date"
+                                            help="Det datum arbete är planerat"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
                                             invisible="space_caption == 'Tvättstuga'"
-                                            readonly="restricted_external" />
-                                        <field name="call_between" invisible="not call_between"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="call_between" invisible="not call_between"
                                             string="Kund nås dessa tider"
-                                            readonly="restricted_external" />
-                                        <field name="company_id" options="{'no_create': True}"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="company_id" options="{'no_create': True}"
                                             groups="base.group_multi_company"
-                                            readonly="restricted_external" />
-                                        <field name="maintenance_team_domain" invisible="True" />
-                                        <field name="restricted_external" invisible="True" />
-                                        <!-- Used by statusbar_field_patch -->
-                                        <field name="user_is_external_contractor" invisible="True" />
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_team_domain" invisible="True" />
+                                        <field
+                                            name="restricted_external" invisible="1" />
+                                        <field
+                                            name="user_is_external_contractor" invisible="1" />
                                     </group>
                                 </div>
                             </div>
