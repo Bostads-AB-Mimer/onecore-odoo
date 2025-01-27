@@ -67,6 +67,7 @@ class OneCoreMaintenanceRequest(models.Model):
     maintenance_request_category_id = fields.Many2one(
         "maintenance.request.category", string="Ärendekategori"
     )
+    start_date = fields.Date("Startdatum", store=True)
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
