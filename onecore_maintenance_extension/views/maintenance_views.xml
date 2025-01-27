@@ -326,7 +326,7 @@
                                         <field
                                             name="schedule_date"
                                             help="Det datum arbete är planerat"
-                                            readonly="user_is_external_contractor" />
+                                        />
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
