@@ -344,7 +344,7 @@
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption == 'Tvättstuga'"
+                                            invisible="space_caption != 'lagenhet'"
                                             readonly="user_is_external_contractor" />
                                         <field
                                             name="call_between" invisible="not call_between"
