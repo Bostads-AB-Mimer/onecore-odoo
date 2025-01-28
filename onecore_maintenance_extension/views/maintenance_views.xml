@@ -131,7 +131,8 @@
                     <div class="d-flex items-center align-items-center fs-5">
                         <p class="fw-bold pt-2 inline-block">Utrymme:</p>
                         <div class="d-flex w-25">
-                            <field name="space_caption" string="Utrymme" class="mx-2 w-10" />
+                            <field name="space_caption" string="Utrymme" class="mx-2 w-10"
+                                readonly="user_is_external_contractor" />
                         </div>
                     </div>
                     <div invisible="description == False">
