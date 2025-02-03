@@ -358,7 +358,11 @@ class OneCoreMaintenanceRequest(models.Model):
     def fetch_property_data(self, search_by_number, search_type):
         onecore_auth = self.env["onecore.auth"]
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
-        params = {"handler": search_type}
+        params = {
+            "handler": search_type,
+            "includeTerminatedLeases": search_type
+            == "rentalObjectId",  # We want to be able to search for rental objects without a current lease
+        }
         url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
 
         try:
@@ -420,6 +424,9 @@ class OneCoreMaintenanceRequest(models.Model):
                             )
 
                 for lease in property["leases"]:
+                    if lease["lastDebitDate"] is not None:  # Skip terminated leases
+                        continue
+
                     lease_option = self.env["maintenance.lease.option"].create(
                         {
                             "user_id": self.env.user.id,
