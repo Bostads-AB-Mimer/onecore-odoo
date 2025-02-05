@@ -212,7 +212,7 @@ class OneCoreMaintenanceRequest(models.Model):
         ],
         string="Utrymme",
         store=True,
-        required=True,
+        required=False,
     )
     equipment_code = fields.Char("Utrustningskod", store=True, readonly=True)
     master_key = fields.Boolean("Huvudnyckel", store=True)
@@ -424,6 +424,20 @@ class OneCoreMaintenanceRequest(models.Model):
                                     "rental_property_option_id": rental_property_option.id,
                                 }
                             )
+
+                if not property["leases"] or len(property["leases"]) == 0:
+                    _logger.info("No leases found in response.")
+                    self.env["maintenance.lease.option"].create(
+                        {
+                            "user_id": self.env.user.id,
+                            "name": "Ingen hyresgäst",
+                            "lease_number": "Ingen hyresgäst",
+                            "rental_property_option_id": rental_property_option.id,
+                            "lease_type": "Ingen hyresgäst",
+                        }
+                    )
+
+                    return
 
                 for lease in property["leases"]:
                     if lease["lastDebitDate"] is not None:  # Skip terminated leases
