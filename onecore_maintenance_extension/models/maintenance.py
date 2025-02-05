@@ -206,10 +206,12 @@ class OneCoreMaintenanceRequest(models.Model):
     hearing_impaired = fields.Boolean("Hörselnedsättning", store=True)
     space_code = fields.Char("Utrymmeskod", store=True)
     space_caption = fields.Selection(
-        [("lagenhet", "Lägenhet"), ("tvattstuga", "Tvättstuga")],
+        [
+            ("Lägenhet", "Lägenhet"),
+            ("Tvättstuga", "Tvättstuga"),
+        ],
         string="Utrymme",
         store=True,
-        default=False,
         required=True,
     )
     equipment_code = fields.Char("Utrustningskod", store=True, readonly=True)

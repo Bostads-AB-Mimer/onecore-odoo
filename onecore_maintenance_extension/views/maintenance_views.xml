@@ -147,7 +147,7 @@
                             readonly="1" />
                     </div>
                     <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start"
-                        invisible="space_caption != 'lagenhet'">
+                        invisible="space_caption != 'Lägenhet'">
                         <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
 
                         <div class="ms-1">
@@ -189,27 +189,27 @@
                                             invisible="not rental_property_name" />
                                         <field name="property_type" invisible="not property_type"
                                             string="Fastighetstyp" />
+                                        <field name="address" string="Adress" />
                                         <field name="code"
-                                            invisible="not code or space_caption != 'lagenhet'"
+                                            invisible="not code or space_caption != 'Lägenhet'"
                                             string="Kod" />
                                         <field name="type"
-                                            invisible="not type or space_caption != 'lagenhet'"
+                                            invisible="not type or space_caption != 'Lägenhet'"
                                             string="Typ" />
                                         <field name="area"
-                                            invisible="not area or space_caption != 'lagenhet'"
+                                            invisible="not area or space_caption != 'Lägenhet'"
                                             string="Yta" />
                                         <field name="entrance"
-                                            invisible="not entrance or space_caption != 'lagenhet'"
+                                            invisible="not entrance or space_caption != 'Lägenhet'"
                                             string="Ingång" />
                                         <field name="floor"
-                                            invisible="not floor or space_caption != 'lagenhet'"
+                                            invisible="not floor or space_caption != 'Lägenhet'"
                                             string="Våning" />
                                         <field name="has_elevator"
-                                            invisible="not has_elevator or space_caption != 'lagenhet'"
+                                            invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
                                         <field name="estate_code" invisible="1"
                                             string="Fastighetskod" />
-                                        <field name="address" string="Adress" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                         <field name="building_code" invisible="1"
@@ -217,9 +217,9 @@
                                         <field name="building" invisible="1" string="Byggnad" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="create_date != False or space_caption == 'lagenhet'" />
+                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_caption" string="Tvättstuga"
-                                            invisible="(not maintenance_unit_caption and maintenance_unit_option_id) or space_caption == 'lagenhet'" />
+                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
                                     </group>
@@ -250,10 +250,8 @@
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
                                             invisible="not lease_option_id and create_date" />
-
                                         <field name="lease_name" string="Kontrakt"
                                             invisible="not lease_name" />
-
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
                                         <field name="contract_date" invisible="not contract_date"
@@ -263,14 +261,12 @@
                                             string="Startdatum" />
                                         <field name="lease_end_date" invisible="1"
                                             string="Slutdatum" />
-
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
-                                            invisible="not tenant_option_id" />
-
+                                            invisible="create_date" />
                                         <field name="tenant_name" string="Hyresgäst"
-                                            invisible="not tenant_name and tenant_option_id" />
+                                            invisible="not tenant_name or not create_date" />
                                         <field name="national_registration_number"
                                             string="Person/Org. nr" />
                                         <field name="contact_code" string="Kundnummer" />
@@ -287,7 +283,7 @@
 
                                         <field name="pet" string="Husdjur"
                                             readonly="create_date != False"
-                                            invisible="space_caption != 'lagenhet'" />
+                                            invisible="space_caption != 'Lägenhet'" />
                                         <field name="hearing_impaired" string="Hörselnedsättning"
                                             readonly="create_date != False" />
                                         <field name="is_tenant" invisible="1" string="Hyresgäst" />
@@ -345,7 +341,7 @@
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption != 'lagenhet'"
+                                            invisible="space_caption != 'Lägenhet'"
                                             readonly="user_is_external_contractor" />
                                         <field
                                             name="call_between" invisible="not call_between"
