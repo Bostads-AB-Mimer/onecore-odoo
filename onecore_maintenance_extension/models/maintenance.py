@@ -1,3 +1,4 @@
+import datetime
 from odoo import models, fields, api, exceptions
 from urllib.parse import quote
 
@@ -424,6 +425,20 @@ class OneCoreMaintenanceRequest(models.Model):
                                     "rental_property_option_id": rental_property_option.id,
                                 }
                             )
+
+                if not property["leases"] or len(property["leases"]) == 0:
+                    _logger.info("No leases found in response.")
+                    self.env["maintenance.lease.option"].create(
+                        {
+                            "user_id": self.env.user.id,
+                            "name": "Ingen hyresgäst",
+                            "lease_number": "Ingen hyresgäst",
+                            "rental_property_option_id": rental_property_option.id,
+                            "lease_type": "Ingen hyresgäst",
+                        }
+                    )
+
+                    return
 
                 for lease in property["leases"]:
                     if lease["lastDebitDate"] is not None:  # Skip terminated leases
