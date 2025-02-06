@@ -1,3 +1,4 @@
+import datetime
 from odoo import models, fields, api, exceptions
 from urllib.parse import quote
 
@@ -212,7 +213,7 @@ class OneCoreMaintenanceRequest(models.Model):
         ],
         string="Utrymme",
         store=True,
-        required=False,
+        required=True,
     )
     equipment_code = fields.Char("Utrustningskod", store=True, readonly=True)
     master_key = fields.Boolean("Huvudnyckel", store=True)
