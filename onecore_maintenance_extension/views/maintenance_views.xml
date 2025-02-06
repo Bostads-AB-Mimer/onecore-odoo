@@ -257,9 +257,9 @@
                                         <field name="contract_date" invisible="not contract_date"
                                             string="Kontraktsdatum" />
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
-                                        <field name="lease_start_date" invisible="1"
+                                        <field name="lease_start_date"
                                             string="Startdatum" />
-                                        <field name="lease_end_date" invisible="1"
+                                        <field name="lease_end_date"
                                             string="Slutdatum" />
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
