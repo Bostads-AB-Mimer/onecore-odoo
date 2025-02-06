@@ -213,7 +213,7 @@ class OneCoreMaintenanceRequest(models.Model):
         ],
         string="Utrymme",
         store=True,
-        required=False,
+        required=True,
     )
     equipment_code = fields.Char("Utrustningskod", store=True, readonly=True)
     master_key = fields.Boolean("Huvudnyckel", store=True)
