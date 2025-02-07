@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates xml:space="preserve">
-    <t t-inherit="web.ListView" t-inherit-mode="extension">
-        <xpath expr="//t[@t-if='!model.root.editedRecord and activeActions.create and props.showButtons']" position="attributes">
-            <attribute name="t-if">!model.root.editedRecord and canCreate and props.showButtons</attribute>
-        </xpath>
-    </t>
-</templates>
