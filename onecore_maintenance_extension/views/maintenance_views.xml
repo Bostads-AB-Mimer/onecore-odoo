@@ -118,6 +118,11 @@
                     <attribute name="col">1</attribute>
                 </xpath>
 
+                <!-- Sets title to readonly for external contractors -->
+                <xpath expr="//div[@class='oe_title']//field[@name='name']" position="attributes">
+                    <attribute name="readonly">user_is_external_contractor</attribute>
+                </xpath>
+
                 <xpath expr="//group[1]" position="inside">
                     <div invisible="not create_date">
                         <field name="creation_origin" invisible="1" readonly="1"></field>
