@@ -147,7 +147,7 @@
                             readonly="1" />
                     </div>
                     <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start"
-                        invisible="space_caption != 'Lägenhet'">
+                        invisible="space_caption != 'Lägenhet' or create_date and not lease_name">
                         <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
 
                         <div class="ms-1">
@@ -265,9 +265,11 @@
                                             string="Kontraktsdatum" />
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
-                                            string="Startdatum" />
+                                            string="Startdatum"
+                                            invisible="create_date and not lease_name" />
                                         <field name="lease_end_date"
-                                            string="Slutdatum" />
+                                            string="Slutdatum"
+                                            invisible="create_date and not lease_name" />
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
@@ -286,17 +288,20 @@
                                         for equipment managers -->
                                         <field name="phone_number" string="Telefon"
                                             help="Här ändrar du telefonnummer i ärendet"
-                                            readonly="user_is_external_contractor" />
+                                            readonly="user_is_external_contractor"
+                                            invisible="create_date and not lease_name" />
 
                                         <field name="email_address" string="E-post"
                                             help="Här ändrar du mailadress i ärendet"
-                                            readonly="user_is_external_contractor" />
+                                            readonly="user_is_external_contractor"
+                                            invisible="create_date and not lease_name" />
 
                                         <field name="pet" string="Husdjur"
                                             readonly="create_date != False"
-                                            invisible="space_caption != 'Lägenhet'" />
+                                            invisible="space_caption != 'Lägenhet' or create_date and not lease_name" />
                                         <field name="hearing_impaired" string="Hörselnedsättning"
-                                            readonly="create_date != False" />
+                                            readonly="create_date != False"
+                                            invisible="create_date and not lease_name" />
                                         <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                     </group>
                                 </div>
@@ -352,7 +357,7 @@
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption != 'Lägenhet'"
+                                            invisible="space_caption != 'Lägenhet' or create_date and not lease_name"
                                             readonly="user_is_external_contractor" />
                                         <field
                                             name="call_between" invisible="not call_between"
