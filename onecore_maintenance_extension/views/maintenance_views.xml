@@ -245,13 +245,20 @@
                             <div id="flush-collapse2" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
+
+                                    <div class="mb-3 fw-bold"
+                                        invisible="lease_name and create_date or not create_date">Ingen
+                                        hyresgäst</div>
+
                                     <group>
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
-                                            invisible="not lease_option_id and create_date" />
+                                            invisible="not lease_option_id and create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="lease_name" string="Kontrakt"
-                                            invisible="not lease_name" />
+                                            invisible="not lease_name"
+                                            placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
                                         <field name="contract_date" invisible="not contract_date"
@@ -264,12 +271,16 @@
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
-                                            invisible="create_date" />
+                                            invisible="create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="tenant_name" string="Hyresgäst"
-                                            invisible="not tenant_name or not create_date" />
+                                            invisible="not tenant_name or not create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="national_registration_number"
+                                            invisible="not national_registration_number"
                                             string="Person/Org. nr" />
-                                        <field name="contact_code" string="Kundnummer" />
+                                        <field name="contact_code" invisible="not contact_code"
+                                            string="Kundnummer" />
 
                                         <!-- Phone number and email address should only be editable
                                         for equipment managers -->
