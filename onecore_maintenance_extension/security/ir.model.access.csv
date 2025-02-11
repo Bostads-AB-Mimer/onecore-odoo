@@ -10,4 +10,6 @@ access_maintenance_lease,maintenance.team.user,model_maintenance_lease,base.grou
 access_maintenance_request_category,maintenance.team.user,model_maintenance_request_category,base.group_user,1,1,1,1
 
 access_maintenance_request_equipment_manager,maintenance.group_equipment_manager,model_maintenance_request,maintenance.group_equipment_manager,1,1,1,1
+
 access_maintenance_request_external,maintenance.group_external_contractor,model_maintenance_request,group_external_contractor,1,1,0,0
+access_ir_config_parameter_system_external,maintenance.group_external_contractor,base.model_ir_config_parameter,group_external_contractor,1,0,0,0
