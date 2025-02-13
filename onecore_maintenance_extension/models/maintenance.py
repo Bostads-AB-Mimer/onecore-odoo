@@ -363,8 +363,9 @@ class OneCoreMaintenanceRequest(models.Model):
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
         params = {
             "handler": search_type,
-            "includeTerminatedLeases": search_type
-            == "rentalObjectId",  # We want to be able to search for rental objects without a current lease
+            "includeTerminatedLeases": (
+                "true" if search_type == "rentalObjectId" else "false"
+            ),  # We want to be able to search for rental objects without a current lease
         }
         url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
 
