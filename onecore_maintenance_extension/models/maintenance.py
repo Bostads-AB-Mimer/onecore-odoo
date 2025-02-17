@@ -247,7 +247,7 @@ class OneCoreMaintenanceRequest(models.Model):
     )
 
     new_tenant = fields.Boolean(
-        string="Empty Tenant", store=False, compute="_compute_new_tenant"
+        string="New Tenant", store=False, compute="_compute_new_tenant"
     )
 
     @api.model
@@ -255,7 +255,7 @@ class OneCoreMaintenanceRequest(models.Model):
         for record in self:
             record.new_tenant = False
 
-        if self.rental_property_id and not self.lease_id:  # Empty tenant
+        if self.rental_property_id and not self.lease_id:  # Empty tenant / lease
             data = self.fetch_property_data(
                 self.rental_property_id.name, "rentalObjectId"
             )
@@ -295,21 +295,8 @@ class OneCoreMaintenanceRequest(models.Model):
                             )
 
                             if not existing_tenant:
-                                if tenant.get("firstName") and tenant.get("lastName"):
-                                    name = (
-                                        tenant["firstName"] + " " + tenant["lastName"]
-                                    )
-                                else:
-                                    name = tenant.get("fullName", "")
-
-                                phone_number = next(
-                                    (
-                                        item["phoneNumber"]
-                                        for item in tenant.get("phoneNumbers")
-                                        if item["isMainNumber"] == 1
-                                    ),
-                                    None,
-                                )
+                                name = self._get_tenant_name(tenant)
+                                phone_number = self._get_main_phone_number(tenant)
 
                                 new_tenant_record = self.env[
                                     "maintenance.tenant"
@@ -330,6 +317,27 @@ class OneCoreMaintenanceRequest(models.Model):
                                 for record in self:
                                     record.tenant_id = new_tenant_record.id
                                     record.new_tenant = True
+
+    def _get_tenant_name(self, tenant):
+        """
+        Construct the tenant's name based on available information.
+        """
+        if tenant.get("firstName") and tenant.get("lastName"):
+            return tenant["firstName"] + " " + tenant["lastName"]
+        return tenant.get("fullName", "")
+
+    def _get_main_phone_number(self, tenant):
+        """
+        Extract the main phone number from the tenant's phone numbers.
+        """
+        return next(
+            (
+                item["phoneNumber"]
+                for item in tenant.get("phoneNumbers", [])
+                if item["isMainNumber"] == 1
+            ),
+            None,
+        )
 
     # This functions searches for notifications from Mimer.nu that are unread for the logged in user.
     @api.depends(
@@ -551,19 +559,9 @@ class OneCoreMaintenanceRequest(models.Model):
                         )
 
                         if not existing_tenant:
-                            if tenant.get("firstName") and tenant.get("lastName"):
-                                name = tenant["firstName"] + " " + tenant["lastName"]
-                            else:
-                                name = tenant.get("fullName", "")
+                            name = self._get_tenant_name(tenant)
+                            phone_number = self._get_main_phone_number(tenant)
 
-                            phone_number = next(
-                                (
-                                    item["phoneNumber"]
-                                    for item in tenant.get("phoneNumbers")
-                                    if item["isMainNumber"] == 1
-                                ),
-                                None,
-                            )
                             tenant_option = self.env[
                                 "maintenance.tenant.option"
                             ].create(
