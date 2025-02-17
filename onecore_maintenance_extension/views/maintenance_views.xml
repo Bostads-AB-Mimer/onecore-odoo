@@ -24,8 +24,10 @@
                         <filter string="Mina ärenden" name="my_maintenances"
                             domain="[('user_id', '=', uid)]" />
                         <separator />
-                        <filter string="Att göra" name="todo" domain="[('stage_id.done', '=', False)]" />
-                        <filter string="Avslutad" name="done" domain="[('stage_id.done', '=', True)]" />
+                        <filter string="Att göra" name="todo"
+                            domain="[('stage_id.done', '=', False)]" />
+                        <filter string="Avslutad" name="done"
+                            domain="[('stage_id.done', '=', True)]" />
                         <separator />
                         <filter string="Blockerat" name="kanban_state_block"
                             domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'blocked')]" />
@@ -54,16 +56,20 @@
                             domain="[('message_needaction', '=', True)]"
                             groups="mail.group_mail_notification_type_inbox" />
                         <separator />
-                        <filter invisible="1" string="Försenade aktiviteter" name="activities_overdue"
+                        <filter invisible="1" string="Försenade aktiviteter"
+                            name="activities_overdue"
                             domain="[('my_activity_date_deadline', '&lt;', context_today().strftime('%Y-%m-%d'))]"
                             help="Visa alla ärenden med försenade aktiviteter" />
                         <filter invisible="1" string="Dagens aktiviteter" name="activities_today"
                             domain="[('my_activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]" />
-                        <filter invisible="1" string="Framtida aktiviteter" name="activities_upcoming_all"
+                        <filter invisible="1" string="Framtida aktiviteter"
+                            name="activities_upcoming_all"
                             domain="[('my_activity_date_deadline', '&gt;', context_today().strftime('%Y-%m-%d'))]" />
                         <separator />
-                        <filter string="Aktiva ärenden" name="active" domain="[('archive', '=', False)]" />
-                        <filter string="Inaktiva ärenden" name="inactive" domain="[('archive', '=', True)]" />
+                        <filter string="Aktiva ärenden" name="active"
+                            domain="[('archive', '=', False)]" />
+                        <filter string="Inaktiva ärenden" name="inactive"
+                            domain="[('archive', '=', True)]" />
                         <group expand='0' string='Gruppera efter...'>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
@@ -88,7 +94,7 @@
 
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
-                    <div class="d-flex flex-nowrap align-items-center mb-4 border rounded"
+                    <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
                         invisible="create_date != False">
                         <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
                             placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
@@ -103,9 +109,18 @@
                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True, 'type': 'number'}" /></div>
                 </xpath>
 
+                <xpath expr="//h1/field" position="attributes">
+                    <attribute name="readonly">restricted_external</attribute>
+                </xpath>
+
                 <!-- Add just one column to the group that wraps the form -->
                 <xpath expr="//group[1]" position="attributes">
                     <attribute name="col">1</attribute>
+                </xpath>
+
+                <!-- Sets title to readonly for external contractors -->
+                <xpath expr="//div[@class='oe_title']//field[@name='name']" position="attributes">
+                    <attribute name="readonly">user_is_external_contractor</attribute>
                 </xpath>
 
                 <xpath expr="//group[1]" position="inside">
@@ -118,18 +133,26 @@
                         </div>
 
                     </div>
+                    <div class="d-flex items-center align-items-center fs-5">
+                        <p class="fw-bold pt-2 inline-block">Utrymme:</p>
+                        <div class="d-flex w-25">
+                            <field name="space_caption" string="Utrymme" class="mx-2 w-10"
+                                readonly="user_is_external_contractor" />
+                        </div>
+                    </div>
                     <div invisible="description == False">
                         <p class="mb-1 fw-bold inline-block">Beskrivning:</p>
                         <field name="description" readonly="1"></field>
                     </div>
 
-                    <div class="d-flex w-100 justify-content-between justify-content-md-start">
+                    <div class="d-flex w-100 justify-content-between justify-content-md-start"
+                        invisible="not priority_expanded">
                         <label class="me-1" for="priority_expanded" string="Prioritet" />
                         <field class="ms-1 text-end text-md-start" name="priority_expanded"
                             readonly="1" />
                     </div>
                     <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start"
-                        invisible="space_caption == 'Tvättstuga'">
+                        invisible="space_caption != 'Lägenhet' or create_date and not lease_name">
                         <div class="me-1 o_form_label o_form_label_readonly">Huvudnyckel</div>
 
                         <div class="ms-1">
@@ -171,20 +194,27 @@
                                             invisible="not rental_property_name" />
                                         <field name="property_type" invisible="not property_type"
                                             string="Fastighetstyp" />
-                                        <field name="space_caption" invisible="not space_caption"
+                                        <field name="address" string="Adress" />
+                                        <field name="code"
+                                            invisible="not code or space_caption != 'Lägenhet'"
+                                            string="Kod" />
+                                        <field name="type"
+                                            invisible="not type or space_caption != 'Lägenhet'"
                                             string="Typ" />
-
-                                        <field name="code" invisible="not code" string="Kod" />
-                                        <field name="type" invisible="not type" string="Typ" />
-                                        <field name="area" invisible="not area" string="Yta" />
-                                        <field name="entrance" invisible="not entrance"
+                                        <field name="area"
+                                            invisible="not area or space_caption != 'Lägenhet'"
+                                            string="Yta" />
+                                        <field name="entrance"
+                                            invisible="not entrance or space_caption != 'Lägenhet'"
                                             string="Ingång" />
-                                        <field name="floor" invisible="not floor" string="Våning" />
-                                        <field name="has_elevator" invisible="not has_elevator"
+                                        <field name="floor"
+                                            invisible="not floor or space_caption != 'Lägenhet'"
+                                            string="Våning" />
+                                        <field name="has_elevator"
+                                            invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
                                         <field name="estate_code" invisible="1"
                                             string="Fastighetskod" />
-                                        <field name="address" string="Adress" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                         <field name="building_code" invisible="1"
@@ -192,9 +222,9 @@
                                         <field name="building" invisible="1" string="Byggnad" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="create_date != False" />
+                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_caption" string="Tvättstuga"
-                                            invisible="not maintenance_unit_caption and maintenance_unit_option_id" />
+                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
                                     </group>
@@ -220,43 +250,63 @@
                             <div id="flush-collapse2" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
+
+                                    <div class="mb-3 fw-bold"
+                                        invisible="lease_name and create_date or not create_date">Ingen
+                                        hyresgäst</div>
+
                                     <group>
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
-                                            invisible="not lease_option_id and create_date" />
-
+                                            invisible="not lease_option_id and create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="lease_name" string="Kontrakt"
-                                            invisible="not lease_name" />
-
+                                            invisible="not lease_name"
+                                            placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
                                         <field name="contract_date" invisible="not contract_date"
                                             string="Kontraktsdatum" />
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
-                                        <field name="lease_start_date" invisible="1"
-                                            string="Startdatum" />
-                                        <field name="lease_end_date" invisible="1"
-                                            string="Slutdatum" />
-
+                                        <field name="lease_start_date"
+                                            string="Startdatum"
+                                            invisible="create_date and not lease_name" />
+                                        <field name="lease_end_date"
+                                            string="Slutdatum"
+                                            invisible="create_date and not lease_name" />
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
-                                            invisible="not tenant_option_id" />
-
+                                            invisible="create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="tenant_name" string="Hyresgäst"
-                                            invisible="not tenant_name and tenant_option_id" />
+                                            invisible="not tenant_name or not create_date"
+                                            placeholder="Inget kontrakt" />
                                         <field name="national_registration_number"
+                                            invisible="not national_registration_number"
                                             string="Person/Org. nr" />
-                                        <field name="contact_code" string="Kundnummer" />
-                                        <field name="phone_number" string="Telefon" help="Här ändrar du telefonnummer i ärendet"/>
-                                        <field name="email_address" string="E-post" help="Här ändrar du mailadress i ärendet"/>
+                                        <field name="contact_code" invisible="not contact_code"
+                                            string="Kundnummer" />
+
+                                        <!-- Phone number and email address should only be editable
+                                        for equipment managers -->
+                                        <field name="phone_number" string="Telefon"
+                                            help="Här ändrar du telefonnummer i ärendet"
+                                            readonly="user_is_external_contractor"
+                                            invisible="create_date and not lease_name" />
+
+                                        <field name="email_address" string="E-post"
+                                            help="Här ändrar du mailadress i ärendet"
+                                            readonly="user_is_external_contractor"
+                                            invisible="create_date and not lease_name" />
 
                                         <field name="pet" string="Husdjur"
                                             readonly="create_date != False"
-                                            invisible="space_caption == 'Tvättstuga'" />
+                                            invisible="space_caption != 'Lägenhet' or create_date and not lease_name" />
                                         <field name="hearing_impaired" string="Hörselnedsättning"
-                                            readonly="create_date != False" />
+                                            readonly="create_date != False"
+                                            invisible="create_date and not lease_name" />
                                         <field name="is_tenant" invisible="1" string="Hyresgäst" />
                                     </group>
                                 </div>
@@ -281,27 +331,61 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <group col="1">
-                                        <field name="request_date" />
-                                        <field name="priority_expanded" />
-                                        <field name="due_date" />
-                                        <field name="maintenance_team_id"
-                                            options="{'no_create': True, 'no_open': True}" />
-                                        <field name="user_id" domain="maintenance_team_domain" />
-                                        <field name="schedule_date" />
-                                        <field name="master_key" string="Huvudnyckel"
+                                        <field name="request_date"
+                                            help="Datumet då ärendet skapades"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="start_date"
+                                            help="Anger vilket datum ärendet kan påbörjas"
+                                            readonly="user_is_external_contractor"
+                                        />
+                                        <field
+                                            name="priority_expanded"
+                                            readonly="user_is_external_contractor" />
+                                        <field name="due_date"
+                                            help="Det datum ärendet ska vara utfört"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_request_category_id"
+                                            options="{'no_create': True, 'no_open': True}"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_team_id"
+                                            options="{'no_create': True, 'no_open': True}"
+                                            readonly="user_is_external_contractor" />
+                                        <field name="user_id"
+                                            domain="maintenance_team_domain" />
+                                        <field
+                                            name="schedule_date"
+                                            help="Det datum arbete är planerat"
+                                        />
+                                        <field
+                                            name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption == 'Tvättstuga'" />
-                                        <field name="call_between" invisible="not call_between"
-                                            string="Kund nås dessa tider" />
-                                        <field name="company_id" options="{'no_create': True}"
-                                            groups="base.group_multi_company" />
-                                        <field name="maintenance_team_domain" invisible="True" />
+                                            invisible="space_caption != 'Lägenhet' or create_date and not lease_name"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="call_between" invisible="not call_between"
+                                            string="Kund nås dessa tider"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="company_id" options="{'no_create': True}"
+                                            groups="base.group_multi_company"
+                                            readonly="user_is_external_contractor" />
+                                        <field
+                                            name="maintenance_team_domain" invisible="True" />
+                                        <field
+                                            name="restricted_external" invisible="1" />
+                                        <field
+                                            name="user_is_external_contractor" invisible="1" />
                                     </group>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none">
+                        <div
+                            class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none"
+                            groups="maintenance.group_equipment_manager">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-4"
                                     class="accordion-button collapsed fs-3 fw-bold"
@@ -335,7 +419,7 @@
                 </xpath>
 
                 <xpath expr="//notebook" position="replace">
-                    <notebook class="d-none d-md-block">
+                    <notebook class="d-none d-md-block" groups="maintenance.group_equipment_manager">
                         <page string="Ärendebeskrivning">
                             <field name='description' placeholder="Ärendebeskrivning" />
                         </page>
@@ -376,6 +460,51 @@
                     <t t-call="onecore_maintenance_extension.maintenance_request_item" />
                 </xpath>
             </field>
+        </record>
+
+        <record id="maintenance_request_category_action" model="ir.actions.act_window">
+            <field name="name">Ärendekategorier</field>
+            <field name="res_model">maintenance.request.category</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <menuitem
+            id="menu_maintenance_request_category"
+            name="Ärendekategorier"
+            parent="maintenance.menu_maintenance_configuration"
+            action="maintenance_request_category_action"
+            groups="maintenance.group_equipment_manager,base.group_user"
+            sequence="2"
+        />
+
+        <!-- Menu Items -->
+        <record id="maintenance.menu_m_request" model="ir.ui.menu">
+            <field name="groups_id"
+                eval="[(6, 0, [ref('maintenance.group_equipment_manager'), ref('group_external_contractor')])]" />
+        </record>
+        <record id="maintenance.menu_m_request_form" model="ir.ui.menu">
+            <field name="groups_id"
+                eval="[(6, 0, [ref('maintenance.group_equipment_manager'), ref('group_external_contractor')])]" />
+        </record>
+        <record id="maintenance.menu_m_request_calendar" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager')])]" />
+        </record>
+        <record id="maintenance.menu_m_dashboard" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+        </record>
+        <record id="maintenance.menu_equipment_form" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+        </record>
+        <record id="maintenance.maintenance_reporting" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+        </record>
+        <record id="maintenance.menu_maintenance_configuration" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+        </record>
+
+        <!-- Only admin with Administration set to settings can go to apps page -->
+        <record id="base.menu_management" model="ir.ui.menu">
+            <field name="groups_id" eval="[(6, 0, [ref('base.group_system'),])]" />
         </record>
     </data>
 </odoo>

@@ -1,12 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- <data>
-    <record id="external_contractor" model="res.groups">
-      <field name="name">Maintenance external contractor</field>
-      <field name="category_id" ref="base.module_category_manufacturing_maintenance"/>
-      <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
-      <field name="users" eval="[(4, ref('base.user_root'))]"/>
-      <field name="comment">The user will be able to manage requests but not change all fields.</field>
+    <!--
+    This removes CRUD permission to create and delete maintenance requests for internal users.
+    It also removes buttons to create, copy and delete maintenance requests for those users.
+    -->
+    <record id="maintenance.access_maintenance_system_user" model="ir.model.access">
+        <field name="perm_create">0</field>
+        <field name="perm_unlink">0</field>
     </record>
-  </data> -->
+
+    <!-- This adds the External Contractor group -->
+    <record id="group_external_contractor" model="res.groups">
+        <field name="name">External contractor</field>
+        <field name="category_id" ref="base.module_category_manufacturing_maintenance" />
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]" />
+        <field name="users" eval="[(4, ref('base.user_root'))]" />
+        <field name="comment">The user will be able to manage requests but not change all fields.</field>
+    </record>
+
+    <data>
+
+        <!-- Rules -->
+
+        <!--
+        This rule allows external contractors to read maintenance requests that belong to their resource
+        group.
+        -->
+        <record id="maintenance_request_rule_external_contractor_group_readonly" model="ir.rule">
+            <field name="name">Readonly External contractor</field>
+            <field name="model_id" ref="model_maintenance_request" />
+            <field name="domain_force">[('maintenance_team_id.member_ids', 'in', [user.id])]</field>
+            <field name="groups" eval="[(4, ref('group_external_contractor'))]" />
+            <field name="perm_write" eval="True" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_unlink" eval="False" />
+            <field name="perm_create" eval="False" />
+        </record>
+
+    </data>
+
 </odoo>

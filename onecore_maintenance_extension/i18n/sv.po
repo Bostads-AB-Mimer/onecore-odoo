@@ -570,7 +570,12 @@ msgstr "Räkning av utrustning"
 #. module: maintenance
 #: model:res.groups,name:maintenance.group_equipment_manager
 msgid "Equipment Manager"
-msgstr "Utrustningsansvarig"
+msgstr "Admin Ärendehantering"
+
+#. module: maintenance
+#: model:res.groups,name:maintenance.group_external_contractor
+msgid "External contractor"
+msgstr "Extern leverantör"
 
 #. module: maintenance
 #: model:ir.model.fields,field_description:maintenance.field_maintenance_equipment__name
@@ -1524,6 +1529,11 @@ msgstr ""
 #: model:res.groups,comment:maintenance.group_equipment_manager
 msgid "The user will be able to manage equipment."
 msgstr "Användaren kommer att kunna hantera utrustning."
+
+#. module: maintenance
+#: model:res.groups,comment:maintenance.group_external_contractor
+msgid "The user will be able to manage requests but not change all fields."
+msgstr "Användaren kommer att kunna hantera ärenden men inte ändra alla fält."
 
 #. module: maintenance
 #: model:ir.model.fields,help:maintenance.field_maintenance_equipment__effective_date
