@@ -255,7 +255,7 @@ class OneCoreMaintenanceRequest(models.Model):
         for record in self:
             record.new_tenant = False
 
-        if self.rental_property_id and not self.tenant_id:  # Empty tenant
+        if self.rental_property_id and not self.lease_id:  # Empty tenant
             data = self.fetch_property_data(
                 self.rental_property_id.name, "rentalObjectId"
             )
