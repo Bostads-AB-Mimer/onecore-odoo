@@ -500,7 +500,10 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange("search_by_number", "search_type")
     def _compute_search(self):
-        if self.search_by_number:
+
+        min_string_length = 6 if self.search_type == "contactCode" else 8
+
+        if self.search_by_number and len(self.search_by_number) >= min_string_length:
             for record in self:
                 record.update_form_options(record.search_by_number, record.search_type)
                 property_records = self.env[
