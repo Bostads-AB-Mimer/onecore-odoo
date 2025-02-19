@@ -1,6 +1,10 @@
 import datetime
-from odoo import models, fields, api, exceptions
+from odoo import api, fields, models, _, exceptions
+from odoo.exceptions import UserError
+
+
 from urllib.parse import quote
+
 
 import base64
 import uuid
@@ -10,6 +14,14 @@ import logging
 import os
 
 _logger = logging.getLogger(__name__)
+
+search_types = {
+    "leaseId": "kontraktsnummer",
+    "rentalObjectId": "hyresobjekt",
+    "contactCode": "kundnummer",
+    "pnr": "personnummer",
+    "phoneNumber": "telefonnummer",
+}
 
 
 def is_local():
@@ -468,9 +480,22 @@ class OneCoreMaintenanceRequest(models.Model):
             return response.json().get("content", {})
         except requests.HTTPError as http_err:
             _logger.error(f"HTTP error occurred: {http_err}")
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s. Det verkar som att det inte finns någon koppling till OneCore-servern.",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
         except Exception as err:
             _logger.error(f"An error occurred: {err}")
-        return None
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
 
     def update_form_options(self, search_by_number, search_type):
         _logger.info("Updating rental property options")
@@ -580,6 +605,13 @@ class OneCoreMaintenanceRequest(models.Model):
                             )
         else:
             _logger.info("No data found in response.")
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
 
     @api.onchange("search_by_number", "search_type")
     def _compute_search(self):
