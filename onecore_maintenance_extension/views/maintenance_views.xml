@@ -140,7 +140,7 @@
                                 readonly="user_is_external_contractor" />
                         </div>
                     </div>
-                    <div invisible="description == False">
+                    <div>
                         <p class="mb-1 fw-bold inline-block">Beskrivning:</p>
                         <field name="description" readonly="1"></field>
                     </div>
