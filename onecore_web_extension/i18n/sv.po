@@ -3694,7 +3694,7 @@ msgstr "Intervall"
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 #, python-format
 msgid "Invalid Operation"
-msgstr ""
+msgstr "Oops!"
 
 #. module: web
 #. odoo-javascript
