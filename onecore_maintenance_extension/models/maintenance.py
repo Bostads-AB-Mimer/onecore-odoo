@@ -246,6 +246,99 @@ class OneCoreMaintenanceRequest(models.Model):
         store=False,
     )
 
+    new_tenant = fields.Boolean(
+        string="New Tenant", store=False, compute="_compute_new_tenant"
+    )
+
+    @api.model
+    def _compute_new_tenant(self):
+        for record in self:
+            record.new_tenant = False
+
+        if self.rental_property_id and not self.lease_id:  # Empty tenant / lease
+            data = self.fetch_property_data(
+                self.rental_property_id.name, "rentalObjectId"
+            )
+            if not data:
+                return
+
+            for property in data:
+                if not property["leases"] or len(property["leases"]) == 0:
+                    return  # No leases found in response.
+
+                for lease in property["leases"]:
+                    if lease["lastDebitDate"] is not None:  # Skip terminated leases
+                        continue
+
+                    new_lease_record = self.env["maintenance.lease"].create(
+                        {
+                            "lease_id": lease["leaseId"],
+                            "name": lease["leaseId"],
+                            "lease_number": lease["leaseNumber"],
+                            "lease_type": lease["type"],
+                            "lease_start_date": lease["leaseStartDate"],
+                            "lease_end_date": lease["leaseEndDate"],
+                            "contract_date": lease["contractDate"],
+                            "approval_date": lease["approvalDate"],
+                        }
+                    )
+
+                    for record in self:
+                        record.lease_id = new_lease_record.id
+
+                    if new_lease_record:
+                        for tenant in lease["tenants"]:
+                            # Check if a tenant with the same contact_code already exists
+                            existing_tenant = self.env["maintenance.tenant"].search(
+                                [("contact_code", "=", tenant["contactCode"])],
+                                limit=1,
+                            )
+
+                            if not existing_tenant:
+                                name = self._get_tenant_name(tenant)
+                                phone_number = self._get_main_phone_number(tenant)
+
+                                new_tenant_record = self.env[
+                                    "maintenance.tenant"
+                                ].create(
+                                    {
+                                        "name": name,
+                                        "contact_code": tenant["contactCode"],
+                                        "contact_key": tenant["contactKey"],
+                                        "national_registration_number": tenant[
+                                            "nationalRegistrationNumber"
+                                        ],
+                                        "email_address": tenant.get("emailAddress"),
+                                        "phone_number": phone_number,
+                                        "is_tenant": tenant["isTenant"],
+                                    }
+                                )
+
+                                for record in self:
+                                    record.tenant_id = new_tenant_record.id
+                                    record.new_tenant = True
+
+    def _get_tenant_name(self, tenant):
+        """
+        Construct the tenant's name based on available information.
+        """
+        if tenant.get("firstName") and tenant.get("lastName"):
+            return tenant["firstName"] + " " + tenant["lastName"]
+        return tenant.get("fullName", "")
+
+    def _get_main_phone_number(self, tenant):
+        """
+        Extract the main phone number from the tenant's phone numbers.
+        """
+        return next(
+            (
+                item["phoneNumber"]
+                for item in tenant.get("phoneNumbers", [])
+                if item["isMainNumber"] == 1
+            ),
+            None,
+        )
+
     # This functions searches for notifications from Mimer.nu that are unread for the logged in user.
     @api.depends(
         "message_ids.notification_ids.is_read",
@@ -466,19 +559,9 @@ class OneCoreMaintenanceRequest(models.Model):
                         )
 
                         if not existing_tenant:
-                            if tenant.get("firstName") and tenant.get("lastName"):
-                                name = tenant["firstName"] + " " + tenant["lastName"]
-                            else:
-                                name = tenant.get("fullName", "")
+                            name = self._get_tenant_name(tenant)
+                            phone_number = self._get_main_phone_number(tenant)
 
-                            phone_number = next(
-                                (
-                                    item["phoneNumber"]
-                                    for item in tenant.get("phoneNumbers")
-                                    if item["isMainNumber"] == 1
-                                ),
-                                None,
-                            )
                             tenant_option = self.env[
                                 "maintenance.tenant.option"
                             ].create(

@@ -255,7 +255,12 @@
                                         invisible="lease_name and create_date or not create_date">Ingen
                                         hyresgäst</div>
 
+                                    <div class="mb-3 fw-bold"
+                                        invisible="not new_tenant">Ny
+                                        hyresgäst, ärendet är uppdaterat</div>
+
                                     <group>
+                                        <field name="new_tenant" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
