@@ -570,9 +570,9 @@ class OneCoreMaintenanceRequest(models.Model):
                                     "name": name,
                                     "contact_code": tenant["contactCode"],
                                     "contact_key": tenant["contactKey"],
-                                    "national_registration_number": tenant[
+                                    "national_registration_number": tenant.get(
                                         "nationalRegistrationNumber"
-                                    ],
+                                    ),
                                     "email_address": tenant.get("emailAddress"),
                                     "phone_number": phone_number,
                                     "is_tenant": tenant["isTenant"],
