@@ -367,7 +367,7 @@
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
-                                            invisible="space_caption != 'Lägenhet' or create_date and not lease_name"
+                                            invisible="space_caption != 'Lägenhet'"
                                             readonly="user_is_external_contractor" />
                                         <field
                                             name="call_between" invisible="not call_between"
