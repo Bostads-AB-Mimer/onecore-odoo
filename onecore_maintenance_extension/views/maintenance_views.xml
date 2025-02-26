@@ -256,11 +256,16 @@
                                         hyresgäst</div>
 
                                     <div class="mb-3 fw-bold"
-                                        invisible="not new_tenant">Ny
-                                        hyresgäst, ärendet är uppdaterat</div>
+                                        invisible="not added_tenant">
+                                        <span
+                                            class="mimer-badge mb-1 fs-7 px-2 py-2">
+                                            Ny hyresgäst, ärendet är uppdaterat
+                                        </span>
+                                    </div>
 
                                     <group>
-                                        <field name="new_tenant" invisible="1" />
+                                        <field name="empty_tenant" invisible="1" />
+                                        <field name="added_tenant" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="create_date != False"
@@ -459,6 +464,7 @@
                     <field name="create_date" />
                     <field name="master_key" />
                     <field name="new_mimer_notification" />
+                    <field name="added_tenant" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
