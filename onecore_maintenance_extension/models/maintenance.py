@@ -658,12 +658,14 @@ class OneCoreMaintenanceRequest(models.Model):
             [("user_id", "=", self.env.user.id)]
         ).unlink()
 
-    @api.depends("request_date", "priority_expanded")
+    @api.depends("request_date", "start_date", "priority_expanded")
     def _compute_due_date(self):
         for record in self:
-            if record.request_date and record.priority_expanded:
+            base_date = record.start_date if record.start_date else record.request_date
+
+            if base_date and record.priority_expanded:
                 record.due_date = fields.Date.add(
-                    record.request_date, days=int(record.priority_expanded)
+                    base_date, days=int(record.priority_expanded)
                 )
 
     @api.onchange("rental_property_option_id")
