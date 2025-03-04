@@ -266,6 +266,29 @@ class OneCoreMaintenanceRequest(models.Model):
         string="Recently added tenant", store=True, default=False
     )
 
+    floor_plan_image = fields.Image(
+        store=False, readonly=True, compute="_compute_floor_plan"
+    )
+
+    @api.depends("rental_property_id", "rental_property_option_id")
+    def _compute_floor_plan(self):
+        for record in self:
+            id = (
+                record.rental_property_id
+                if record.rental_property_id
+                else record.rental_property_option_id
+            )
+
+            if id:
+                url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
+                response = requests.get(url)
+                if response.status_code == 200:
+                    record.floor_plan_image = base64.b64encode(response.content)
+                else:
+                    record.floor_plan_image = ""
+            else:
+                record.floor_plan_image = ""
+
     @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
         for record in self:
