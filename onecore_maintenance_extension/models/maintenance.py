@@ -262,11 +262,11 @@ class OneCoreMaintenanceRequest(models.Model):
         string="No tenant", store=False, compute="_compute_empty_tenant"
     )
 
-    added_tenant = fields.Boolean(
+    recently_added_tenant = fields.Boolean(
         string="Recently added tenant", store=True, default=False
     )
 
-    @api.depends("added_tenant")
+    @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
         for record in self:
             if record.lease_name and record.create_date or not record.create_date:
@@ -274,14 +274,14 @@ class OneCoreMaintenanceRequest(models.Model):
             else:
                 record.empty_tenant = True
 
-        if self.added_tenant and self.tenant_id:
+        if self.recently_added_tenant and self.tenant_id:
             # Check if the tenant was created more than two weeks ago
             if (datetime.datetime.now() - self.tenant_id.create_date).days > 14:
                 for record in self:
-                    record.added_tenant = False
+                    record.recently_added_tenant = False
         else:
             for record in self:
-                record.added_tenant = False
+                record.recently_added_tenant = False
 
         if self.rental_property_id and not self.lease_id:  # Empty tenant / lease
             data = self.fetch_property_data(
@@ -326,7 +326,7 @@ class OneCoreMaintenanceRequest(models.Model):
                                 name = self._get_tenant_name(tenant)
                                 phone_number = self._get_main_phone_number(tenant)
 
-                                added_tenant_record = self.env[
+                                recently_added_tenant_record = self.env[
                                     "maintenance.tenant"
                                 ].create(
                                     {
@@ -343,8 +343,8 @@ class OneCoreMaintenanceRequest(models.Model):
                                 )
 
                                 for record in self:
-                                    record.tenant_id = added_tenant_record.id
-                                    record.added_tenant = True
+                                    record.tenant_id = recently_added_tenant_record.id
+                                    record.recently_added_tenant = True
                                     record.empty_tenant = False
 
     def _get_tenant_name(self, tenant):

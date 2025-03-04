@@ -45,7 +45,7 @@
         <field name="due_date" />
         <field name="today_date" />
         <field name="new_mimer_notification" />
-        <field name="added_tenant" />
+        <field name="recently_added_tenant" />
       </mobile>
     </field>
   </record>
