@@ -266,10 +266,13 @@ class OneCoreMaintenanceRequest(models.Model):
         string="Recently added tenant", store=True, default=False
     )
 
-    @api.model
+    @api.depends("added_tenant")
     def _compute_empty_tenant(self):
         for record in self:
-            record.empty_tenant = False
+            if record.lease_name and record.create_date or not record.create_date:
+                record.empty_tenant = False
+            else:
+                record.empty_tenant = True
 
         if self.added_tenant and self.tenant_id:
             # Check if the tenant was created more than two weeks ago
@@ -342,6 +345,7 @@ class OneCoreMaintenanceRequest(models.Model):
                                 for record in self:
                                     record.tenant_id = added_tenant_record.id
                                     record.added_tenant = True
+                                    record.empty_tenant = False
 
     def _get_tenant_name(self, tenant):
         """

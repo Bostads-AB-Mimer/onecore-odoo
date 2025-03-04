@@ -252,7 +252,7 @@
                                 <div class="accordion-body">
 
                                     <div class="mb-3 fw-bold"
-                                        invisible="lease_name and create_date or not create_date">Ingen
+                                        invisible="not empty_tenant">Ingen
                                         hyresgäst</div>
 
                                     <div class="mb-3 fw-bold"
