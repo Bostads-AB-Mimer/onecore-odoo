@@ -316,36 +316,29 @@ class OneCoreMaintenanceRequest(models.Model):
 
                     if new_lease_record:
                         for tenant in lease["tenants"]:
-                            # Check if a tenant with the same contact_code already exists
-                            existing_tenant = self.env["maintenance.tenant"].search(
-                                [("contact_code", "=", tenant["contactCode"])],
-                                limit=1,
+                            name = self._get_tenant_name(tenant)
+                            phone_number = self._get_main_phone_number(tenant)
+
+                            recently_added_tenant_record = self.env[
+                                "maintenance.tenant"
+                            ].create(
+                                {
+                                    "name": name,
+                                    "contact_code": tenant["contactCode"],
+                                    "contact_key": tenant["contactKey"],
+                                    "national_registration_number": tenant[
+                                        "nationalRegistrationNumber"
+                                    ],
+                                    "email_address": tenant.get("emailAddress"),
+                                    "phone_number": phone_number,
+                                    "is_tenant": tenant["isTenant"],
+                                }
                             )
 
-                            if not existing_tenant:
-                                name = self._get_tenant_name(tenant)
-                                phone_number = self._get_main_phone_number(tenant)
-
-                                recently_added_tenant_record = self.env[
-                                    "maintenance.tenant"
-                                ].create(
-                                    {
-                                        "name": name,
-                                        "contact_code": tenant["contactCode"],
-                                        "contact_key": tenant["contactKey"],
-                                        "national_registration_number": tenant[
-                                            "nationalRegistrationNumber"
-                                        ],
-                                        "email_address": tenant.get("emailAddress"),
-                                        "phone_number": phone_number,
-                                        "is_tenant": tenant["isTenant"],
-                                    }
-                                )
-
-                                for record in self:
-                                    record.tenant_id = recently_added_tenant_record.id
-                                    record.recently_added_tenant = True
-                                    record.empty_tenant = False
+                            for record in self:
+                                record.tenant_id = recently_added_tenant_record.id
+                                record.recently_added_tenant = True
+                                record.empty_tenant = False
 
     def _get_tenant_name(self, tenant):
         """
