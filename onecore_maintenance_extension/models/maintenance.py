@@ -952,6 +952,15 @@ class OneCoreMaintenanceRequest(models.Model):
                         "Du har inte behörighet att flytta detta ärende till Avslutad"
                     )
 
+            if not self.user_id:
+                restricted_stages = self.env["maintenance.stage"].search(
+                    [("name", "=", "Resurs tilldelad")]
+                )
+                if vals["stage_id"] in restricted_stages.ids:
+                    raise exceptions.UserError(
+                        "Ingen resurs är tilldelad. Vänligen välj en resurs."
+                    )
+
         if "kanban_state" not in vals and "stage_id" in vals:
             vals["kanban_state"] = "normal"
         if (
