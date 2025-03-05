@@ -21,7 +21,7 @@ patch(StatusBarField.prototype, {
         isFolded: option[foldField],
         isSelected: Boolean(currentValue && option.id === currentValue[0]),
         isDisabled:
-          (option.display_name === "Resurs tilldelad" &&
+          (currentStageName === "Väntar på handläggning" &&
             !record.data.user_id) ||
           (userIsExternalContractor &&
             (option.display_name === "Avslutad" ||

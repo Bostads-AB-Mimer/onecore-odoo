@@ -953,10 +953,10 @@ class OneCoreMaintenanceRequest(models.Model):
                     )
 
             if not self.user_id:
-                restricted_stages = self.env["maintenance.stage"].search(
-                    [("name", "=", "Resurs tilldelad")]
+                allowed_stages = self.env["maintenance.stage"].search(
+                    [("name", "=", "Väntar på handläggning")]
                 )
-                if vals["stage_id"] in restricted_stages.ids:
+                if vals["stage_id"] not in allowed_stages.ids:
                     raise exceptions.UserError(
                         "Ingen resurs är tilldelad. Vänligen välj en resurs."
                     )
