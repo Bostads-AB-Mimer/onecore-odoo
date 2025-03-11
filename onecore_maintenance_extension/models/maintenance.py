@@ -626,9 +626,23 @@ class OneCoreMaintenanceRequest(models.Model):
     @api.onchange("search_by_number", "search_type")
     def _compute_search(self):
 
-        min_string_length = 6 if self.search_type == "contactCode" else 8
+        min_string_length = (
+            6
+            if self.search_type == "contactCode"
+            else 12 if self.search_type == "pnr" else 8
+        )
 
         if self.search_by_number and len(self.search_by_number) >= min_string_length:
+
+            if self.search_type == "pnr":
+                # Check if the first two digits are valid
+                if (
+                    str(self.search_by_number)[:2] != "20"
+                    and str(self.search_by_number)[:2] != "19"
+                ):
+                    # Invalid personal number, dont search
+                    return
+
             for record in self:
                 record.update_form_options(record.search_by_number, record.search_type)
                 property_records = self.env[
