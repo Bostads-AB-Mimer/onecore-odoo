@@ -11,7 +11,7 @@ patch(StatusBarField.prototype, {
     if (this.field.type === "many2one") {
       // Many2one
       const currentStageName = record.data.stage_id[1];
-      const shouldDisable =
+      const userIsExternalContractor =
         record.model.config.resModel === "maintenance.request" &&
         record.data.user_is_external_contractor;
 
@@ -21,10 +21,12 @@ patch(StatusBarField.prototype, {
         isFolded: option[foldField],
         isSelected: Boolean(currentValue && option.id === currentValue[0]),
         isDisabled:
-          shouldDisable &&
-          (option.display_name === "Avslutad" ||
-            currentStageName === "Avslutad" ||
-            currentStageName === "Utförd"),
+          (currentStageName === "Väntar på handläggning" &&
+            !record.data.user_id) ||
+          (userIsExternalContractor &&
+            (option.display_name === "Avslutad" ||
+              currentStageName === "Avslutad" ||
+              currentStageName === "Utförd")),
       }));
     } else {
       // Selection
