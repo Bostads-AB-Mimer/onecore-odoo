@@ -279,7 +279,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 else record.rental_property_option_id
             )
 
-            if id:
+            if id and record.space_caption == "Lägenhet":
                 url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
                 response = requests.get(url)
                 if response.status_code == 200:
