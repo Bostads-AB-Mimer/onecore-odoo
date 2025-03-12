@@ -51,3 +51,7 @@ class OnecoreMaintenanceRentalProperty(models.Model):
     estate = fields.Char("Fastighet")
     building_code = fields.Char("Kvarterskod")
     building = fields.Char("Kvarter")
+
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Maintenance Request", ondelete="cascade"
+    )

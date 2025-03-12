@@ -28,3 +28,7 @@ class OnecoreMaintenanceTenant(models.Model):
     phone_number = fields.Char("Telefonnummer")
     email_address = fields.Char("E-postadress")
     is_tenant = fields.Boolean("Är hyresgäst", default=True)
+
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Maintenance Request", ondelete="cascade"
+    )

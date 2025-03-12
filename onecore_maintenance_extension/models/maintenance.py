@@ -810,7 +810,11 @@ class OneCoreMaintenanceRequest(models.Model):
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
         images = []
-        for vals in vals_list:
+
+        maintenance_requests = super().create(vals_list)
+
+        for idx, vals in enumerate(vals_list):
+            maintenance_request_id = maintenance_requests[idx].id
             # SAVE RENTAL PROPERTY
             if vals.get("rental_property_option_id"):
                 property_option_record = self.env[
@@ -833,6 +837,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         "estate": property_option_record.estate,
                         "building_code": property_option_record.building_code,
                         "building": property_option_record.building,
+                        "maintenance_request_id": maintenance_request_id,
                     }
                 )
                 vals["rental_property_id"] = new_property_record.id
@@ -851,6 +856,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         "type": maintenance_unit_option_record.type,
                         "code": maintenance_unit_option_record.code,
                         "estate_code": maintenance_unit_option_record.estate_code,
+                        "maintenance_request_id": maintenance_request_id,
                     }
                 )
                 vals["maintenance_unit_id"] = new_maintenance_unit_record.id
@@ -870,6 +876,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         "lease_end_date": lease_option_record.lease_end_date,
                         "contract_date": lease_option_record.contract_date,
                         "approval_date": lease_option_record.approval_date,
+                        "maintenance_request_id": maintenance_request_id,
                     }
                 )
 
@@ -889,6 +896,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         "email_address": tenant_option_record.email_address,
                         "phone_number": tenant_option_record.phone_number,
                         "is_tenant": tenant_option_record.is_tenant,
+                        "maintenance_request_id": maintenance_request_id,
                     }
                 )
 
@@ -901,7 +909,6 @@ class OneCoreMaintenanceRequest(models.Model):
             if not vals.get("space_caption"):
                 vals["space_caption"] = "Tvättstuga"
 
-        maintenance_requests = super().create(vals_list)
         for request in maintenance_requests:
             for image in images:
                 file_data = base64.b64decode(image["Base64String"])

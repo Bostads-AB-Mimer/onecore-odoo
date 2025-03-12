@@ -25,3 +25,7 @@ class OnecoreMaintenanceMaintenanceUnit(models.Model):
     caption = fields.Char("Utrymme", required=True)
     code = fields.Char("Utrymmeskod", required=True)
     estate_code = fields.Char("Fastighetskod", required=True)
+
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Maintenance Request", ondelete="cascade"
+    )

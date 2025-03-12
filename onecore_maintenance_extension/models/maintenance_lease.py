@@ -43,3 +43,7 @@ class OnecoreMaintenanceLease(models.Model):
     contract_date = fields.Date("Kontraktsdatum")
     last_debit_date = fields.Date("Datum för senaste debitering")
     approval_date = fields.Date("Datum för godkännande")
+
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Maintenance Request", ondelete="cascade"
+    )
