@@ -273,6 +273,10 @@ class OneCoreMaintenanceRequest(models.Model):
         store=False, readonly=True, compute="_compute_floor_plan"
     )
 
+    special_attention = fields.Boolean(
+        string="Viktig kundinfo", readonly=True, default=True
+    )
+
     @api.depends("rental_property_id", "rental_property_option_id")
     def _compute_floor_plan(self):
         for record in self:
@@ -637,6 +641,7 @@ class OneCoreMaintenanceRequest(models.Model):
                                     "email_address": tenant.get("emailAddress"),
                                     "phone_number": phone_number,
                                     "is_tenant": tenant["isTenant"],
+                                    "special_attention": tenant.get("specialAttention"),
                                 }
                             )
         else:
@@ -796,6 +801,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.phone_number = record.tenant_option_id.phone_number
                 record.email_address = record.tenant_option_id.email_address
                 record.is_tenant = record.tenant_option_id.is_tenant
+                record.special_attention = record.tenant_option_id.special_attention
 
     def _resource_assigned(self):
         resource_allocated_stage = self.env["maintenance.stage"].search(
@@ -910,6 +916,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         "email_address": tenant_option_record.email_address,
                         "phone_number": tenant_option_record.phone_number,
                         "is_tenant": tenant_option_record.is_tenant,
+                        "special_attention": tenant_option_record.special_attention,
                         "maintenance_request_id": maintenance_request.id,
                     }
                 )

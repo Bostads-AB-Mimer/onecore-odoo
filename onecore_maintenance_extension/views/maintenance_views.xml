@@ -126,13 +126,20 @@
                 <xpath expr="//group[1]" position="inside">
                     <div invisible="not create_date">
                         <field name="creation_origin" invisible="1" readonly="1"></field>
+                        <field name="special_attention" invisible="1" />
 
                         <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
                             <span invisible="creation_origin != 'internal'">Skapad internt</span>
                             <span invisible="creation_origin != 'mimer-nu'">Från Mimer.nu</span>
                         </div>
 
+                        <div
+                            class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill bg-danger text-white"
+                            invisible="not special_attention">
+                            <span>Viktig kundinfo</span>
+                        </div>
                     </div>
+
                     <div class="d-flex items-center align-items-center fs-5">
                         <p class="fw-bold pt-2 inline-block">Utrymme:</p>
                         <div class="d-flex w-25">
