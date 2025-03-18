@@ -78,7 +78,10 @@ class OneCoreMaintenanceRequest(models.Model):
         readonly=False,
     )
     maintenance_request_category_id = fields.Many2one(
-        "maintenance.request.category", string="Ärendekategori"
+        "maintenance.request.category",
+        string="Ärendekategori",
+        required=True,
+        store=True,
     )
     start_date = fields.Date("Startdatum", store=True)
 

@@ -16,6 +16,7 @@
         "views/mobile_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",
+        "data/maintenance.request.category.csv",
     ],
     "assets": {
         "web.assets_backend": [
