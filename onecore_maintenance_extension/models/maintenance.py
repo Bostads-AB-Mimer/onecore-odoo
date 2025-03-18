@@ -822,7 +822,7 @@ class OneCoreMaintenanceRequest(models.Model):
         maintenance_requests = super().create(vals_list)
 
         for idx, vals in enumerate(vals_list):
-            maintenance_request_id = maintenance_requests[idx].id
+            maintenance_request = maintenance_requests[idx]
             # SAVE RENTAL PROPERTY
             if vals.get("rental_property_option_id"):
                 property_option_record = self.env[
@@ -845,10 +845,13 @@ class OneCoreMaintenanceRequest(models.Model):
                         "estate": property_option_record.estate,
                         "building_code": property_option_record.building_code,
                         "building": property_option_record.building,
-                        "maintenance_request_id": maintenance_request_id,
+                        "maintenance_request_id": maintenance_request.id,
                     }
                 )
-                vals["rental_property_id"] = new_property_record.id
+
+                maintenance_request.write(
+                    {"rental_property_id": new_property_record.id}
+                )
 
             # SAVE MAINTENANCE UNIT
             if vals.get("maintenance_unit_option_id"):
@@ -864,10 +867,13 @@ class OneCoreMaintenanceRequest(models.Model):
                         "type": maintenance_unit_option_record.type,
                         "code": maintenance_unit_option_record.code,
                         "estate_code": maintenance_unit_option_record.estate_code,
-                        "maintenance_request_id": maintenance_request_id,
+                        "maintenance_request_id": maintenance_request.id,
                     }
                 )
-                vals["maintenance_unit_id"] = new_maintenance_unit_record.id
+
+                maintenance_request.write(
+                    {"maintenance_unit_id": new_maintenance_unit_record.id}
+                )
 
             # SAVE LEASE
             if vals.get("lease_option_id"):
@@ -884,11 +890,11 @@ class OneCoreMaintenanceRequest(models.Model):
                         "lease_end_date": lease_option_record.lease_end_date,
                         "contract_date": lease_option_record.contract_date,
                         "approval_date": lease_option_record.approval_date,
-                        "maintenance_request_id": maintenance_request_id,
+                        "maintenance_request_id": maintenance_request.id,
                     }
                 )
 
-                vals["lease_id"] = new_lease_record.id
+                maintenance_request.write({"lease_id": new_lease_record.id})
 
             # SAVE TENANT
             if vals.get("tenant_option_id"):
@@ -904,11 +910,11 @@ class OneCoreMaintenanceRequest(models.Model):
                         "email_address": tenant_option_record.email_address,
                         "phone_number": tenant_option_record.phone_number,
                         "is_tenant": tenant_option_record.is_tenant,
-                        "maintenance_request_id": maintenance_request_id,
+                        "maintenance_request_id": maintenance_request.id,
                     }
                 )
 
-                vals["tenant_id"] = new_tenant_record.id
+                maintenance_request.write({"tenant_id": new_tenant_record.id})
 
             # Fix for now to hide stuff specific for tvättstugeärenden
             if not vals.get("space_caption"):
