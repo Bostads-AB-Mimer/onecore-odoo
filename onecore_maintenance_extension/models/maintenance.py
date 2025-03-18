@@ -915,6 +915,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 vals["space_caption"] = "Tvättstuga"
 
         for idx, request in enumerate(maintenance_requests):
+<<<<<<< HEAD
             if len(images) > 0:
                 request_images = images[idx]
                 for image in request_images:
@@ -930,6 +931,21 @@ class OneCoreMaintenanceRequest(models.Model):
                         }
                     )
 
+=======
+            request_images = images[idx]
+            for image in request_images:
+                file_data = base64.b64decode(image["Base64String"])
+                attachment = self.env["ir.attachment"].create(
+                    {
+                        "name": image["Filename"],
+                        "type": "binary",
+                        "datas": base64.b64encode(file_data),
+                        "res_model": "maintenance.request",
+                        "res_id": request.id,
+                        "mimetype": "application/octet-stream",
+                    }
+                )
+>>>>>>> 70606b9 (Remove images from vals before saving maintenance requests)
             if request.owner_user_id or request.user_id:
                 request._add_followers()
             if request.user_id and request.stage_id.name == "Väntar på handläggning":
