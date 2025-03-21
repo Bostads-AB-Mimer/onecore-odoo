@@ -1001,7 +1001,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
             if not self.user_id:
                 allowed_stages = self.env["maintenance.stage"].search(
-                    [("name", "=", "Väntar på handläggning")]
+                    [("name", "in", ["Väntar på handläggning", "Avslutad"])]
                 )
                 if vals["stage_id"] not in allowed_stages.ids:
                     raise exceptions.UserError(
