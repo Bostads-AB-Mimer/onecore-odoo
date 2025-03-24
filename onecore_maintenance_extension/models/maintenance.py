@@ -814,6 +814,11 @@ class OneCoreMaintenanceRequest(models.Model):
         _logger.info(f"Creating maintenance requests: {vals_list}")
         images = []
 
+        # Remove images from vals_list before saving the requests
+        for vals in vals_list:
+            if "images" in vals:
+                images.append(vals.pop("images"))
+
         maintenance_requests = super().create(vals_list)
 
         for idx, vals in enumerate(vals_list):
@@ -905,26 +910,26 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 vals["tenant_id"] = new_tenant_record.id
 
-            if "images" in vals:
-                images = vals.pop("images")
-
             # Fix for now to hide stuff specific for tvättstugeärenden
             if not vals.get("space_caption"):
                 vals["space_caption"] = "Tvättstuga"
 
-        for request in maintenance_requests:
-            for image in images:
-                file_data = base64.b64decode(image["Base64String"])
-                attachment = self.env["ir.attachment"].create(
-                    {
-                        "name": image["Filename"],
-                        "type": "binary",
-                        "datas": base64.b64encode(file_data),
-                        "res_model": "maintenance.request",
-                        "res_id": request.id,
-                        "mimetype": "application/octet-stream",
-                    }
-                )
+        for idx, request in enumerate(maintenance_requests):
+            if len(images) > 0:
+                request_images = images[idx]
+                for image in request_images:
+                    file_data = base64.b64decode(image["Base64String"])
+                    attachment = self.env["ir.attachment"].create(
+                        {
+                            "name": image["Filename"],
+                            "type": "binary",
+                            "datas": base64.b64encode(file_data),
+                            "res_model": "maintenance.request",
+                            "res_id": request.id,
+                            "mimetype": "application/octet-stream",
+                        }
+                    )
+
             if request.owner_user_id or request.user_id:
                 request._add_followers()
             if request.user_id and request.stage_id.name == "Väntar på handläggning":
