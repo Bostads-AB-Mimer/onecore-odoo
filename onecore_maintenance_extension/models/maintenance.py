@@ -1,6 +1,10 @@
 import datetime
-from odoo import models, fields, api, exceptions
+from odoo import api, fields, models, _, exceptions
+from odoo.exceptions import UserError
+
+
 from urllib.parse import quote
+
 
 import base64
 import uuid
@@ -10,6 +14,14 @@ import logging
 import os
 
 _logger = logging.getLogger(__name__)
+
+search_types = {
+    "leaseId": "kontraktsnummer",
+    "rentalObjectId": "hyresobjekt",
+    "contactCode": "kundnummer",
+    "pnr": "personnummer",
+    "phoneNumber": "telefonnummer",
+}
 
 
 def is_local():
@@ -66,7 +78,10 @@ class OneCoreMaintenanceRequest(models.Model):
         readonly=False,
     )
     maintenance_request_category_id = fields.Many2one(
-        "maintenance.request.category", string="Ärendekategori"
+        "maintenance.request.category",
+        string="Ärendekategori",
+        required=True,
+        store=True,
     )
     start_date = fields.Date("Startdatum", store=True)
 
@@ -246,6 +261,132 @@ class OneCoreMaintenanceRequest(models.Model):
         store=False,
     )
 
+    empty_tenant = fields.Boolean(
+        string="No tenant", store=False, compute="_compute_empty_tenant"
+    )
+
+    recently_added_tenant = fields.Boolean(
+        string="Recently added tenant", store=True, default=False
+    )
+
+    floor_plan_image = fields.Image(
+        store=False, readonly=True, compute="_compute_floor_plan"
+    )
+
+    @api.depends("rental_property_id", "rental_property_option_id")
+    def _compute_floor_plan(self):
+        for record in self:
+            id = (
+                record.rental_property_id
+                if record.rental_property_id
+                else record.rental_property_option_id
+            )
+
+            if id and record.space_caption == "Lägenhet":
+                url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
+                response = requests.get(url)
+                if response.status_code == 200:
+                    record.floor_plan_image = base64.b64encode(response.content)
+                else:
+                    record.floor_plan_image = ""
+            else:
+                record.floor_plan_image = ""
+
+    @api.depends("recently_added_tenant")
+    def _compute_empty_tenant(self):
+        for record in self:
+            if record.lease_name and record.create_date or not record.create_date:
+                record.empty_tenant = False
+            else:
+                record.empty_tenant = True
+
+        if self.recently_added_tenant and self.tenant_id:
+            # Check if the tenant was created more than two weeks ago
+            if (datetime.datetime.now() - self.tenant_id.create_date).days > 14:
+                for record in self:
+                    record.recently_added_tenant = False
+        else:
+            for record in self:
+                record.recently_added_tenant = False
+
+        if self.rental_property_id and not self.lease_id:  # Empty tenant / lease
+            data = self.fetch_property_data(
+                self.rental_property_id.name, "rentalObjectId"
+            )
+            if not data:
+                return
+
+            for property in data:
+                if not property["leases"] or len(property["leases"]) == 0:
+                    return  # No leases found in response.
+
+                for lease in property["leases"]:
+                    if lease["lastDebitDate"] is not None:  # Skip terminated leases
+                        continue
+
+                    new_lease_record = self.env["maintenance.lease"].create(
+                        {
+                            "lease_id": lease["leaseId"],
+                            "name": lease["leaseId"],
+                            "lease_number": lease["leaseNumber"],
+                            "lease_type": lease["type"],
+                            "lease_start_date": lease["leaseStartDate"],
+                            "lease_end_date": lease["leaseEndDate"],
+                            "contract_date": lease["contractDate"],
+                            "approval_date": lease["approvalDate"],
+                        }
+                    )
+
+                    for record in self:
+                        record.lease_id = new_lease_record.id
+
+                    if new_lease_record:
+                        for tenant in lease["tenants"]:
+                            name = self._get_tenant_name(tenant)
+                            phone_number = self._get_main_phone_number(tenant)
+
+                            recently_added_tenant_record = self.env[
+                                "maintenance.tenant"
+                            ].create(
+                                {
+                                    "name": name,
+                                    "contact_code": tenant["contactCode"],
+                                    "contact_key": tenant["contactKey"],
+                                    "national_registration_number": tenant[
+                                        "nationalRegistrationNumber"
+                                    ],
+                                    "email_address": tenant.get("emailAddress"),
+                                    "phone_number": phone_number,
+                                    "is_tenant": tenant["isTenant"],
+                                }
+                            )
+
+                            for record in self:
+                                record.tenant_id = recently_added_tenant_record.id
+                                record.recently_added_tenant = True
+                                record.empty_tenant = False
+
+    def _get_tenant_name(self, tenant):
+        """
+        Construct the tenant's name based on available information.
+        """
+        if tenant.get("firstName") and tenant.get("lastName"):
+            return tenant["firstName"] + " " + tenant["lastName"]
+        return tenant.get("fullName", "")
+
+    def _get_main_phone_number(self, tenant):
+        """
+        Extract the main phone number from the tenant's phone numbers.
+        """
+        return next(
+            (
+                item["phoneNumber"]
+                for item in tenant.get("phoneNumbers", [])
+                if item["isMainNumber"] == 1
+            ),
+            None,
+        )
+
     # This functions searches for notifications from Mimer.nu that are unread for the logged in user.
     @api.depends(
         "message_ids.notification_ids.is_read",
@@ -375,9 +516,22 @@ class OneCoreMaintenanceRequest(models.Model):
             return response.json().get("content", {})
         except requests.HTTPError as http_err:
             _logger.error(f"HTTP error occurred: {http_err}")
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s. Det verkar som att det inte finns någon koppling till OneCore-servern.",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
         except Exception as err:
             _logger.error(f"An error occurred: {err}")
-        return None
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
 
     def update_form_options(self, search_by_number, search_type):
         _logger.info("Updating rental property options")
@@ -466,19 +620,9 @@ class OneCoreMaintenanceRequest(models.Model):
                         )
 
                         if not existing_tenant:
-                            if tenant.get("firstName") and tenant.get("lastName"):
-                                name = tenant["firstName"] + " " + tenant["lastName"]
-                            else:
-                                name = tenant.get("fullName", "")
+                            name = self._get_tenant_name(tenant)
+                            phone_number = self._get_main_phone_number(tenant)
 
-                            phone_number = next(
-                                (
-                                    item["phoneNumber"]
-                                    for item in tenant.get("phoneNumbers")
-                                    if item["isMainNumber"] == 1
-                                ),
-                                None,
-                            )
                             tenant_option = self.env[
                                 "maintenance.tenant.option"
                             ].create(
@@ -487,9 +631,9 @@ class OneCoreMaintenanceRequest(models.Model):
                                     "name": name,
                                     "contact_code": tenant["contactCode"],
                                     "contact_key": tenant["contactKey"],
-                                    "national_registration_number": tenant[
+                                    "national_registration_number": tenant.get(
                                         "nationalRegistrationNumber"
-                                    ],
+                                    ),
                                     "email_address": tenant.get("emailAddress"),
                                     "phone_number": phone_number,
                                     "is_tenant": tenant["isTenant"],
@@ -497,10 +641,34 @@ class OneCoreMaintenanceRequest(models.Model):
                             )
         else:
             _logger.info("No data found in response.")
+            raise UserError(
+                _(
+                    "Kunde inte hitta något resultat för %s: %s",
+                    search_types[search_type],
+                    search_by_number,
+                )
+            )
 
     @api.onchange("search_by_number", "search_type")
     def _compute_search(self):
-        if self.search_by_number:
+
+        min_string_length = (
+            6
+            if self.search_type == "contactCode"
+            else 12 if self.search_type == "pnr" else 8
+        )
+
+        if self.search_by_number and len(self.search_by_number) >= min_string_length:
+
+            if self.search_type == "pnr":
+                # Check if the first two digits are valid
+                if (
+                    str(self.search_by_number)[:2] != "20"
+                    and str(self.search_by_number)[:2] != "19"
+                ):
+                    # Invalid personal number, dont search
+                    return
+
             for record in self:
                 record.update_form_options(record.search_by_number, record.search_type)
                 property_records = self.env[
@@ -540,12 +708,14 @@ class OneCoreMaintenanceRequest(models.Model):
             [("user_id", "=", self.env.user.id)]
         ).unlink()
 
-    @api.depends("request_date", "priority_expanded")
+    @api.depends("request_date", "start_date", "priority_expanded")
     def _compute_due_date(self):
         for record in self:
-            if record.request_date and record.priority_expanded:
+            base_date = record.start_date if record.start_date else record.request_date
+
+            if base_date and record.priority_expanded:
                 record.due_date = fields.Date.add(
-                    record.request_date, days=int(record.priority_expanded)
+                    base_date, days=int(record.priority_expanded)
                 )
 
     @api.onchange("rental_property_option_id")
@@ -820,6 +990,15 @@ class OneCoreMaintenanceRequest(models.Model):
                 if vals["stage_id"] in restricted_stages.ids:
                     raise exceptions.UserError(
                         "Du har inte behörighet att flytta detta ärende till Avslutad"
+                    )
+
+            if not self.user_id:
+                allowed_stages = self.env["maintenance.stage"].search(
+                    [("name", "in", ["Väntar på handläggning", "Avslutad"])]
+                )
+                if vals["stage_id"] not in allowed_stages.ids:
+                    raise exceptions.UserError(
+                        "Ingen resurs är tilldelad. Vänligen välj en resurs."
                     )
 
         if "kanban_state" not in vals and "stage_id" in vals:

@@ -6,7 +6,7 @@
                 <b class="o_kanban_record_title">
                     <t t-esc="record.name.raw_value"/>
                 </b>
-                <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value">
+                <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value || record.recently_added_tenant.raw_value">
                     <span class="mimer-badge">
                         Ny kundinfo
                     </span>
