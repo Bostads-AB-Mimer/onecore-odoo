@@ -498,6 +498,31 @@
             </field>
         </record>
 
+        <record id="hr_equipment_request_view_tree_extension" model="ir.ui.view">
+            <field name="name">equipment.request.tree</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_tree" />
+            <field name="arch" type="xml">
+                <xpath expr="//tree" position="replace">
+                    <tree string="maintenance Request" multi_edit="1" sample="1">
+                        <field name="message_needaction" column_invisible="True" />
+                        <field name="id" />
+                        <field name="name" />
+                        <field name="request_date" groups="base.group_no_one" />
+                        <field name="address" />
+                        <field name="user_id" />
+                        <field name="maintenance_team_id" />
+                        <field name="due_date" />
+                        <field name="stage_id" />
+                        <field name="master_key" />
+                        <field name="rental_property_id" />
+                        <field name="company_id" readonly="1" groups="base.group_multi_company" />
+                        <field name="activity_exception_decoration" widget="activity_exception" />
+                    </tree>
+                </xpath>
+            </field>
+        </record>
+
         <record id="maintenance_request_category_action" model="ir.actions.act_window">
             <field name="name">Ärendekategorier</field>
             <field name="res_model">maintenance.request.category</field>
