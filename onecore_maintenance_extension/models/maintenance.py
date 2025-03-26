@@ -274,7 +274,9 @@ class OneCoreMaintenanceRequest(models.Model):
     )
 
     special_attention = fields.Boolean(
-        string="Viktig kundinfo", readonly=True, default=True
+        string="Viktig kundinfo",
+        related="tenant_id.special_attention",
+        depends=["tenant_id"],
     )
 
     @api.depends("rental_property_id", "rental_property_option_id")
