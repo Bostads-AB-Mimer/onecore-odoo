@@ -2,8 +2,18 @@
 
 import { patch } from "@web/core/utils/patch";
 import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
+import { useService } from "@web/core/utils/hooks";
+import ConfirmDialog from "./confirm_dialog";
 
 patch(StatusBarField.prototype, {
+  setup() {
+    super.setup();
+    this.dialogService = useService("dialog");
+    this.userIsExternalContractor =
+      this.props.record.model.config.resModel === "maintenance.request" &&
+      this.props.record.data.user_is_external_contractor;
+  },
+
   getAllItems() {
     const { foldField, name, record } = this.props;
     const currentValue = record.data[name];
@@ -11,9 +21,6 @@ patch(StatusBarField.prototype, {
     if (this.field.type === "many2one") {
       // Many2one
       const currentStageName = record.data.stage_id[1];
-      const userIsExternalContractor =
-        record.model.config.resModel === "maintenance.request" &&
-        record.data.user_is_external_contractor;
 
       return this.specialData.data.map((option) => ({
         value: option.id,
@@ -23,7 +30,7 @@ patch(StatusBarField.prototype, {
         isDisabled:
           (currentStageName === "Väntar på handläggning" &&
             !record.data.user_id) ||
-          (userIsExternalContractor &&
+          (this.userIsExternalContractor &&
             (option.display_name === "Avslutad" ||
               currentStageName === "Avslutad" ||
               currentStageName === "Utförd")),
@@ -44,6 +51,21 @@ patch(StatusBarField.prototype, {
         isFolded: false,
         isSelected: value === currentValue,
       }));
+    }
+  },
+
+  async selectItem(item) {
+    if (this.userIsExternalContractor && item.label === "Utförd") {
+      const confirmed = await ConfirmDialog(
+        this.dialogService,
+        "Hej",
+        "Om du gör detta kan du inte ändra tillbaka"
+      );
+      if (confirmed) {
+        super.selectItem(item);
+      }
+    } else {
+      super.selectItem(item);
     }
   },
 });
