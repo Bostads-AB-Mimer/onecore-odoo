@@ -44,6 +44,12 @@
                             domain="[('priority_expanded', '=', '10')]" />
                         <filter string="2 veckor" name="two_weeks"
                             domain="[('priority_expanded', '=', '14')]" />
+                        <filter string="3 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '21')]" />
+                        <filter string="5 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '35')]" />
+                        <filter string="8 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '56')]" />
                         <separator />
                         <filter string="Ej schemalagt" name="unscheduled"
                             domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
