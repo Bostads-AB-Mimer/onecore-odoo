@@ -15,6 +15,7 @@ class OnecoreMaintenanceTenantOption(models.Model):
     phone_number = fields.Char("Telefonnummer")
     email_address = fields.Char("E-postadress")
     is_tenant = fields.Boolean("Är hyresgäst", default=True)
+    special_attention = fields.Boolean(string="Viktig kundinfo", readonly=True)
 
 
 class OnecoreMaintenanceTenant(models.Model):
@@ -28,6 +29,7 @@ class OnecoreMaintenanceTenant(models.Model):
     phone_number = fields.Char("Telefonnummer")
     email_address = fields.Char("E-postadress")
     is_tenant = fields.Boolean("Är hyresgäst", default=True)
+    special_attention = fields.Boolean(string="Viktig kundinfo", readonly=True)
 
     maintenance_request_id = fields.Many2one(
         "maintenance.request", string="Maintenance Request", ondelete="cascade"
