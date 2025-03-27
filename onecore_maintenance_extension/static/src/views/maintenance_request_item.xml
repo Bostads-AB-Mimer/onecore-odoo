@@ -17,6 +17,11 @@
                 od-<t t-esc="record.id.raw_value"/>
                 <br/>
             </span>
+            <span t-if="record.rental_property_id.value">
+                <t t-esc="record.rental_property_id.value"/>
+                <br/>
+            </span>
+
             <span class="oe_grey" t-if="record.address.raw_value">
                 <t t-esc="record.address.raw_value"/>
                 <br/>
