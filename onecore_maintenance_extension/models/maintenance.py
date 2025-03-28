@@ -990,7 +990,43 @@ class OneCoreMaintenanceRequest(models.Model):
             #     _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return maintenance_requests
+    
+    def open_time_report(self):
+        """
+        Open the time report application in a new window.
+        The function passes the estate code as a URL parameter 'p'
+        and the maintenance request ID as a URL parameter 'od'.
+        """
+        self.ensure_one()
+        # Get estate code from either rental property or maintenance unit
+        estate_code = False
+        if self.rental_property_id and self.rental_property_id.estate_code:
+            estate_code = self.rental_property_id.estate_code
+        elif self.maintenance_unit_id and self.maintenance_unit_id.estate_code:
+            estate_code = self.maintenance_unit_id.estate_code
 
+        # Get the base URL from system parameters
+        base_url = self.env['ir.config_parameter'].sudo().get_param('time_report_base_url', 'https://apps.mimer.nu/version-test/tidsrapportering/')
+        
+        # Construct the URL with both estate code and maintenance request ID
+        url = base_url
+        params = []
+        if estate_code:
+            params.append(f"p={estate_code}")
+        
+        # Always add the maintenance request ID
+        params.append(f"od={self.id}")
+        
+        # Join parameters with & if there are multiple
+        if params:
+            url += "?" + "&".join(params)
+                
+        return {
+            'type': 'ir.actions.act_url',
+            'url': url,
+            'target': 'new',  # Opens in a new tab/window
+        }
+        
     def write(self, vals):
         if "stage_id" in vals:
             if self.env.user.has_group(

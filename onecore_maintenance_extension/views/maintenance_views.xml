@@ -400,11 +400,13 @@
                                             name="schedule_date"
                                             help="Det datum arbete är planerat"
                                         />
+                                        
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
                                             invisible="space_caption != 'Lägenhet'"
                                             readonly="user_is_external_contractor" />
+                                            
                                         <field
                                             name="call_between" invisible="not call_between"
                                             string="Kund nås dessa tider"
@@ -420,6 +422,13 @@
                                         <field
                                             name="user_is_external_contractor" invisible="1" />
                                     </group>
+                                    <button name="open_time_report" 
+                                                type="object" 
+                                                string="Öppna tidrapport" 
+                                                icon="fa-clock-o"
+                                                class="btn btn-secondary mt-2 mb-2"
+                                                help="Öppna tidrapporteringssystem"
+                                                invisible="user_is_external_contractor"/>
                                 </div>
                             </div>
                         </div>
@@ -548,5 +557,11 @@
         <record id="base.menu_management" model="ir.ui.menu">
             <field name="groups_id" eval="[(6, 0, [ref('base.group_system'),])]" />
         </record>
+        
+        <record id="time_report_base_url" model="ir.config_parameter">
+    <field name="key">time_report_base_url</field>
+    <field name="value">https://timereport.example.com</field>
+</record>
+        
     </data>
 </odoo>
