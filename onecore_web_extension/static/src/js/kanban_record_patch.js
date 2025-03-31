@@ -27,8 +27,8 @@ patch(KanbanRecord.prototype, {
       ) {
         const confirmed = await ConfirmDialog(
           this.dialogService,
-          "Hej",
-          "Om du gör detta kan du inte ändra tillbaka"
+          "Bekräfta ändring",
+          "Är du säker på att du vill ändra statusen till Utförd? Om du gör detta kan du inte ändra tillbaka."
         );
 
         return confirmed;
