@@ -43,10 +43,15 @@ class OneCoreMailMessage(models.Model):
         },
     )
 
-    def _send_email(self, to_email, subject, message):
+    def _send_email(self, to_email, subject, text, team_name=None):
         onecore_auth = self.env["onecore.auth"]
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
-        data = {"to": to_email, "subject": subject, "message": message}
+        data = {
+            "to": to_email,
+            "subject": subject,
+            "text": text,
+            "externalContractorName": team_name,
+        }
         url = f"{base_url}/workOrders/sendEmail"
 
         try:
@@ -59,10 +64,14 @@ class OneCoreMailMessage(models.Model):
             _logger.error(f"An error occurred: {err}")
         return None
 
-    def _send_sms(self, phone_number, message):
+    def _send_sms(self, phone_number, text, team_name=None):
         onecore_auth = self.env["onecore.auth"]
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
-        data = {"phoneNumber": phone_number, "message": message}
+        data = {
+            "phoneNumber": phone_number,
+            "text": text,
+            "externalContractorName": team_name,
+        }
         url = f"{base_url}/workOrders/sendSms"
 
         try:
@@ -85,10 +94,20 @@ class OneCoreMailMessage(models.Model):
                 subject = f"Ang. serviceanmälan: {the_record.name}"
                 body = values["body"].replace("<br>", "\\n")
 
+                team_name = (
+                    the_record.maintenance_team_id.name
+                    if self.env.user.has_group(
+                        "onecore_maintenance_extension.group_external_contractor"
+                    )
+                    else None
+                )
+
                 # send by sms
                 if values["message_type"] == "tenant_sms":
                     send_sms_result = self._send_sms(
-                        the_record.tenant_id.phone_number, body
+                        the_record.tenant_id.phone_number,
+                        body,
+                        team_name,
                     )
 
                     if send_sms_result is None:
@@ -97,7 +116,10 @@ class OneCoreMailMessage(models.Model):
                 # send by email
                 if values["message_type"] == "tenant_mail":
                     send_email_result = self._send_email(
-                        the_record.tenant_id.email_address, subject, body
+                        the_record.tenant_id.email_address,
+                        subject,
+                        body,
+                        team_name,
                     )
 
                     if send_email_result is None:
@@ -106,10 +128,10 @@ class OneCoreMailMessage(models.Model):
                 # send by email and sms
                 if values["message_type"] == "tenant_mail_and_sms":
                     send_email_result = self._send_email(
-                        the_record.tenant_id.email_address, subject, body
+                        the_record.tenant_id.email_address, subject, body, team_name
                     )
                     send_sms_result = self._send_sms(
-                        the_record.tenant_id.phone_number, body
+                        the_record.tenant_id.phone_number, body, team_name
                     )
 
                     if send_email_result is None and send_sms_result is not None:
