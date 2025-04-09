@@ -330,8 +330,6 @@ class OneCoreMaintenanceRequest(models.Model):
                     return  # No leases found in response.
 
                 for lease in property["leases"]:
-                    if lease["lastDebitDate"] is not None:  # Skip terminated leases
-                        continue
 
                     new_lease_record = self.env["maintenance.lease"].create(
                         {
@@ -340,7 +338,7 @@ class OneCoreMaintenanceRequest(models.Model):
                             "lease_number": lease["leaseNumber"],
                             "lease_type": lease["type"],
                             "lease_start_date": lease["leaseStartDate"],
-                            "lease_end_date": lease["leaseEndDate"],
+                            "lease_end_date": lease["lastDebitDate"],
                             "contract_date": lease["contractDate"],
                             "approval_date": lease["approvalDate"],
                         }
@@ -513,9 +511,6 @@ class OneCoreMaintenanceRequest(models.Model):
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
         params = {
             "handler": search_type,
-            "includeTerminatedLeases": (
-                "true" if search_type == "rentalObjectId" else "false"
-            ),  # We want to be able to search for rental objects without a current lease
         }
         url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
 
@@ -605,8 +600,6 @@ class OneCoreMaintenanceRequest(models.Model):
                     return
 
                 for lease in property["leases"]:
-                    if lease["lastDebitDate"] is not None:  # Skip terminated leases
-                        continue
 
                     lease_option = self.env["maintenance.lease.option"].create(
                         {
@@ -616,7 +609,7 @@ class OneCoreMaintenanceRequest(models.Model):
                             "rental_property_option_id": rental_property_option.id,
                             "lease_type": lease["type"],
                             "lease_start_date": lease["leaseStartDate"],
-                            "lease_end_date": lease["leaseEndDate"],
+                            "lease_end_date": lease["lastDebitDate"],
                             "contract_date": lease["contractDate"],
                             "approval_date": lease["approvalDate"],
                         }
