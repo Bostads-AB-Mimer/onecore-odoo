@@ -13,6 +13,7 @@
         "security/maintenance.xml",
         "security/ir.model.access.csv",
         "views/maintenance_views.xml",
+        "views/maintenance_team_view.xml",
         "views/mobile_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",
