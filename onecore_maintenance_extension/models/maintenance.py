@@ -3,9 +3,7 @@ from odoo import api, fields, models, _, exceptions
 from odoo.exceptions import UserError
 
 
-from urllib.parse import quote
-
-
+import urllib.parse
 import base64
 import uuid
 import requests
@@ -511,7 +509,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 "true" if search_type == "rentalObjectId" else "false"
             ),  # We want to be able to search for rental objects without a current lease
         }
-        url = f"{base_url}/workOrderData/{quote(str(search_by_number), safe='')}"
+        url = f"{base_url}/workOrderData/{urllib.parse.quote(str(search_by_number), safe='')}"
 
         try:
             response = onecore_auth.onecore_request("GET", url, params=params)
@@ -990,7 +988,7 @@ class OneCoreMaintenanceRequest(models.Model):
             #     _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return maintenance_requests
-    
+
     def open_time_report(self):
         """
         Open the time report application in a new window.
@@ -1006,27 +1004,28 @@ class OneCoreMaintenanceRequest(models.Model):
             estate_code = self.maintenance_unit_id.estate_code
 
         # Get the base URL from system parameters
-        base_url = self.env['ir.config_parameter'].sudo().get_param('time_report_base_url', 'https://apps.mimer.nu/version-test/tidsrapportering/')
-        
+        base_url = (
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param(
+                "time_report_base_url",
+                "https://apps.mimer.nu/version-test/tidsrapportering/",
+            )
+        )
+
         # Construct the URL with both estate code and maintenance request ID
         url = base_url
-        params = []
+        params = {"od": self.id}
         if estate_code:
-            params.append(f"p={estate_code}")
-        
-        # Always add the maintenance request ID
-        params.append(f"od={self.id}")
-        
-        # Join parameters with & if there are multiple
-        if params:
-            url += "?" + "&".join(params)
-                
+            params["p"] = estate_code
+        url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
         return {
-            'type': 'ir.actions.act_url',
-            'url': url,
-            'target': 'new',  # Opens in a new tab/window
+            "type": "ir.actions.act_url",
+            "url": url,
+            "target": "new",  # Opens in a new tab/window
         }
-        
+
     def write(self, vals):
         if "stage_id" in vals:
             if self.env.user.has_group(
