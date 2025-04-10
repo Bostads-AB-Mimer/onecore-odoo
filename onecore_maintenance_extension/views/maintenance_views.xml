@@ -314,8 +314,7 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
-                                        <field name="contract_date" invisible="not contract_date"
-                                            string="Kontraktsdatum" />
+                                        
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"
