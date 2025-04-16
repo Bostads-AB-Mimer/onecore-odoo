@@ -413,6 +413,11 @@
                                             invisible="space_caption != 'Lägenhet'"
                                             readonly="user_is_external_contractor" />
                                         <field
+                                            name="hidden_from_my_pages"
+                                            string="Dold från Mimer.nu"
+                                            widget="boolean_toggle"
+                                            readonly="user_is_external_contractor" />
+                                        <field
                                             name="call_between" invisible="not call_between"
                                             string="Kund nås dessa tider"
                                             readonly="user_is_external_contractor" />
@@ -501,6 +506,7 @@
                     <field name="space_caption" />
                     <field name="create_date" />
                     <field name="master_key" />
+                    <field name="hidden_from_my_pages" />
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                 </xpath>
@@ -528,6 +534,7 @@
                         <field name="due_date" />
                         <field name="stage_id" />
                         <field name="master_key" />
+                        <field name="hidden_from_my_pages" />
                         <field name="rental_property_id" />
                         <field name="company_id" readonly="1" groups="base.group_multi_company" />
                         <field name="activity_exception_decoration" widget="activity_exception" />
