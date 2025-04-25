@@ -15,6 +15,7 @@
                         <field string="Telefonnummer" name="phone_number" />
                         <field string="Kundnummer" name="contact_code" />
                         <field string="Tvättstuga" name="maintenance_unit_id" />
+                        <field string="Hyresobjekt" name="rental_property_id"/>
                         <field name="category_id" />
                         <field name="user_id" />
                         <field name="equipment_id" />
