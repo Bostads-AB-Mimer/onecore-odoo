@@ -85,6 +85,10 @@ class OneCoreMaintenanceRequest(models.Model):
     )
     start_date = fields.Date("Startdatum", store=True)
 
+    hidden_from_my_pages = fields.Boolean(
+        "Dold från Mimer.nu", store=True, default=False
+    )
+
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
     rental_property_id = fields.Many2one(

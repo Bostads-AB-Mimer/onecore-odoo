@@ -42,6 +42,7 @@
         <field name="space_caption" />
         <field name="create_date" />
         <field name="master_key" />
+        <field name="hidden_from_my_pages" />
         <field name="due_date" />
         <field name="today_date" />
         <field name="new_mimer_notification" />
