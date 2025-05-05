@@ -2,9 +2,9 @@
 
 ## Local development
 
-- Get Odoo up and running locally by following this [guide](https://www.odoo.com/documentation/master/administration/on_premise/source.html)
+- Get Odoo 17 up and running locally by following this [guide](https://www.odoo.com/documentation/17.0/administration/on_premise/source.html)
 - Clone this repo (duh)
-- Run Odoo with `ENV=local python3 odoo-bin --addons-path="PATH TO onecore-odoo" -d odoo --db_user={DB_USER} --db_host={DB_HOST} --db_port={DB_PORT} -i base -u onecore_maintenance_extension -u onecore_mail_extension -u onecore_auth -u onecore_ui -u onecore_web_extension --dev xml`
+- Run Odoo with `ENV=local python3 odoo-bin --addons-path="addons, {PATH TO onecore-odoo}" -d odoo --db_user={DB_USER} --db_host={DB_HOST} --db_port={DB_PORT} -i base -u onecore_maintenance_extension -u onecore_mail_extension -u onecore_auth -u onecore_ui -u onecore_web_extension --dev xml`
 
 ## Deploying to test environment
 
