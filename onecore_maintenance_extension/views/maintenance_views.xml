@@ -406,11 +406,13 @@
                                             name="schedule_date"
                                             help="Det datum arbete är planerat"
                                         />
+
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
                                             invisible="space_caption != 'Lägenhet'"
                                             readonly="user_is_external_contractor" />
+
                                         <field
                                             name="hidden_from_my_pages"
                                             string="Dold från Mimer.nu"
@@ -431,6 +433,13 @@
                                         <field
                                             name="user_is_external_contractor" invisible="1" />
                                     </group>
+                                    <button name="open_time_report"
+                                        type="object"
+                                        string="Öppna tidrapport"
+                                        icon="fa-clock-o"
+                                        class="btn btn-secondary mt-2 mb-2"
+                                        help="Öppna tidrapporteringssystem"
+                                        invisible="user_is_external_contractor" />
                                 </div>
                             </div>
                         </div>
