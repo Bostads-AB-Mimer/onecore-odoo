@@ -103,9 +103,9 @@
                 <xpath expr="//group[1]" position="before">
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
                         invisible="create_date != False">
+                        <field class="w-25 my-0 p-2 border-end bg-light" name="search_type" />
                         <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
                             placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
-                        <field class="w-25 my-0 p-2 border-start bg-light" name="search_type" />
                     </div>
                 </xpath>
 
