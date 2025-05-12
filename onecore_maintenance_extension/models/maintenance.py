@@ -1006,7 +1006,6 @@ class OneCoreMaintenanceRequest(models.Model):
         # Get the base URL from system parameters
         base_url = (
             self.env["ir.config_parameter"]
-            .sudo()
             .get_param(
                 "time_report_base_url",
                 "https://apps.mimer.nu/version-test/tidsrapportering/",
