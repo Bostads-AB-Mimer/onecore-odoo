@@ -503,6 +503,13 @@ class OneCoreMaintenanceRequest(models.Model):
         }
 
     @api.model
+    def fetch_is_hidden_from_my_pages(self, thread_id):
+        record = self.env["maintenance.request"].search([("id", "=", thread_id)])
+        return {
+            "hidden_from_my_pages": record.hidden_from_my_pages,
+        }
+
+    @api.model
     def is_user_external_contractor(self):
         is_external_contractor = self.env.user.has_group(
             "onecore_maintenance_extension.group_external_contractor"

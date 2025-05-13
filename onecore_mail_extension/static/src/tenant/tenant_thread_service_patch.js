@@ -10,6 +10,20 @@ patch(ThreadService.prototype, {
     super.setup(env, services);
     this.notificationService = services["notification"];
   },
+  async getIsHiddenFromMyPages(threadId) {
+    try {
+      const result = await this.rpc("/web/dataset/call_kw", {
+        model: "maintenance.request",
+        method: "fetch_is_hidden_from_my_pages",
+        args: [threadId],
+        kwargs: {},
+      });
+      return result;
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      return null;
+    }
+  },
   async getTenantContacts(threadId) {
     try {
       const result = await this.rpc("/web/dataset/call_kw", {

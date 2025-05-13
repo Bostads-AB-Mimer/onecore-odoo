@@ -2,14 +2,29 @@
 <templates xml:space="preserve">
 
     <t t-name="onecore_mail_extension.TenantComposer" t-inherit="mail.Composer" t-inherit-mode="extension" owl="1">
-        
+
         <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
         <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
             <attribute name="t-if">props.type != 'message'</attribute>    
         </xpath>
 
+        <!-- Hide the send button if isHiddenFrom my pages is true-->
+        <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[2]" position="attributes">
+            <attribute name="t-if">!state.isHiddenFromMyPages</attribute>  
+        </xpath>
+
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
-            <t t-if="props.type === 'message'">
+            
+            
+            <t t-if="state.isHiddenFromMyPages">
+                <div class="alert alert-warning mt-3">
+                    <strong>Information</strong>
+                    <p>Det här ärendet är dolt från Mimer.nu och digital kommunikation med hyresgäst är därför
+                stängd.</p>
+                </div>
+            </t>
+
+            <t t-if="props.type === 'message' and !state.isHiddenFromMyPages">
                 <p class="mt-3"><strong>Skicka som</strong></p>
                 <div class="d-flex mb-3">
                     <CheckBox disabled="!state.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="state.sendSMS" onChange.bind="onSMSCheckboxChange">
