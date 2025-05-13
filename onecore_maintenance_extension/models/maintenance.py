@@ -957,7 +957,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
 
-            if request.phone_number:
+            if request.phone_number and not request.hidden_from_my_pages:
                 request._send_created_sms(request.phone_number)
 
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
