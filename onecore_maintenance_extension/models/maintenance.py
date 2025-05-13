@@ -501,6 +501,13 @@ class OneCoreMaintenanceRequest(models.Model):
         }
 
     @api.model
+    def fetch_is_hidden_from_my_pages(self, thread_id):
+        record = self.env["maintenance.request"].search([("id", "=", thread_id)])
+        return {
+            "hidden_from_my_pages": record.hidden_from_my_pages,
+        }
+
+    @api.model
     def is_user_external_contractor(self):
         is_external_contractor = self.env.user.has_group(
             "onecore_maintenance_extension.group_external_contractor"
@@ -955,7 +962,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 request.close_date = fields.Date.today()
             maintenance_requests.activity_update()
 
-            if request.phone_number:
+            if request.phone_number and not request.hidden_from_my_pages:
                 request._send_created_sms(request.phone_number)
 
             # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.

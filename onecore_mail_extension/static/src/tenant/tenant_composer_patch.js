@@ -17,15 +17,21 @@ patch(Composer.prototype, {
       sendEmail: false,
       tenantHasEmail: false,
       tenantHasPhoneNumber: false,
+      isHiddenFromMyPages: false,
     });
     this.state.active = true;
 
     onMounted(async () => {
+      const isHiddenFromMyPagesResult =
+        await this.threadService.getIsHiddenFromMyPages(this.thread.id);
+
       const tenantResult = await this.threadService.getTenantContacts(
         this.thread.id
       );
       this.state.tenantHasEmail = tenantResult.has_email;
       this.state.tenantHasPhoneNumber = tenantResult.has_phone_number;
+      this.state.isHiddenFromMyPages =
+        isHiddenFromMyPagesResult.hidden_from_my_pages;
     });
   },
   onSMSCheckboxChange(checked) {
