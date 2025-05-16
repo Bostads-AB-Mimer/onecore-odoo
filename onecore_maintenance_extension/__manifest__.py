@@ -21,6 +21,7 @@
     ],
     "assets": {
         "web.assets_backend": [
+            "onecore_maintenance_extension/static/src/js/*.js",
             "onecore_maintenance_extension/static/src/views/*.xml",
             "onecore_maintenance_extension/static/src/scss/*.scss",
         ],
