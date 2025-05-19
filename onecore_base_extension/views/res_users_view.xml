@@ -1,0 +1,16 @@
+<odoo>
+    <!-- Hide api key from user preferences -->
+    <record id="view_users_form_hide_api_keys" model="ir.ui.view">
+        <field name="name">res.users.form.hide.api.keys</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form_simple_modif" />
+
+        <!-- Hide the third group in account security (api keys) for non-admin users -->
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='page_account_security']/group[3]" position="attributes">
+                <attribute name="groups">base.group_system</attribute>
+            </xpath>
+        </field>
+
+    </record>
+</odoo>
