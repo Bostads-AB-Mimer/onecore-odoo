@@ -3,7 +3,7 @@
     "category": "ONECore",
     "summary": "Extends the Odoo base module with ONECore specific customizations.",
     "sequence": 100,
-    "category": "Productivity/Discuss",
+    "category": "ONECore",
     "version": "1.0",
     "depends": ["base"],
     "data": [
