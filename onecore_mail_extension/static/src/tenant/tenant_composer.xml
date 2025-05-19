@@ -8,7 +8,7 @@
             <attribute name="t-if">props.type != 'message'</attribute>    
         </xpath>
 
-        <!-- Hide the send button if isHiddenFrom my pages is true-->
+        <!-- Hide the send button if isHiddenFromMyPages is true-->
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[2]" position="attributes">
             <attribute name="t-if">!state.isHiddenFromMyPages</attribute>  
         </xpath>
