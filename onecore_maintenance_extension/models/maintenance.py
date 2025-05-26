@@ -28,6 +28,7 @@ def is_local():
 
 class OneCoreMaintenanceRequest(models.Model):
     _inherit = "maintenance.request"
+    _order = "recently_added_tenant desc, request_date desc"
 
     uuid = fields.Char(
         string="UUID", default=lambda self: str(uuid.uuid4()), readonly=True, copy=False
