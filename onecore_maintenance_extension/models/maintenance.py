@@ -811,13 +811,6 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.is_tenant = record.tenant_option_id.is_tenant
                 record.special_attention = record.tenant_option_id.special_attention
 
-    def _resource_assigned(self):
-        resource_allocated_stage = self.env["maintenance.stage"].search(
-            [("name", "=", "Resurs tilldelad")]
-        )
-        if resource_allocated_stage:
-            self.write({"stage_id": resource_allocated_stage.id})
-
     def _send_created_sms(self, phone_number):
         mail_message = self.env["mail.message"]
         message = f"Hej {self.tenant_name}!\n\nTack för din serviceanmälan. Du kan följa, uppdatera och prata med oss om ditt ärende på Mina sidor."
@@ -953,8 +946,14 @@ class OneCoreMaintenanceRequest(models.Model):
 
             if request.owner_user_id or request.user_id:
                 request._add_followers()
+
             if request.user_id and request.stage_id.name == "Väntar på handläggning":
-                request._resource_assigned()
+                resource_allocated_stage = self.env["maintenance.stage"].search(
+                    [("name", "=", "Resurs tilldelad")]
+                )
+                if resource_allocated_stage:
+                    request.stage_id = resource_allocated_stage.id
+
             if request.equipment_id and not request.maintenance_team_id:
                 request.maintenance_team_id = request.equipment_id.maintenance_team_id
             if request.close_date and not request.stage_id.done:
@@ -965,41 +964,6 @@ class OneCoreMaintenanceRequest(models.Model):
 
             if request.phone_number and not request.hidden_from_my_pages:
                 request._send_created_sms(request.phone_number)
-
-            # The below is  a Mimer added API-call to create errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
-            # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/'''
-
-            # Only proceed if rental_property_option_id is present
-            # if request.rental_property_option_id:
-            #     ICP = self.env['ir.config_parameter'].sudo()
-            #     token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
-            #     if not token:
-            #         _logger.error("Bearer token is not set in system parameters.")
-            #         return maintenance_requests
-
-            #     webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/createerrand"
-            #     headers = {
-            #         'Authorization': f'Bearer {token}',
-            #         'Content-Type': 'application/json'
-            #     }
-
-            #      # Convert HTML to plain text
-            #     description_text = html2plaintext(request.description) if request.description else ""
-
-            #     data = {
-            #         "rentalObjectId": request.rental_property_option_id.name,
-            #         "title": request.name,
-            #         "odooId": str(request.id),  # The unique Odoo ID
-            #         "description": description_text,
-            #         "state": request.stage_id.name,
-            #     }
-            #     try:
-            #         response = requests.post(webhook_url, headers=headers, json=data)
-            #         _logger.info(f"Webhook sent. Status Code: {response.status_code}, Response: {response.text}")
-            #     except Exception as e:
-            #         _logger.error(f"Failed to send webhook: {e}")
-            # else:
-            #     _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
 
         return maintenance_requests
 
@@ -1018,12 +982,9 @@ class OneCoreMaintenanceRequest(models.Model):
             estate_code = self.maintenance_unit_id.estate_code
 
         # Get the base URL from system parameters
-        base_url = (
-            self.env["ir.config_parameter"]
-            .get_param(
-                "time_report_base_url",
-                "https://apps.mimer.nu/version-test/tidsrapportering/",
-            )
+        base_url = self.env["ir.config_parameter"].get_param(
+            "time_report_base_url",
+            "https://apps.mimer.nu/version-test/tidsrapportering/",
         )
 
         # Construct the URL with both estate code and maintenance request ID
@@ -1070,101 +1031,15 @@ class OneCoreMaintenanceRequest(models.Model):
                         "Ingen resurs är tilldelad. Vänligen välj en resurs."
                     )
 
-        if "kanban_state" not in vals and "stage_id" in vals:
-            vals["kanban_state"] = "normal"
-        if (
-            "stage_id" in vals
-            and self.maintenance_type == "preventive"
-            and self.recurring_maintenance
-            and self.env["maintenance.stage"].browse(vals["stage_id"]).done
-        ):
-            schedule_date = self.schedule_date or fields.Datetime.now()
-            schedule_date += relativedelta(
-                **{f"{self.repeat_unit}s": self.repeat_interval}
-            )
-            if (
-                self.repeat_type == "forever"
-                or schedule_date.date() <= self.repeat_until
-            ):
-                self.copy({"schedule_date": schedule_date})
-        res = super().write(vals)
-
-        if vals.get("owner_user_id") or vals.get("user_id"):
-            self._add_followers()
         if vals.get("user_id") and self.stage_id.name == "Väntar på handläggning":
-            self._resource_assigned()
-        if "stage_id" in vals:
-            self.filtered(lambda m: m.stage_id.done).write(
-                {"close_date": fields.Date.today()}
+            resource_allocated_stage = self.env["maintenance.stage"].search(
+                [("name", "=", "Resurs tilldelad")]
             )
-            self.filtered(lambda m: not m.stage_id.done).write({"close_date": False})
-            self.activity_feedback(["maintenance.mail_act_maintenance_request"])
-            self.activity_update()
-        if vals.get("user_id") or vals.get("schedule_date"):
-            self.activity_update()
-        if self._need_new_activity(vals):
-            # need to change description of activity also so unlink old and create new activity
-            self.activity_unlink(["maintenance.mail_act_maintenance_request"])
-            self.activity_update()
+            vals.update({"stage_id": resource_allocated_stage.id})
+        elif vals.get("user_id") is False and self.stage_id.name == "Resurs tilldelad":
+            initial_stage = self.env["maintenance.stage"].search(
+                [("name", "=", "Väntar på handläggning")]
+            )
+            vals.update({"stage_id": initial_stage.id})
 
-        # The below is  a Mimer added API-call to update errands in other app to test out a webhook, the api call to apps.mimer.nu is only to be used for testing.
-        # Created errands will be created in a test app and can be viewed at https://apps.mimer.nu/version-test/odootest/
-
-        # for request in self:
-        #     # Only proceed if rental_property_option_id is present
-        #     if request.rental_property_option_id:
-        #         ICP = request.env['ir.config_parameter'].sudo()
-        #         token = ICP.get_param('x_webhook_bearer_token', default=None) #Note that this token needs to be added in the odoo interface, using developersettings.
-        #         if not token:
-        #             _logger.error("Bearer token is not set in system parameters.")
-        #             continue  # Skip this iteration
-
-        #         webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/updateErrand"
-        #         headers = {
-        #             'Authorization': f'Bearer {token}',
-        #             'Content-Type': 'application/json'
-        #         }
-
-        #         # Assuming you want to update the same fields as those you send when creating an errand
-        #         description_text = html2plaintext(request.description) if request.description else ""
-        #         data = {
-        #             "odooId": str(request.id),
-        #             "rentalObjectId": request.rental_property_option_id.name,
-        #             "title": request.name,
-        #             "description": description_text,
-        #             "state": request.stage_id.name,
-        #         }
-
-        #         try:
-        #             response = requests.post(webhook_url, headers=headers, json=data)
-        #             _logger.info(f"Webhook for update sent. Status Code: {response.status_code}, Response: {response.text}")
-        #         except Exception as e:
-        #             _logger.error(f"Failed to send update webhook: {e}")
-
-        return res
-
-    # Mimer created webhook to delete errands from external testapp. https://apps.mimer.nu/version-test/odootest/
-    # def unlink(self):
-    #     ICP = self.env['ir.config_parameter'].sudo()
-    #     token = ICP.get_param('x_webhook_bearer_token', default=None)
-    #     if not token:
-    #         _logger.error("Bearer token is not set in system parameters.")
-    #     else:
-    #         for request in self:
-    #             if request.rental_property_option_id:
-    #                 webhook_url = "https://apps.mimer.nu/version-test/api/1.1/wf/deleteerrand"
-    #                 headers = {
-    #                     'Authorization': f'Bearer {token}',
-    #                     'Content-Type': 'application/json'
-    #                 }
-    #                 data = {"odooId": str(request.id)}
-    #                 try:
-    #                     response = requests.post(webhook_url, headers=headers, json=data)
-    #                     if response.status_code != 200:
-    #                         _logger.error(f"Webhook call failed: {response.text}")
-    #                 except Exception as e:
-    #                     _logger.error(f"Error calling webhook: {str(e)}")
-    #             else:
-    #                 _logger.info(f"Webhook not sent. rental_property_option_id is missing for Maintenance Request ID: {request.id}")
-
-    #     return super().unlink()
+        return super().write(vals)
