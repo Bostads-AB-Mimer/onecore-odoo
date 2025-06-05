@@ -224,11 +224,21 @@ class OneCoreMaintenanceRequest(models.Model):
     call_between = fields.Char("Nås mellan", store=True)
     hearing_impaired = fields.Boolean("Hörselnedsättning", store=True)
     space_code = fields.Char("Utrymmeskod", store=True)
+
+    SPACES = [
+        ("Lägenhet", "Lägenhet"),
+        ("Tvättstuga", "Tvättstuga"),
+        ("Uppgång", "Uppgång"),
+        ("Miljöbod", "Miljöbod"),
+        ("Lekplats", "Lekplats"),
+        ("Lokal", "Lokal"),
+        ("Bilplats", "Bilplats"),
+    ]
+
+    SORTED_SPACES = sorted(SPACES)
+
     space_caption = fields.Selection(
-        [
-            ("Lägenhet", "Lägenhet"),
-            ("Tvättstuga", "Tvättstuga"),
-        ],
+        selection=SORTED_SPACES,
         string="Utrymme",
         store=True,
         required=True,
