@@ -46,7 +46,7 @@ class OneCoreMailMessage(models.Model):
     def _send_email(self, to_email, subject, message):
         onecore_auth = self.env["onecore.auth"]
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
-        data = {"to": to_email, "subject": subject, "message": message}
+        data = {"to": to_email, "subject": subject, "text": message}
         url = f"{base_url}/workOrders/sendEmail"
 
         try:
@@ -62,7 +62,7 @@ class OneCoreMailMessage(models.Model):
     def _send_sms(self, phone_number, message):
         onecore_auth = self.env["onecore.auth"]
         base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
-        data = {"phoneNumber": phone_number, "message": message}
+        data = {"phoneNumber": phone_number, "text": message}
         url = f"{base_url}/workOrders/sendSms"
 
         try:
