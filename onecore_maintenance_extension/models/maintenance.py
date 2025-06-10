@@ -226,6 +226,8 @@ class OneCoreMaintenanceRequest(models.Model):
     space_code = fields.Char("Utrymmeskod", store=True)
 
     SPACES = [
+        ("Byggnad", "Byggnad"),
+        ("Fastighet", "Fastighet"),
         ("Lägenhet", "Lägenhet"),
         ("Tvättstuga", "Tvättstuga"),
         ("Uppgång", "Uppgång"),
