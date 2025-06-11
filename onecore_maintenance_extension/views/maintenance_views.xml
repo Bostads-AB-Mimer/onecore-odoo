@@ -15,6 +15,7 @@
                         <field string="Telefonnummer" name="phone_number" />
                         <field string="Kundnummer" name="contact_code" />
                         <field string="Tvättstuga" name="maintenance_unit_id" />
+                        <field string="Hyresobjekt" name="rental_property_id"/>
                         <field name="category_id" />
                         <field name="user_id" />
                         <field name="equipment_id" />
@@ -44,6 +45,12 @@
                             domain="[('priority_expanded', '=', '10')]" />
                         <filter string="2 veckor" name="two_weeks"
                             domain="[('priority_expanded', '=', '14')]" />
+                        <filter string="3 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '21')]" />
+                        <filter string="5 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '35')]" />
+                        <filter string="8 veckor" name="two_weeks"
+                            domain="[('priority_expanded', '=', '56')]" />
                         <separator />
                         <filter string="Ej schemalagt" name="unscheduled"
                             domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
@@ -96,9 +103,9 @@
                 <xpath expr="//group[1]" position="before">
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
                         invisible="create_date != False">
+                        <field class="w-25 my-0 p-2 border-end bg-light" name="search_type" />
                         <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
                             placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
-                        <field class="w-25 my-0 p-2 border-start bg-light" name="search_type" />
                     </div>
                 </xpath>
 
@@ -124,15 +131,22 @@
                 </xpath>
 
                 <xpath expr="//group[1]" position="inside">
-                    <div invisible="not create_date">
-                        <field name="creation_origin" invisible="1" readonly="1"></field>
+                    <field name="special_attention" invisible="1" />
+                    <field name="creation_origin" invisible="1" readonly="1"></field>
 
-                        <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill">
+                    <div>
+                        <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill"
+                            invisible="not create_date">
                             <span invisible="creation_origin != 'internal'">Skapad internt</span>
                             <span invisible="creation_origin != 'mimer-nu'">Från Mimer.nu</span>
                         </div>
-
+                        <div
+                            class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill bg-danger text-white"
+                            invisible="not special_attention">
+                            <span>Viktig kundinfo</span>
+                        </div>
                     </div>
+
                     <div class="d-flex items-center align-items-center fs-5">
                         <p class="fw-bold pt-2 inline-block">Utrymme:</p>
                         <div class="d-flex w-25">
@@ -301,8 +315,7 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
-                                        <field name="contract_date" invisible="not contract_date"
-                                            string="Kontraktsdatum" />
+                                        
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"
@@ -394,10 +407,17 @@
                                             name="schedule_date"
                                             help="Det datum arbete är planerat"
                                         />
+
                                         <field
                                             name="master_key" string="Huvudnyckel"
                                             widget="boolean_toggle"
                                             invisible="space_caption != 'Lägenhet'"
+                                            readonly="user_is_external_contractor" />
+
+                                        <field
+                                            name="hidden_from_my_pages"
+                                            string="Dold från Mimer.nu"
+                                            widget="boolean_toggle"
                                             readonly="user_is_external_contractor" />
                                         <field
                                             name="call_between" invisible="not call_between"
@@ -414,6 +434,13 @@
                                         <field
                                             name="user_is_external_contractor" invisible="1" />
                                     </group>
+                                    <button name="open_time_report"
+                                        type="object"
+                                        string="Öppna tidrapport"
+                                        icon="fa-clock-o"
+                                        class="btn btn-secondary mt-2 mb-2"
+                                        help="Öppna tidrapporteringssystem"
+                                        invisible="user_is_external_contractor" />
                                 </div>
                             </div>
                         </div>
@@ -492,12 +519,39 @@
                     <field name="space_caption" />
                     <field name="create_date" />
                     <field name="master_key" />
+                    <field name="hidden_from_my_pages" />
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
                     <t t-call="onecore_maintenance_extension.maintenance_request_item" />
+                </xpath>
+            </field>
+        </record>
+
+        <record id="hr_equipment_request_view_tree_extension" model="ir.ui.view">
+            <field name="name">equipment.request.tree</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_tree" />
+            <field name="arch" type="xml">
+                <xpath expr="//tree" position="replace">
+                    <tree string="maintenance Request" multi_edit="1" sample="1">
+                        <field name="message_needaction" column_invisible="True" />
+                        <field name="id" />
+                        <field name="name" />
+                        <field name="request_date" groups="base.group_no_one" />
+                        <field name="address" />
+                        <field name="user_id" />
+                        <field name="maintenance_team_id" />
+                        <field name="due_date" />
+                        <field name="stage_id" />
+                        <field name="master_key" />
+                        <field name="hidden_from_my_pages" />
+                        <field name="rental_property_id" />
+                        <field name="company_id" readonly="1" groups="base.group_multi_company" />
+                        <field name="activity_exception_decoration" widget="activity_exception" />
+                    </tree>
                 </xpath>
             </field>
         </record>

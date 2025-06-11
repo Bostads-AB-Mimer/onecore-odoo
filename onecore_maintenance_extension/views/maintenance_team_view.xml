@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="maintenance_team_kanban_extension" model="ir.ui.view">
+        <field name="name">maintenance.team.kanban.extension</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_kanban"/>
+        <field name="arch" type="xml">
+            <!-- Add the new field to the view -->
+            <xpath expr="//field[@name='todo_request_count_unscheduled']" position="after">
+                <field name="first_column_request_count"/>
+            </xpath>
+            
+            <!-- Replace the "Scheduled" item in the right column with our custom count -->
+            <xpath expr="//div[@class='col-6 o_kanban_primary_right']/div[1]" position="replace">
+                <div t-if="record.first_column_request_count.raw_value > 0">
+                    <a name="%(maintenance.hr_equipment_todo_request_action_from_dashboard)d" type="action">
+                        <t t-esc="record.first_column_request_count.value"/>
+                        Väntar på handläggning
+                    </a>
+                </div>
+            </xpath>
+            
+            <!-- Remove the "Unscheduled" item from the right column -->
+            <xpath expr="//div[@class='col-6 o_kanban_primary_right']/div[4]" position="replace">
+            </xpath>
+        </field>
+    </record>
+</odoo>
