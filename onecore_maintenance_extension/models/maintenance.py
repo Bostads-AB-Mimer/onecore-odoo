@@ -175,48 +175,73 @@ class OneCoreMaintenanceRequest(models.Model):
 
     tenant_id = fields.Many2one("maintenance.tenant", string="Hyresgäst ID", store=True)
 
-    tenant_name = fields.Char("Namn", related="tenant_id.name", depends=["tenant_id"])
+    tenant_name = fields.Char(
+        "Namn", related="tenant_id.name", depends=["tenant_id"], store=False
+    )
     contact_code = fields.Char(
-        "Kundnummer", related="tenant_id.contact_code", depends=["tenant_id"]
+        "Kundnummer",
+        related="tenant_id.contact_code",
+        depends=["tenant_id"],
+        store=False,
     )
     national_registration_number = fields.Char(
         "Personnummer",
         related="tenant_id.national_registration_number",
         depends=["tenant_id"],
+        store=False,
         groups="maintenance.group_equipment_manager",
     )
     phone_number = fields.Char(
         "Telefonnummer",
         related="tenant_id.phone_number",
         depends=["tenant_id"],
+        store=False,
         readonly=False,
     )
     email_address = fields.Char(
         "E-postadress",
         related="tenant_id.email_address",
         depends=["tenant_id"],
+        store=False,
         readonly=False,
     )
     is_tenant = fields.Boolean(
-        "Är hyresgäst", related="tenant_id.is_tenant", depends=["tenant_id"]
+        "Är hyresgäst",
+        related="tenant_id.is_tenant",
+        depends=["tenant_id"],
+        store=False,
     )
 
     #   LEASE  ---------------------------------------------------------------------------------------------------------------------
 
     lease_id = fields.Many2one("maintenance.lease", string="Lease id", store=True)
 
-    lease_name = fields.Char("Kontrakt", related="lease_id.name", depends=["lease_id"])
+    lease_name = fields.Char(
+        "Kontrakt", related="lease_id.name", depends=["lease_id"], store=False
+    )
     lease_type = fields.Char(
-        "Typ av kontrakt", related="lease_id.lease_type", depends=["lease_id"]
+        "Typ av kontrakt",
+        related="lease_id.lease_type",
+        depends=["lease_id"],
+        store=False,
     )
     contract_date = fields.Date(
-        "Kontraktsdatum", related="lease_id.contract_date", depends=["lease_id"]
+        "Kontraktsdatum",
+        related="lease_id.contract_date",
+        depends=["lease_id"],
+        store=False,
     )
     lease_start_date = fields.Date(
-        "Kontrakt Startdatum", related="lease_id.lease_start_date", depends=["lease_id"]
+        "Kontrakt Startdatum",
+        related="lease_id.lease_start_date",
+        depends=["lease_id"],
+        store=False,
     )
     lease_end_date = fields.Date(
-        "Kontrakt Slutdatum", related="lease_id.lease_end_date", depends=["lease_id"]
+        "Kontrakt Slutdatum",
+        related="lease_id.lease_end_date",
+        depends=["lease_id"],
+        store=False,
     )
 
     # Comes from Mimer.nu
@@ -796,11 +821,46 @@ class OneCoreMaintenanceRequest(models.Model):
                 if rental_property_records:
                     record.rental_property_option_id = rental_property_records[0].id
 
+                record.hidden_from_my_pages = False
+        else:
+            for record in self:
+                record.lease_id = False
+                record.tenant_id = False
+                record.tenant_option_id = False
+                record.hidden_from_my_pages = True
+
+    @api.onchange("lease_id")
+    def _onchange_lease_id(self):
+        if self.lease_id:
+            for record in self:
+                record.lease_type = record.lease_id.lease_type
+                record.contract_date = record.lease_id.contract_date
+                record.lease_start_date = record.lease_id.lease_start_date
+                record.lease_end_date = record.lease_id.lease_end_date
+
+                tenant_records = self.env["maintenance.tenant"].search(
+                    [("id", "=", record.tenant_id.id)]
+                )
+                if tenant_records:
+                    record.tenant_id = tenant_records[0].id
+                rental_property_records = self.env[
+                    "maintenance.rental.property"
+                ].search([("id", "=", record.rental_property_id.id)])
+                if rental_property_records:
+                    record.rental_property_id = rental_property_records[0].id
+
+                record.hidden_from_my_pages = False
+        else:
+            for record in self:
+                record.lease_id = False
+                record.tenant_id = False
+                record.hidden_from_my_pages = True
+
     @api.onchange("tenant_option_id")
     def _onchange_tenant_option_id(self):
         if self.tenant_option_id:
             for record in self:
-                record.tenant_id = record.tenant_option_id.name
+                record.tenant_id = record.tenant_option_id.id
                 record.tenant_name = record.tenant_option_id.name
                 record.contact_code = record.tenant_option_id.contact_code
                 record.national_registration_number = (
@@ -810,6 +870,16 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.email_address = record.tenant_option_id.email_address
                 record.is_tenant = record.tenant_option_id.is_tenant
                 record.special_attention = record.tenant_option_id.special_attention
+        else:
+            for record in self:
+                record.tenant_id = False
+                record.tenant_name = False
+                record.contact_code = False
+                record.national_registration_number = False
+                record.phone_number = False
+                record.email_address = False
+                record.is_tenant = False
+                record.special_attention = False
 
     def _send_created_sms(self, phone_number):
         mail_message = self.env["mail.message"]
@@ -1041,5 +1111,11 @@ class OneCoreMaintenanceRequest(models.Model):
                 [("name", "=", "Väntar på handläggning")]
             )
             vals.update({"stage_id": initial_stage.id})
+
+        if "lease_id" in vals and not vals["lease_id"]:
+            vals.update({"tenant_id": False})
+
+        if "tenant_id" in vals and not vals["tenant_id"]:
+            vals.update({"hidden_from_my_pages": True})
 
         return super().write(vals)
