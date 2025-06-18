@@ -235,6 +235,11 @@ class OneCoreMaintenanceRequest(models.Model):
         ("Lekplats", "Lekplats"),
         ("Lokal", "Lokal"),
         ("Bilplats", "Bilplats"),
+        ("Vind", "Vind"),
+        ("Källare", "Källare"),
+        ("Cykelförråd", "Cykelförråd"),
+        ("Övrigt", "Övrigt"),
+        ("Gården/Utomhus", "Gården/Utomhus"),
     ]
 
     SORTED_SPACES = sorted(SPACES)
