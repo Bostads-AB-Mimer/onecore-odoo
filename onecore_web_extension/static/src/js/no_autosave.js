@@ -80,7 +80,13 @@ patch(FormController.prototype, {
 
       if (result && result.type) {
         if (result.type === "ir.actions.act_url") {
-          window.open(result.url, result.target || "_self");
+          if (this.model.root.dirty) {
+            const canLeave = await this.beforeLeave();
+            if (!canLeave) {
+              return false;
+            }
+          }
+          window.location.href = result.url;
         } else {
           this.env.services.action.doAction(result);
         }
