@@ -997,7 +997,7 @@ class OneCoreMaintenanceRequest(models.Model):
         return {
             "type": "ir.actions.act_url",
             "url": url,
-            "target": "new",  # Opens in a new tab/window
+            "target": "self",  # Opens in a new tab/window
         }
 
     def write(self, vals):
