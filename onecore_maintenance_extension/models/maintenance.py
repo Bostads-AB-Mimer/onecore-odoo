@@ -1139,7 +1139,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 new_display = "Inte valt"
 
             return (
-                f"<strong>{field_label}:</strong> {old_display} → {new_display}"
+                f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
                 if old_display != new_display
                 else None
             )
@@ -1158,12 +1158,12 @@ class OneCoreMaintenanceRequest(models.Model):
                 "Inte satt" if new_value in [False, None, ""] else str(new_value),
             )
 
-            return f"<strong>{field_label}:</strong> {old_display} → {new_display}"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
         elif isinstance(field_obj, fields.Boolean):
             old_display = "Ja" if old_value else "Nej"
             new_display = "Ja" if new_value else "Nej"
-            return f"<strong>{field_label}:</strong> {old_display} → {new_display}"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
         elif isinstance(field_obj, (fields.Date, fields.Datetime)):
             old_display = old_value.strftime("%Y-%m-%d") if old_value else "Inte satt"
@@ -1185,12 +1185,12 @@ class OneCoreMaintenanceRequest(models.Model):
                     new_value.strftime("%Y-%m-%d") if new_value else "Inte satt"
                 )
 
-            return f"<strong>{field_label}:</strong> {old_display} → {new_display}"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
         else:
             old_display = str(old_value) if old_value else "Inte satt"
             new_display = str(new_value) if new_value else "Inte satt"
-            return f"<strong>{field_label}:</strong> {old_display} → {new_display}"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
     def _post_change_notifications(self, changes_by_record):
         for record in self:
