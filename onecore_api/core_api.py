@@ -56,37 +56,70 @@ class CoreApi:
         return response
 
     def fetch_leases(self, identifier, value):
-        if identifier == "leaseId":
-            path = "/leases"
-        elif identifier == "rentalObjectId":
-            path = "/leases/by-rental-property-id"
-        elif identifier == "contactCode":
-            path = "/leases/by-contact-code"
-        elif identifier == "pnr":
-            path = "/leases/for"
+        paths = {
+            "leaseId": "/leases",
+            "rentalObjectId": "/leases/by-rental-property-id",
+            "contactCode": "/leases/by-contact-code",
+            "pnr": "/leases/for",
+        }
+
+        if identifier not in paths:
+            raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
         try:
             response = self.request(
-                "GET", f"{path}/{urllib.parse.quote(str(value), safe='')}"
+                "GET",
+                f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
+                params={"includeContacts": "true"},
             )
             response.raise_for_status()
-            return response.json().get("content", {})  # TODO returnera alltid lista?
+            content = response.json().get("content", {})
+
+            return content if isinstance(content, list) else [content]
         except requests.HTTPError as http_err:
             raise OneCoreException(
-                _(
-                    "Kunde inte hitta något resultat för %s: %s. Det verkar som att det inte finns någon koppling till OneCore-servern.",
-                    identifier,
-                    value,
-                )
+                f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
 
-    def fetch_rental_property(self, id):
+    def fetch_residence(self, id):
         url = (
             f"/propertyBase/residence/rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
         response = self.request("GET", url)
         response.raise_for_status()
         return response.json().get("content")
+
+    def fetch_rental_property(self, identifier, value):
+        fetch_fns = {
+            "Bostadskontrakt": lambda id: self.fetch_residence(id),
+        }
+
+        try:
+            leases = self.fetch_leases(identifier, value)
+
+            if leases and len(leases) > 0:
+                data = []
+
+                for lease in leases:
+                    lease_type = lease["type"].strip()
+                    if lease_type in fetch_fns:
+                        rental_property = fetch_fns[lease_type](
+                            lease["rentalPropertyId"]
+                        )
+
+                        data.append(
+                            {
+                                "lease": lease,
+                                "rental_property": rental_property,
+                            }
+                        )
+
+                return data
+
+            return None
+        except Exception as err:
+            _logger.error(f"An error occurred: {err}")
+            raise err
 
 
 class OneCoreException(Exception):

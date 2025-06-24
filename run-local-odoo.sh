@@ -10,7 +10,6 @@
 # --db_port=5432 -i base 
 # -u onecore_maintenance_extension 
 # -u onecore_mail_extension 
-# -u onecore_auth 
 # -u onecore_ui 
 # -u onecore_web_extension 
 # --dev xml
