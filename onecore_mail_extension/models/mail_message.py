@@ -2,6 +2,7 @@ from odoo import _, api, fields, models
 
 import logging
 import requests
+from ...onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
 
@@ -43,19 +44,21 @@ class OneCoreMailMessage(models.Model):
         },
     )
 
+    def get_core_api(self):
+        return core_api.CoreApi(self.env)
+
     def _send_email(self, to_email, subject, text, team_name=None):
-        onecore_auth = self.env["onecore.auth"]
-        base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
         data = {
             "to": to_email,
             "subject": subject,
             "text": text,
             "externalContractorName": team_name,
         }
-        url = f"{base_url}/work-orders/send-email"
 
         try:
-            response = onecore_auth.onecore_request("POST", url, data=data)
+            response = self.get_core_api().request(
+                "POST", "/workOrders/sendEmail", data=data
+            )
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as http_err:
@@ -65,17 +68,16 @@ class OneCoreMailMessage(models.Model):
         return None
 
     def _send_sms(self, phone_number, text, team_name=None):
-        onecore_auth = self.env["onecore.auth"]
-        base_url = self.env["ir.config_parameter"].get_param("onecore_base_url", "")
         data = {
             "phoneNumber": phone_number,
             "text": text,
             "externalContractorName": team_name,
         }
-        url = f"{base_url}/work-orders/send-sms"
 
         try:
-            response = onecore_auth.onecore_request("POST", url, data=data)
+            response = self.get_core_api().request(
+                "POST", "/workOrders/sendSms", data=data
+            )
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as http_err:

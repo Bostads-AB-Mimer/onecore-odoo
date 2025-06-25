@@ -6,7 +6,7 @@
     "sequence": 100,
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
-    "depends": ["maintenance", "onecore_auth", "onecore_ui"],
+    "depends": ["maintenance", "onecore_ui"],
     "summary": "Extends the maintenance module with ONECore features.",
     "website": "https://www.odoo.com/app/maintenance",
     "data": [
