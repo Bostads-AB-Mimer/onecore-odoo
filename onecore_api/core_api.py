@@ -89,10 +89,17 @@ class CoreApi:
         response.raise_for_status()
         return response.json().get("content")
 
+    def fetch_maintenance_units(self, id):
+        url = f"/propertyBase/maintenance-units/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        response = self.request("GET", url)
+        response.raise_for_status()
+        return response.json().get("content")
+
     def fetch_rental_property(self, identifier, value):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
         }
+        lease_types_with_maintenance_units = ["Bostadskontrakt"]
 
         try:
             leases = self.fetch_leases(identifier, value)
@@ -106,11 +113,17 @@ class CoreApi:
                         rental_property = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
+                        maintenance_units = (
+                            self.fetch_maintenance_units(lease["rentalPropertyId"])
+                            if lease_type in lease_types_with_maintenance_units
+                            else []
+                        )
 
                         data.append(
                             {
                                 "lease": lease,
                                 "rental_property": rental_property,
+                                "maintenance_units": maintenance_units,
                             }
                         )
 
