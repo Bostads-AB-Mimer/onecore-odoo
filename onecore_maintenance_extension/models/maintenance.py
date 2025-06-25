@@ -1,6 +1,7 @@
 import datetime
 from odoo import api, fields, models, _, exceptions
 from odoo.exceptions import UserError
+from markupsafe import Markup
 
 
 import urllib.parse
@@ -790,7 +791,9 @@ class OneCoreMaintenanceRequest(models.Model):
             if "images" in vals:
                 images.append(vals.pop("images"))
 
-        maintenance_requests = super().create(vals_list)
+        maintenance_requests = super(
+            OneCoreMaintenanceRequest, self.with_context(creating_records=True)
+        ).create(vals_list)
 
         for idx, vals in enumerate(vals_list):
             maintenance_request = maintenance_requests[idx]
@@ -1005,4 +1008,131 @@ class OneCoreMaintenanceRequest(models.Model):
             )
             vals.update({"stage_id": initial_stage.id})
 
-        return super().write(vals)
+        # Skip change tracking during record creation
+        if self.env.context.get("creating_records"):
+            return super().write(vals)
+
+        changes_by_record = self._track_field_changes(vals)
+
+        result = super().write(vals)
+
+        self._post_change_notifications(changes_by_record)
+
+        return result
+
+    def _track_field_changes(self, vals):
+        skip_fields = {
+            "message_main_attachment_id",
+            "message_ids",
+            "activity_ids",
+            "website_message_ids",
+            "__last_update",
+            "display_name",
+            "stage_id",
+        }
+
+        filtered_vals = {k: v for k, v in vals.items() if k not in skip_fields}
+
+        if not filtered_vals:
+            return {}
+
+        changes_by_record = {}
+        for record in self:
+            changes = []
+            for field, new_value in filtered_vals.items():
+                old_value = record[field]
+                if old_value == new_value:
+                    continue
+
+                field_obj = record._fields[field]
+                field_label = field_obj.get_description(self.env)["string"]
+
+                change_text = self._format_field_change(
+                    field_obj, old_value, new_value, field_label
+                )
+                if change_text:
+                    changes.append(change_text)
+
+            changes_by_record[record.id] = changes
+
+        return changes_by_record
+
+    def _format_field_change(self, field_obj, old_value, new_value, field_label):
+        if field_obj.name == "description":
+            return f"<strong>{field_label}:</strong> Uppdaterad"
+
+        if isinstance(field_obj, fields.Many2one):
+            old_display = old_value.display_name if old_value else "Inte valt"
+            if new_value:
+                new_record = self.env[field_obj.comodel_name].browse(new_value)
+                new_display = (
+                    new_record.display_name if new_record.exists() else "Inte valt"
+                )
+            else:
+                new_display = "Inte valt"
+
+            return (
+                f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+                if old_display != new_display
+                else None
+            )
+
+        elif isinstance(field_obj, fields.Selection):
+            selection = field_obj.selection
+            if callable(selection):
+                selection = selection(self)
+
+            old_display = next(
+                (label for value, label in selection if value == old_value),
+                "Inte satt" if old_value in [False, None, ""] else str(old_value),
+            )
+            new_display = next(
+                (label for value, label in selection if value == new_value),
+                "Inte satt" if new_value in [False, None, ""] else str(new_value),
+            )
+
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+
+        elif isinstance(field_obj, fields.Boolean):
+            old_display = "Ja" if old_value else "Nej"
+            new_display = "Ja" if new_value else "Nej"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+
+        elif isinstance(field_obj, (fields.Date, fields.Datetime)):
+            old_display = old_value.strftime("%Y-%m-%d") if old_value else "Inte satt"
+
+            if isinstance(new_value, str):
+                try:
+                    new_date = (
+                        fields.Date.from_string(new_value)
+                        if new_value != "False"
+                        else None
+                    )
+                    new_display = (
+                        new_date.strftime("%Y-%m-%d") if new_date else "Inte satt"
+                    )
+                except:
+                    new_display = str(new_value) if new_value else "Inte satt"
+            else:
+                new_display = (
+                    new_value.strftime("%Y-%m-%d") if new_value else "Inte satt"
+                )
+
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+
+        else:
+            old_display = str(old_value) if old_value else "Inte satt"
+            new_display = str(new_value) if new_value else "Inte satt"
+            return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+
+    def _post_change_notifications(self, changes_by_record):
+        for record in self:
+            if record.id in changes_by_record and changes_by_record[record.id]:
+                html_content = (
+                    "<div>" + "<br/>".join(changes_by_record[record.id]) + "</div>"
+                )
+                record.message_post(
+                    body=Markup(html_content),
+                    message_type="notification",
+                    subtype_xmlid="mail.mt_note",
+                )
