@@ -127,11 +127,6 @@ class OneCoreMaintenanceRequest(models.Model):
         related="rental_property_id.has_elevator",
         depends=["rental_property_id"],
     )
-    wash_space = fields.Char(
-        "Tvättutrymme",
-        related="rental_property_id.wash_space",
-        depends=["rental_property_id"],
-    )
     estate_code = fields.Char(
         "Fastighetskod",
         related="rental_property_id.estate_code",
@@ -547,6 +542,7 @@ class OneCoreMaintenanceRequest(models.Model):
             for item in data:
                 property = item["rental_property"]
                 lease = item["lease"]
+                maintenance_units = item.get("maintenance_units", [])
 
                 rental_property_option = self.env[
                     "maintenance.rental.property.option"
@@ -559,11 +555,9 @@ class OneCoreMaintenanceRequest(models.Model):
                         "property_type": property["type"].get("name"),
                         "area": property["areaSize"],
                         "entrance": property["entrance"],
-                        "floor": property["floor"],
                         "has_elevator": (
                             "Ja" if property["accessibility"].get("elevator") else "Nej"
                         ),
-                        # "wash_space": property["property"].get("washSpace"),
                         "estate_code": property["property"].get("code"),
                         "estate": property["property"].get("name"),
                         "building_code": property["building"].get("code"),
@@ -611,23 +605,22 @@ class OneCoreMaintenanceRequest(models.Model):
                             }
                         )
 
-            #     if "maintenanceUnits" in property and property["maintenanceUnits"]:
-            #         for maintenance_unit in property["maintenanceUnits"]:
-            #             if maintenance_unit["type"] == "Tvättstuga":
-            #                 maintenance_unit_option = self.env[
-            #                     "maintenance.maintenance.unit.option"
-            #                 ].create(
-            #                     {
-            #                         "user_id": self.env.user.id,
-            #                         "name": maintenance_unit["caption"],
-            #                         "caption": maintenance_unit["caption"],
-            #                         "type": maintenance_unit["type"],
-            #                         "id": maintenance_unit["id"],
-            #                         "code": maintenance_unit["code"],
-            #                         "estate_code": maintenance_unit["estateCode"],
-            #                         "rental_property_option_id": rental_property_option.id,
-            #                     }
-            #                 )
+                for maintenance_unit in maintenance_units:
+                    if maintenance_unit["type"] == "Tvättstuga":
+                        maintenance_unit_option = self.env[
+                            "maintenance.maintenance.unit.option"
+                        ].create(
+                            {
+                                "user_id": self.env.user.id,
+                                "id": maintenance_unit["id"],
+                                "name": maintenance_unit["caption"],
+                                "caption": maintenance_unit["caption"],
+                                "type": maintenance_unit["type"],
+                                "code": maintenance_unit["code"],
+                                "estate_code": maintenance_unit["estateCode"],
+                                "rental_property_option_id": rental_property_option.id,
+                            }
+                        )
         else:
             _logger.info("No data found in response.")
             raise UserError(
@@ -720,7 +713,6 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.entrance = record.rental_property_option_id.entrance
                 record.floor = record.rental_property_option_id.floor
                 record.has_elevator = record.rental_property_option_id.has_elevator
-                record.wash_space = record.rental_property_option_id.wash_space
                 record.estate_code = record.rental_property_option_id.estate_code
                 record.estate = record.rental_property_option_id.estate
                 record.building_code = record.rental_property_option_id.building_code
@@ -825,7 +817,6 @@ class OneCoreMaintenanceRequest(models.Model):
                         "entrance": property_option_record.entrance,
                         "floor": property_option_record.floor,
                         "has_elevator": property_option_record.has_elevator,
-                        "wash_space": property_option_record.wash_space,
                         "estate_code": property_option_record.estate_code,
                         "estate": property_option_record.estate,
                         "building_code": property_option_record.building_code,
