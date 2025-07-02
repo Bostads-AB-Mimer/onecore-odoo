@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenanceLeaseOption(models.Model):
+class OnecoreMaintenanceLeaseOption(models.TransientModel):
     _name = "maintenance.lease.option"
     _description = "Lease Option"
 

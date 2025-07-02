@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenanceRentalPropertyOption(models.Model):
+class OnecoreMaintenanceRentalPropertyOption(models.TransientModel):
     _name = "maintenance.rental.property.option"
     _description = "Rental Property Option"
 

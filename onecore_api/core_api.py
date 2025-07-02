@@ -55,6 +55,11 @@ class CoreApi:
 
         return response
 
+    def _get_json(self, url, **kwargs):
+        response = self.request("GET", url, **kwargs)
+        response.raise_for_status()
+        return response.json().get("content")
+
     def fetch_leases(self, identifier, value):
         paths = {
             "leaseId": "/leases",
@@ -67,13 +72,10 @@ class CoreApi:
             raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
         try:
-            response = self.request(
-                "GET",
+            content = self._get_json(
                 f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
                 params={"includeContacts": "true"},
             )
-            response.raise_for_status()
-            content = response.json().get("content", {})
 
             return content if isinstance(content, list) else [content]
         except requests.HTTPError as http_err:
@@ -82,20 +84,45 @@ class CoreApi:
             )
 
     def fetch_residence(self, id):
-        url = (
+        return self._get_json(
             f"/propertyBase/residence/rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
-        response = self.request("GET", url)
-        response.raise_for_status()
-        return response.json().get("content")
 
-    def fetch_maintenance_units(self, id):
-        url = f"/propertyBase/maintenance-units/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
-        response = self.request("GET", url)
-        response.raise_for_status()
-        return response.json().get("content")
+    def fetch_building(self, id):
+        return self._get_json(
+            f"/propertyBase/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
+        )
 
-    def fetch_rental_property(self, identifier, value):
+    def fetch_properties(self, name):
+        properties = self._get_json(
+            f"/propertyBase/properties/search", params={"q": name}
+        )
+        data = []
+
+        for property in properties:
+            maintenance_units = self.fetch_maintenance_units_for_property(
+                property["code"]
+            )
+            data.append(
+                {
+                    "property": property,
+                    "maintenance_units": maintenance_units,
+                }
+            )
+
+        return data
+
+    def fetch_maintenance_units_for_residence(self, id):
+        return self._get_json(
+            f"/propertyBase/maintenance-units/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        )
+
+    def fetch_maintenance_units_for_property(self, code):
+        return self._get_json(
+            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
+        )
+
+    def fetch_work_order_data(self, identifier, value):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
         }
@@ -114,7 +141,9 @@ class CoreApi:
                             lease["rentalPropertyId"]
                         )
                         maintenance_units = (
-                            self.fetch_maintenance_units(lease["rentalPropertyId"])
+                            self.fetch_maintenance_units_for_residence(
+                                lease["rentalPropertyId"]
+                            )
                             if lease_type in lease_types_with_maintenance_units
                             else []
                         )
