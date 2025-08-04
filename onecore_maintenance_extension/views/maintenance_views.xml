@@ -255,7 +255,7 @@
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
                                         <field name="maintenance_unit_option_id"
-                                            string="Underhållsenhet 1"
+                                            string="Underhållsenhet"
                                             domain="[('property_option_id', '=', property_option_id)]"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not maintenance_unit_option_id and create_date"
