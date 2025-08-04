@@ -569,8 +569,7 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         return is_external_contractor
 
-    def update_form_options(self, search_by_number, search_type):
-        _logger.info("Updating rental property options")
+    def update_rental_property_form_options(self, search_by_number, search_type):
         data = self.get_core_api().fetch_work_order_data(search_type, search_by_number)
         self._delete_options()
 
@@ -673,7 +672,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
             )
 
-    def update_form_options_2(self, search_by_number, search_type):
+    def update_property_form_options(self, search_by_number, search_type):
         data = self.get_core_api().fetch_properties(search_by_number)
         self._delete_options()
 
@@ -731,7 +730,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
         for record in self:
             if self.search_type == "propertyName":
-                record.update_form_options_2(
+                record.update_property_form_options(
                     record.search_by_number, record.search_type
                 )
 
@@ -758,7 +757,9 @@ class OneCoreMaintenanceRequest(models.Model):
                 data = self.get_core_api().fetch_building(record.search_by_number)
                 print("property", json.dumps(data, indent=2))
             else:
-                record.update_form_options(record.search_by_number, record.search_type)
+                record.update_rental_property_form_options(
+                    record.search_by_number, record.search_type
+                )
 
                 property_records = self.env[
                     "maintenance.rental.property.option"
