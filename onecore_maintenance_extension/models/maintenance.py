@@ -37,7 +37,7 @@ class OneCoreMaintenanceRequest(models.Model):
     uuid = fields.Char(
         string="UUID", default=lambda self: str(uuid.uuid4()), readonly=True, copy=False
     )
-    search_by_number = fields.Char("Search", store=False)
+    search_value = fields.Char("Search", store=False)
     search_type = fields.Selection(
         [
             ("leaseId", "Kontraktsnummer"),
@@ -569,127 +569,75 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         return is_external_contractor
 
-    def update_rental_property_form_options(self, search_by_number, search_type):
-        data = self.get_core_api().fetch_work_order_data(search_type, search_by_number)
-        self._delete_options()
+    def update_rental_property_form_options(self, work_order_data):
+        for item in work_order_data:
+            property = item["rental_property"]
+            lease = item["lease"]
+            maintenance_units = item.get("maintenance_units", [])
 
-        if data:
-            for item in data:
-                property = item["rental_property"]
-                lease = item["lease"]
-                maintenance_units = item.get("maintenance_units", [])
-
-                rental_property_option = self.env[
-                    "maintenance.rental.property.option"
-                ].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "name": property["rentalInformation"].get("rentalId"),
-                        "address": property["name"],
-                        "code": property["code"],
-                        "property_type": property["type"].get("name"),
-                        "area": property["areaSize"],
-                        "entrance": property["entrance"],
-                        "has_elevator": (
-                            "Ja" if property["accessibility"].get("elevator") else "Nej"
-                        ),
-                        "estate_code": property["property"].get("code"),
-                        "estate": property["property"].get("name"),
-                        "building_code": property["building"].get("code"),
-                        "building": property["building"].get("name"),
-                    }
-                )
-
-                lease_option = self.env["maintenance.lease.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "name": lease["leaseId"],
-                        "lease_number": lease["leaseNumber"],
-                        "rental_property_option_id": rental_property_option.id,
-                        "lease_type": lease["type"],
-                        "lease_start_date": lease["leaseStartDate"],
-                        "lease_end_date": lease["lastDebitDate"],
-                        "contract_date": lease["contractDate"],
-                        "approval_date": lease["approvalDate"],
-                    }
-                )
-
-                for tenant in lease["tenants"]:
-                    # Check if a tenant with the same contact_code already exists
-                    existing_tenant = self.env["maintenance.tenant.option"].search(
-                        [("contact_code", "=", tenant["contactCode"])], limit=1
-                    )
-
-                    if not existing_tenant:
-                        name = self._get_tenant_name(tenant)
-                        phone_number = self._get_main_phone_number(tenant)
-
-                        tenant_option = self.env["maintenance.tenant.option"].create(
-                            {
-                                "user_id": self.env.user.id,
-                                "name": name,
-                                "contact_code": tenant["contactCode"],
-                                "contact_key": tenant["contactKey"],
-                                "national_registration_number": tenant.get(
-                                    "nationalRegistrationNumber"
-                                ),
-                                "email_address": tenant.get("emailAddress"),
-                                "phone_number": phone_number,
-                                "is_tenant": tenant["isTenant"],
-                                "special_attention": tenant.get("specialAttention"),
-                            }
-                        )
-
-                for maintenance_unit in maintenance_units:
-                    if maintenance_unit["type"] == "Tvättstuga":
-                        maintenance_unit_option = self.env[
-                            "maintenance.maintenance.unit.option"
-                        ].create(
-                            {
-                                "user_id": self.env.user.id,
-                                "id": maintenance_unit["id"],
-                                "name": maintenance_unit["caption"],
-                                "caption": maintenance_unit["caption"],
-                                "type": maintenance_unit["type"],
-                                "code": maintenance_unit["code"],
-                                "rental_property_option_id": rental_property_option.id,
-                            }
-                        )
-        else:
-            search_types = {
-                "leaseId": "kontraktsnummer",
-                "rentalObjectId": "hyresobjekt",
-                "contactCode": "kundnummer",
-                "pnr": "personnummer",
-            }
-
-            _logger.info("No data found in response.")
-            raise UserError(
-                _(
-                    "Kunde inte hitta något resultat för %s: %s",
-                    search_types[search_type],
-                    search_by_number,
-                )
+            rental_property_option = self.env[
+                "maintenance.rental.property.option"
+            ].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": property["rentalInformation"].get("rentalId"),
+                    "address": property["name"],
+                    "code": property["code"],
+                    "property_type": property["type"].get("name"),
+                    "area": property["areaSize"],
+                    "entrance": property["entrance"],
+                    "has_elevator": (
+                        "Ja" if property["accessibility"].get("elevator") else "Nej"
+                    ),
+                    "estate_code": property["property"].get("code"),
+                    "estate": property["property"].get("name"),
+                    "building_code": property["building"].get("code"),
+                    "building": property["building"].get("name"),
+                }
             )
 
-    def update_property_form_options(self, search_by_number, search_type):
-        data = self.get_core_api().fetch_properties(search_by_number)
-        self._delete_options()
+            lease_option = self.env["maintenance.lease.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": lease["leaseId"],
+                    "lease_number": lease["leaseNumber"],
+                    "rental_property_option_id": rental_property_option.id,
+                    "lease_type": lease["type"],
+                    "lease_start_date": lease["leaseStartDate"],
+                    "lease_end_date": lease["lastDebitDate"],
+                    "contract_date": lease["contractDate"],
+                    "approval_date": lease["approvalDate"],
+                }
+            )
 
-        if data:
-            for item in data:
-                property = item["property"]
-                maintenance_units = item.get("maintenance_units", [])
-
-                property_option = self.env["maintenance.property.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "designation": property["designation"],
-                        "code": property["code"],
-                    }
+            for tenant in lease["tenants"]:
+                # Check if a tenant with the same contact_code already exists
+                existing_tenant = self.env["maintenance.tenant.option"].search(
+                    [("contact_code", "=", tenant["contactCode"])], limit=1
                 )
 
-                for maintenance_unit in maintenance_units:
+                if not existing_tenant:
+                    name = self._get_tenant_name(tenant)
+                    phone_number = self._get_main_phone_number(tenant)
+
+                    tenant_option = self.env["maintenance.tenant.option"].create(
+                        {
+                            "user_id": self.env.user.id,
+                            "name": name,
+                            "contact_code": tenant["contactCode"],
+                            "contact_key": tenant["contactKey"],
+                            "national_registration_number": tenant.get(
+                                "nationalRegistrationNumber"
+                            ),
+                            "email_address": tenant.get("emailAddress"),
+                            "phone_number": phone_number,
+                            "is_tenant": tenant["isTenant"],
+                            "special_attention": tenant.get("specialAttention"),
+                        }
+                    )
+
+            for maintenance_unit in maintenance_units:
+                if maintenance_unit["type"] == "Tvättstuga":
                     maintenance_unit_option = self.env[
                         "maintenance.maintenance.unit.option"
                     ].create(
@@ -700,39 +648,59 @@ class OneCoreMaintenanceRequest(models.Model):
                             "caption": maintenance_unit["caption"],
                             "type": maintenance_unit["type"],
                             "code": maintenance_unit["code"],
-                            "property_option_id": property_option.id,
+                            "rental_property_option_id": rental_property_option.id,
                         }
                     )
-        else:
-            search_types = {
-                "leaseId": "kontraktsnummer",
-                "rentalObjectId": "hyresobjekt",
-                "contactCode": "kundnummer",
-                "pnr": "personnummer",
-            }
 
-            _logger.info("No data found in response.")
-            raise UserError(
-                _(
-                    "Kunde inte hitta något resultat för %s: %s",
-                    search_types[search_type],
-                    search_by_number,
-                )
+    def update_property_form_options(self, properties):
+        for item in properties:
+            property = item["property"]
+            maintenance_units = item.get("maintenance_units", [])
+
+            property_option = self.env["maintenance.property.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "designation": property["designation"],
+                    "code": property["code"],
+                }
             )
 
-    @api.onchange("search_by_number", "search_type")
+            for maintenance_unit in maintenance_units:
+                maintenance_unit_option = self.env[
+                    "maintenance.maintenance.unit.option"
+                ].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "id": maintenance_unit["id"],
+                        "name": maintenance_unit["caption"],
+                        "caption": maintenance_unit["caption"],
+                        "type": maintenance_unit["type"],
+                        "code": maintenance_unit["code"],
+                        "property_option_id": property_option.id,
+                    }
+                )
+
+    @api.onchange("search_value", "search_type")
     def _compute_search(self):
-        if not self.search_by_number or not validators[self.search_type](
-            self.search_by_number
-        ):
+        if not self.search_value or not validators[self.search_type](self.search_value):
             self._delete_options()
             return
 
         for record in self:
             if self.search_type == "propertyName":
-                record.update_property_form_options(
-                    record.search_by_number, record.search_type
-                )
+                properties = self.get_core_api().fetch_properties(record.search_value)
+
+                if not properties:
+                    _logger.info("No data found in response.")
+                    raise UserError(
+                        _(
+                            "Kunde inte hitta något resultat för %s",
+                            record.search_value,
+                        )
+                    )
+
+                record._delete_options()
+                record.update_property_form_options(properties)
 
                 property_records = self.env["maintenance.property.option"].search(
                     [("user_id", "=", self.env.user.id)]
@@ -754,12 +722,34 @@ class OneCoreMaintenanceRequest(models.Model):
                     record.maintenance_unit_option_id = maintenance_unit_records[0]
 
             elif self.search_type == "buildingCode":
-                data = self.get_core_api().fetch_building(record.search_by_number)
-                print("property", json.dumps(data, indent=2))
+                building = self.get_core_api().fetch_building(record.search_value)
+
+                if not building:
+                    _logger.info("No data found in response.")
+                    raise UserError(
+                        _(
+                            "Kunde inte hitta något resultat för %s",
+                            record.search_value,
+                        )
+                    )
+
+                print("building", json.dumps(building, indent=2))
             else:
-                record.update_rental_property_form_options(
-                    record.search_by_number, record.search_type
+                work_order_data = self.get_core_api().fetch_work_order_data(
+                    record.search_type, record.search_value
                 )
+
+                if not work_order_data:
+                    _logger.info("No data found in response.")
+                    raise UserError(
+                        _(
+                            "Kunde inte hitta något resultat för %s",
+                            record.search_value,
+                        )
+                    )
+
+                record._delete_options()
+                record.update_rental_property_form_options(work_order_data)
 
                 property_records = self.env[
                     "maintenance.rental.property.option"
