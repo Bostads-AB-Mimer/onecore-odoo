@@ -198,9 +198,9 @@
                             <div id="flush-collapse1" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
-                                    <field name="show_rental_property_info" invisible="1" />
+                                    <field name="form_state" invisible="1" />
                                     <group col="1"
-                                        invisible="not show_rental_property_info">
+                                        invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
                                         <field name="rental_property_option_id"
                                             string="Hyresobjekt"
@@ -246,7 +246,7 @@
                                             invisible="1" />
                                     </group>
                                     <group col="1"
-                                        invisible="show_rental_property_info">
+                                        invisible="form_state != 'property'">
                                         <field name="create_date" invisible="1" />
                                         <field name="property_option_id" string="Fastighet"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -263,6 +263,15 @@
                                         <field name="maintenance_unit_caption"
                                             string="Underhållsenhet"
                                             invisible="not maintenance_unit_caption or not create_date" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'building'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="building_option_id" string="Byggnad"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="building_name"
+                                            invisible="not building_name" />
                                     </group>
                                 </div>
                             </div>

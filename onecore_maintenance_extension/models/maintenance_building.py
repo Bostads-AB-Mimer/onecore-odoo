@@ -7,7 +7,6 @@ class OnecoreMaintenanceBuildingOption(models.TransientModel):
 
     building_id = fields.Char(string="Byggnads ID", store=True)
     name = fields.Char("Namn", required=True)
-    address = fields.Char("Adress")
     code = fields.Char("Kod")
 
     maintenance_request_id = fields.Many2one(
@@ -22,7 +21,6 @@ class OnecoreMaintenanceBuilding(models.Model):
 
     building_id = fields.Char(string="Byggnads ID", store=True)
     name = fields.Char("Namn", required=True)
-    address = fields.Char("Adress")
     code = fields.Char("Kod")
 
     maintenance_request_id = fields.Many2one(

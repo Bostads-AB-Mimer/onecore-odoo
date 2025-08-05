@@ -1,6 +1,5 @@
 import datetime
 from odoo import api, fields, models, _, exceptions
-from odoo.exceptions import UserError
 from markupsafe import Markup
 
 
@@ -48,8 +47,7 @@ class OneCoreMaintenanceRequest(models.Model):
             ("propertyName", "Fastighetsnamn"),
         ],
         string="Search Type",
-        # default="pnr",
-        default="propertyName",
+        default="pnr",
         required=True,
         store=False,
     )
@@ -58,6 +56,14 @@ class OneCoreMaintenanceRequest(models.Model):
         "maintenance.property.option",
         compute="_compute_search",
         string="Property Option Id",
+        domain=lambda self: [("user_id", "=", self.env.user.id)],
+        readonly=False,
+    )
+
+    building_option_id = fields.Many2one(
+        "maintenance.building.option",
+        compute="_compute_search",
+        string="Building Option Id",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
@@ -112,6 +118,15 @@ class OneCoreMaintenanceRequest(models.Model):
         "Fastighetsbeteckning",
         related="property_id.designation",
         depends=["property_id"],
+    )
+
+    #    BUILDING
+    building_id = fields.Many2one("maintenance.building", store=True, string="Byggnad")
+
+    building_name = fields.Char(
+        "Byggnad",
+        related="building_id.name",
+        depends=["building_id"],
     )
 
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
@@ -323,18 +338,29 @@ class OneCoreMaintenanceRequest(models.Model):
         depends=["tenant_id"],
     )
 
-    show_rental_property_info = fields.Boolean(
-        compute="_compute_show_rental_property_info",
+    form_state = fields.Selection(
+        [
+            ("rental-property", "Bostad"),
+            ("property", "Fastighet"),
+            ("building", "Byggnad"),
+        ],
+        compute="_compute_form_state",
     )
 
-    @api.depends("rental_property_id", "rental_property_option_id")
-    def _compute_show_rental_property_info(self):
-        # TODO vi kanske behöver ett till state för att visa byggnads-info?
+    @api.depends(
+        "property_id",
+        "property_option_id",
+        "building_id",
+        "building_option_id",
+    )
+    def _compute_form_state(self):
         for record in self:
-            if record.rental_property_id or record.rental_property_option_id:
-                record.show_rental_property_info = True
+            if record.property_id or record.property_option_id:
+                record.form_state = "property"
+            elif record.building_id or record.building_option_id:
+                record.form_state = "building"
             else:
-                record.show_rental_property_info = False
+                record.form_state = "rental-property"
 
     def get_core_api(self):
         return core_api.CoreApi(self.env)
@@ -680,6 +706,16 @@ class OneCoreMaintenanceRequest(models.Model):
                     }
                 )
 
+    def update_building_form_options(self, building):
+        building_option = self.env["maintenance.building.option"].create(
+            {
+                "user_id": self.env.user.id,
+                "name": building["name"],
+                "code": building["code"],
+            }
+        )
+        # TODO get maintenance units for building
+
     @api.onchange("search_value", "search_type")
     def _compute_search(self):
         if not self.search_value or not validators[self.search_type](self.search_value):
@@ -692,7 +728,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if not properties:
                     _logger.info("No data found in response.")
-                    raise UserError(
+                    raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
                             record.search_value,
@@ -726,14 +762,22 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if not building:
                     _logger.info("No data found in response.")
-                    raise UserError(
+                    raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
                             record.search_value,
                         )
                     )
 
-                print("building", json.dumps(building, indent=2))
+                record._delete_options()
+                record.update_building_form_options(building)
+
+                building_records = self.env["maintenance.building.option"].search(
+                    [("user_id", "=", self.env.user.id)]
+                )
+
+                if building_records:
+                    record.building_option_id = building_records[0]
             else:
                 work_order_data = self.get_core_api().fetch_work_order_data(
                     record.search_type, record.search_value
@@ -741,7 +785,7 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if not work_order_data:
                     _logger.info("No data found in response.")
-                    raise UserError(
+                    raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
                             record.search_value,
@@ -927,6 +971,21 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
 
                 maintenance_request.write({"property_id": new_property_record.id})
+
+            # SAVE BUILDING
+            if vals.get("building_option_id"):
+                building_option_record = self.env["maintenance.building.option"].search(
+                    [("id", "=", vals.get("building_option_id"))]
+                )
+                new_building_record = self.env["maintenance.building"].create(
+                    {
+                        "name": building_option_record.name,
+                        "code": building_option_record.code,
+                        "maintenance_request_id": maintenance_request.id,
+                    }
+                )
+
+                maintenance_request.write({"building_id": new_building_record.id})
 
             # SAVE RENTAL PROPERTY
             if vals.get("rental_property_option_id"):
