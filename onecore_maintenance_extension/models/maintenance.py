@@ -530,9 +530,12 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         return is_external_contractor
 
-    def update_form_options(self, search_by_number, search_type):
+    def update_form_options(self, search_by_number, search_type, space_caption):
         _logger.info("Updating rental property options")
-        data = self.get_core_api().fetch_rental_property(search_type, search_by_number)
+
+        data = self.get_core_api().fetch_form_data(
+            search_type, search_by_number, space_caption
+        )
         self._delete_options()
 
         if data:
@@ -586,7 +589,7 @@ class OneCoreMaintenanceRequest(models.Model):
                         name = self._get_tenant_name(tenant)
                         phone_number = self._get_main_phone_number(tenant)
 
-                        tenant_option = self.env["maintenance.tenant.option"].create(
+                        self.env["maintenance.tenant.option"].create(
                             {
                                 "user_id": self.env.user.id,
                                 "name": name,
@@ -603,21 +606,18 @@ class OneCoreMaintenanceRequest(models.Model):
                         )
 
                 for maintenance_unit in maintenance_units:
-                    if maintenance_unit["type"] == "Tvättstuga":
-                        maintenance_unit_option = self.env[
-                            "maintenance.maintenance.unit.option"
-                        ].create(
-                            {
-                                "user_id": self.env.user.id,
-                                "id": maintenance_unit["id"],
-                                "name": maintenance_unit["caption"],
-                                "caption": maintenance_unit["caption"],
-                                "type": maintenance_unit["type"],
-                                "code": maintenance_unit["code"],
-                                "estate_code": maintenance_unit["estateCode"],
-                                "rental_property_option_id": rental_property_option.id,
-                            }
-                        )
+                    self.env["maintenance.maintenance.unit.option"].create(
+                        {
+                            "user_id": self.env.user.id,
+                            "id": maintenance_unit["id"],
+                            "name": maintenance_unit["caption"],
+                            "caption": maintenance_unit["caption"],
+                            "type": maintenance_unit["type"],
+                            "code": maintenance_unit["code"],
+                            "estate_code": maintenance_unit["estateCode"],
+                            "rental_property_option_id": rental_property_option.id,
+                        }
+                    )
         else:
             _logger.info("No data found in response.")
             raise UserError(
@@ -628,7 +628,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
             )
 
-    @api.onchange("search_by_number", "search_type")
+    @api.onchange("space_caption", "search_by_number", "search_type")
     def _compute_search(self):
 
         min_string_length = (
@@ -649,7 +649,9 @@ class OneCoreMaintenanceRequest(models.Model):
                     return
 
             for record in self:
-                record.update_form_options(record.search_by_number, record.search_type)
+                record.update_form_options(
+                    record.search_by_number, record.search_type, record.space_caption
+                )
                 property_records = self.env[
                     "maintenance.rental.property.option"
                 ].search([("user_id", "=", self.env.user.id)])
