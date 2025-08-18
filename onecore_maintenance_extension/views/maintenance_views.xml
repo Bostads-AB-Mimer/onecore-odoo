@@ -242,6 +242,11 @@
                                             invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_caption" string="Tvättstuga"
                                             invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
+                                        <field name="maintenance_unit_option_id" string="Lekplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Lekplats'" />
+                                        <field name="maintenance_unit_caption" string="Lekplats"
+                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
                                     </group>

@@ -112,17 +112,26 @@ class CoreApi:
 
         return data
 
-    def fetch_maintenance_units_for_residence(self, id):
-        return self._get_json(
-            f"/propertyBase/maintenance-units/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
-        )
-
     def fetch_maintenance_units_for_property(self, code):
         return self._get_json(
             f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
         )
 
-    def fetch_work_order_data(self, identifier, value):
+    def fetch_maintenance_units(self, id, location_type):
+        content = self._get_json(
+            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
+        )
+        return self.filter_maintenance_units_by_location_type(content, location_type)
+
+    def filter_maintenance_units_by_location_type(
+        self, maintenance_units, location_type
+    ):
+        return filter(
+            lambda maintenance_unit: maintenance_unit["type"] == location_type,
+            maintenance_units,
+        )
+
+    def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
         }
@@ -141,8 +150,8 @@ class CoreApi:
                             lease["rentalPropertyId"]
                         )
                         maintenance_units = (
-                            self.fetch_maintenance_units_for_residence(
-                                lease["rentalPropertyId"]
+                            self.fetch_maintenance_units(
+                                rental_property["property"]["code"], location_type
                             )
                             if lease_type in lease_types_with_maintenance_units
                             else []
@@ -155,7 +164,6 @@ class CoreApi:
                                 "maintenance_units": maintenance_units,
                             }
                         )
-
                 return data
 
             return None

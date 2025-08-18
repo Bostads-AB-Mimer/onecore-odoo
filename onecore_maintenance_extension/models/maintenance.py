@@ -646,7 +646,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     name = self._get_tenant_name(tenant)
                     phone_number = self._get_main_phone_number(tenant)
 
-                    tenant_option = self.env["maintenance.tenant.option"].create(
+                    self.env["maintenance.tenant.option"].create(
                         {
                             "user_id": self.env.user.id,
                             "name": name,
@@ -663,20 +663,17 @@ class OneCoreMaintenanceRequest(models.Model):
                     )
 
             for maintenance_unit in maintenance_units:
-                if maintenance_unit["type"] == "Tvättstuga":
-                    maintenance_unit_option = self.env[
-                        "maintenance.maintenance.unit.option"
-                    ].create(
-                        {
-                            "user_id": self.env.user.id,
-                            "id": maintenance_unit["id"],
-                            "name": maintenance_unit["caption"],
-                            "caption": maintenance_unit["caption"],
-                            "type": maintenance_unit["type"],
-                            "code": maintenance_unit["code"],
-                            "rental_property_option_id": rental_property_option.id,
-                        }
-                    )
+                self.env["maintenance.maintenance.unit.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "id": maintenance_unit["id"],
+                        "name": maintenance_unit["caption"],
+                        "caption": maintenance_unit["caption"],
+                        "type": maintenance_unit["type"],
+                        "code": maintenance_unit["code"],
+                        "rental_property_option_id": rental_property_option.id,
+                    }
+                )
 
     def update_property_form_options(self, properties):
         for item in properties:
@@ -716,7 +713,7 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         # TODO get maintenance units for building
 
-    @api.onchange("search_value", "search_type")
+    @api.onchange("search_value", "search_type", "space_caption")
     def _compute_search(self):
         if not self.search_value or not validators[self.search_type](self.search_value):
             self._delete_options()
@@ -779,8 +776,8 @@ class OneCoreMaintenanceRequest(models.Model):
                 if building_records:
                     record.building_option_id = building_records[0]
             else:
-                work_order_data = self.get_core_api().fetch_work_order_data(
-                    record.search_type, record.search_value
+                work_order_data = self.get_core_api().fetch_form_data(
+                    record.search_type, record.search_value, record.space_caption
                 )
 
                 if not work_order_data:
@@ -795,6 +792,10 @@ class OneCoreMaintenanceRequest(models.Model):
                 record._delete_options()
                 record.update_rental_property_form_options(work_order_data)
 
+            for record in self:
+                record.update_form_options(
+                    record.search_by_number, record.search_type, record.space_caption
+                )
                 property_records = self.env[
                     "maintenance.rental.property.option"
                 ].search([("user_id", "=", self.env.user.id)])
