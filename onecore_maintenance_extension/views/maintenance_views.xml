@@ -15,7 +15,7 @@
                         <field string="Telefonnummer" name="phone_number" />
                         <field string="Kundnummer" name="contact_code" />
                         <field string="Tvättstuga" name="maintenance_unit_id" />
-                        <field string="Hyresobjekt" name="rental_property_id"/>
+                        <field string="Hyresobjekt" name="rental_property_id" />
                         <field name="category_id" />
                         <field name="user_id" />
                         <field name="equipment_id" />
@@ -239,6 +239,11 @@
                                             invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_caption" string="Tvättstuga"
                                             invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
+                                        <field name="maintenance_unit_option_id" string="Lekplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Lekplats'" />
+                                        <field name="maintenance_unit_caption" string="Lekplats"
+                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
                                     </group>
@@ -315,7 +320,7 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
-                                        
+
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"

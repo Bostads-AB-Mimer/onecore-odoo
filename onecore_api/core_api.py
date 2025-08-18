@@ -89,13 +89,20 @@ class CoreApi:
         response.raise_for_status()
         return response.json().get("content")
 
-    def fetch_maintenance_units(self, id):
-        url = f"/propertyBase/maintenance-units/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+    def fetch_maintenance_units(self, id, location_type):
+        url = f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
         response = self.request("GET", url)
         response.raise_for_status()
-        return response.json().get("content")
+        return self.filter_maintenance_units_by_location_type(
+            response.json().get("content"), location_type
+        )
 
-    def fetch_rental_property(self, identifier, value):
+    def filter_maintenance_units_by_location_type(self, maintenance_units, location_type):
+        return filter(
+            lambda maintenance_unit: maintenance_unit["type"] == location_type, maintenance_units
+        )
+    
+    def fetch_rental_property(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
         }
@@ -114,7 +121,9 @@ class CoreApi:
                             lease["rentalPropertyId"]
                         )
                         maintenance_units = (
-                            self.fetch_maintenance_units(lease["rentalPropertyId"])
+                            self.fetch_maintenance_units(
+                                rental_property["property"]["code"], location_type
+                            )
                             if lease_type in lease_types_with_maintenance_units
                             else []
                         )
@@ -126,13 +135,15 @@ class CoreApi:
                                 "maintenance_units": maintenance_units,
                             }
                         )
-
                 return data
 
             return None
         except Exception as err:
             _logger.error(f"An error occurred: {err}")
             raise err
+
+    def fetch_form_data(self, identifier, value, location_type):
+        return self.fetch_rental_property(identifier, value, location_type)
 
 
 class OneCoreException(Exception):
