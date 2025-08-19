@@ -104,7 +104,7 @@
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
                         invisible="create_date != False">
                         <field class="w-25 my-0 p-2 border-end bg-light" name="search_type" />
-                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
+                        <field class="flex-grow-1 my-0 p-2" name="search_value" string="Search"
                             placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
                     </div>
                 </xpath>
@@ -198,9 +198,12 @@
                             <div id="flush-collapse1" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
-                                    <group col="1">
+                                    <field name="form_state" invisible="1" />
+                                    <group col="1"
+                                        invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
-                                        <field name="rental_property_option_id" string="Hyresobjekt"
+                                        <field name="rental_property_option_id"
+                                            string="Hyresobjekt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="create_date != False" />
 
@@ -246,6 +249,34 @@
                                             invisible="not maintenance_unit_caption or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'property'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="property_option_id" string="Fastighet"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="property_designation"
+                                            string="Fastighetsbeteckning"
+                                            invisible="not property_designation" />
+                                        <field name="maintenance_unit_option_id"
+                                            string="Underhållsenhet"
+                                            domain="[('property_option_id', '=', property_option_id)]"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not maintenance_unit_option_id and create_date"
+                                        />
+                                        <field name="maintenance_unit_caption"
+                                            string="Underhållsenhet"
+                                            invisible="not maintenance_unit_caption or not create_date" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'building'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="building_option_id" string="Byggnad"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="building_name"
+                                            invisible="not building_name" />
                                     </group>
                                 </div>
                             </div>
