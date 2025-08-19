@@ -1,6 +1,7 @@
 import requests
 import logging
 import urllib.parse
+import json
 
 _logger = logging.getLogger(__name__)
 
@@ -55,7 +56,8 @@ class CoreApi:
 
         return response
 
-    def fetch_leases(self, identifier, value):
+    def fetch_leases(self, identifier, value, location_type):
+        print(f"API - fetching leases for {location_type}!")
         paths = {
             "leaseId": "/leases",
             "rentalObjectId": "/leases/by-rental-property-id",
@@ -75,11 +77,32 @@ class CoreApi:
             response.raise_for_status()
             content = response.json().get("content", {})
 
+            # Filter response on space caption if needed
+            if location_type is not None and location_type is not False:
+                print(f"FILTERING CONTENT BY TYPE: {location_type}")
+                filtered_content = self.filter_lease_on_location_type(
+                    content, location_type
+                )
+                return (
+                    filtered_content
+                    if isinstance(filtered_content, list)
+                    else [filtered_content]
+                )
+
             return content if isinstance(content, list) else [content]
         except requests.HTTPError as http_err:
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
+
+    def filter_lease_on_location_type(self, data, location_type):
+        if location_type == "Bilplats":
+            filtered_content = [
+                item for item in data if item["type"].strip() == "P-Platskontrakt"
+            ]
+            return filtered_content
+        else:
+            return data
 
     def fetch_residence(self, id):
         url = (
@@ -97,19 +120,31 @@ class CoreApi:
             response.json().get("content"), location_type
         )
 
-    def filter_maintenance_units_by_location_type(self, maintenance_units, location_type):
+    def filter_maintenance_units_by_location_type(
+        self, maintenance_units, location_type
+    ):
         return filter(
-            lambda maintenance_unit: maintenance_unit["type"] == location_type, maintenance_units
+            lambda maintenance_unit: maintenance_unit["type"] == location_type,
+            maintenance_units,
         )
-    
+
+    def fetch_parking_space(self, id):
+        url = f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        response = self.request("GET", url)
+        response.raise_for_status()
+        return response.json().get("content")
+
     def fetch_rental_property(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
+            "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
         }
         lease_types_with_maintenance_units = ["Bostadskontrakt"]
 
         try:
-            leases = self.fetch_leases(identifier, value)
+            leases = self.fetch_leases(identifier, value, location_type)
+
+            print(f"API - fetched {len(leases)} leases for {location_type}!")
 
             if leases and len(leases) > 0:
                 data = []
@@ -120,6 +155,7 @@ class CoreApi:
                         rental_property = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
+                        parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
                         maintenance_units = (
                             self.fetch_maintenance_units(
                                 rental_property["property"]["code"], location_type
@@ -132,10 +168,11 @@ class CoreApi:
                             {
                                 "lease": lease,
                                 "rental_property": rental_property,
+                                "parking_space": parking_space,
                                 "maintenance_units": maintenance_units,
                             }
                         )
-                return data
+                    return data
 
             return None
         except Exception as err:
