@@ -93,12 +93,13 @@ class CoreApi:
             f"/propertyBase/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
         )
 
-    def fetch_properties(self, name):
+    def fetch_properties(self, name, location_type):
         properties = self._get_json(
             f"/propertyBase/properties/search", params={"q": name}
         )
         data = []
 
+        # FIXME it would be nice if we could run these in parallel
         for property in properties:
             maintenance_units = self.fetch_maintenance_units_for_property(
                 property["code"]
@@ -106,7 +107,9 @@ class CoreApi:
             data.append(
                 {
                     "property": property,
-                    "maintenance_units": maintenance_units,
+                    "maintenance_units": self.filter_maintenance_units_by_location_type(
+                        maintenance_units, location_type
+                    ),
                 }
             )
 
@@ -143,6 +146,7 @@ class CoreApi:
             if leases and len(leases) > 0:
                 data = []
 
+                # FIXME it would be nice if we could run these in parallel
                 for lease in leases:
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:

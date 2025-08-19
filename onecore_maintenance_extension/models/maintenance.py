@@ -721,7 +721,9 @@ class OneCoreMaintenanceRequest(models.Model):
 
         for record in self:
             if self.search_type == "propertyName":
-                properties = self.get_core_api().fetch_properties(record.search_value)
+                properties = self.get_core_api().fetch_properties(
+                    record.search_value, record.space_caption
+                )
 
                 if not properties:
                     _logger.info("No data found in response.")
@@ -792,10 +794,6 @@ class OneCoreMaintenanceRequest(models.Model):
                 record._delete_options()
                 record.update_rental_property_form_options(work_order_data)
 
-            for record in self:
-                record.update_form_options(
-                    record.search_by_number, record.search_type, record.space_caption
-                )
                 property_records = self.env[
                     "maintenance.rental.property.option"
                 ].search([("user_id", "=", self.env.user.id)])
