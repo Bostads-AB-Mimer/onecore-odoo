@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenancePropertyOption(models.TransientModel):
     _name = "maintenance.property.option"
     _description = "Property"
+    _rec_name = "designation"
 
     code = fields.Char("Kod", required=True)
     designation = fields.Char("Beteckning", required=True)
@@ -14,6 +15,7 @@ class OnecoreMaintenancePropertyOption(models.TransientModel):
 class OnecoreMaintenanceProperty(models.Model):
     _name = "maintenance.property"
     _description = "Property"
+    _rec_name = "designation"
 
     code = fields.Char("Kod", required=True)
     designation = fields.Char("Beteckning", required=True)
