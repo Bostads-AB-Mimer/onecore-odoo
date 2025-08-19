@@ -9,9 +9,6 @@ class OnecoreMaintenanceBuildingOption(models.TransientModel):
     name = fields.Char("Namn", required=True)
     code = fields.Char("Kod")
 
-    maintenance_request_id = fields.Many2one(
-        "maintenance.request", string="Maintenance Request", ondelete="cascade"
-    )
     user_id = fields.Many2one("res.users", "User", default=lambda self: self.env.user)
 
 
@@ -26,4 +23,3 @@ class OnecoreMaintenanceBuilding(models.Model):
     maintenance_request_id = fields.Many2one(
         "maintenance.request", string="Maintenance Request", ondelete="cascade"
     )
-    user_id = fields.Many2one("res.users", "User", default=lambda self: self.env.user)
