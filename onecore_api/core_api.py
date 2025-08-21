@@ -158,10 +158,9 @@ class CoreApi:
         )
 
     def fetch_parking_space(self, id):
-        url = f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
-        response = self.request("GET", url)
-        response.raise_for_status()
-        return response.json().get("content")
+        return self._get_json(
+            f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        )
 
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
