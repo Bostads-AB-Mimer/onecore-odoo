@@ -56,6 +56,11 @@ class CoreApi:
 
         return response
 
+    def _get_json(self, url, **kwargs):
+        response = self.request("GET", url, **kwargs)
+        response.raise_for_status()
+        return response.json().get("content")
+
     def fetch_leases(self, identifier, value, location_type):
         print(f"API - fetching leases for {location_type}!")
         paths = {
@@ -69,13 +74,10 @@ class CoreApi:
             raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
         try:
-            response = self.request(
-                "GET",
+            content = self._get_json(
                 f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
                 params={"includeContacts": "true"},
             )
-            response.raise_for_status()
-            content = response.json().get("content", {})
 
             # Filter response on space caption if needed
             if location_type is not None and location_type is not False:
@@ -105,20 +107,47 @@ class CoreApi:
             return data
 
     def fetch_residence(self, id):
-        url = (
+        return self._get_json(
             f"/propertyBase/residence/rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
-        response = self.request("GET", url)
-        response.raise_for_status()
-        return response.json().get("content")
+
+    def fetch_building(self, id):
+        return self._get_json(
+            f"/propertyBase/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
+        )
+
+    def fetch_properties(self, name, location_type):
+        properties = self._get_json(
+            f"/propertyBase/properties/search", params={"q": name}
+        )
+        data = []
+
+        # FIXME it would be nice if we could run these in parallel
+        for property in properties:
+            maintenance_units = self.fetch_maintenance_units_for_property(
+                property["code"]
+            )
+            data.append(
+                {
+                    "property": property,
+                    "maintenance_units": self.filter_maintenance_units_by_location_type(
+                        maintenance_units, location_type
+                    ),
+                }
+            )
+
+        return data
+
+    def fetch_maintenance_units_for_property(self, code):
+        return self._get_json(
+            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
+        )
 
     def fetch_maintenance_units(self, id, location_type):
-        url = f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
-        response = self.request("GET", url)
-        response.raise_for_status()
-        return self.filter_maintenance_units_by_location_type(
-            response.json().get("content"), location_type
+        content = self._get_json(
+            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
         )
+        return self.filter_maintenance_units_by_location_type(content, location_type)
 
     def filter_maintenance_units_by_location_type(
         self, maintenance_units, location_type
@@ -134,7 +163,7 @@ class CoreApi:
         response.raise_for_status()
         return response.json().get("content")
 
-    def fetch_rental_property(self, identifier, value, location_type):
+    def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
             "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
@@ -149,6 +178,7 @@ class CoreApi:
             if leases and len(leases) > 0:
                 data = []
 
+                # FIXME it would be nice if we could run these in parallel
                 for lease in leases:
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
@@ -178,9 +208,6 @@ class CoreApi:
         except Exception as err:
             _logger.error(f"An error occurred: {err}")
             raise err
-
-    def fetch_form_data(self, identifier, value, location_type):
-        return self.fetch_rental_property(identifier, value, location_type)
 
 
 class OneCoreException(Exception):
