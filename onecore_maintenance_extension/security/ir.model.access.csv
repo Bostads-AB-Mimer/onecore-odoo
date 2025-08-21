@@ -3,12 +3,13 @@ access_maintenance_rental_property_option,maintenance.team.user,model_maintenanc
 access_maintenance_maintenance_unit_option,maintenance.team.user,model_maintenance_maintenance_unit_option,base.group_user,1,1,1,1
 access_maintenance_tenant_option,maintenance.team.user,model_maintenance_tenant_option,base.group_user,1,1,1,1
 access_maintenance_lease_option,maintenance.team.user,model_maintenance_lease_option,base.group_user,1,1,1,1
+access_maintenance_parking_space_option,maintenance.team.user,model_maintenance_parking_space_option,base.group_user,1,1,1,1
 access_maintenance_rental_property,maintenance.team.user,model_maintenance_rental_property,base.group_user,1,1,1,1
 access_maintenance_maintenance_unit,maintenance.team.user,model_maintenance_maintenance_unit,base.group_user,1,1,1,1
 access_maintenance_tenant,maintenance.team.user,model_maintenance_tenant,base.group_user,1,1,1,1
+access_maintenance_parking_space,maintenance.team.user,model_maintenance_parking_space,base.group_user,1,1,1,1
 access_maintenance_lease,maintenance.team.user,model_maintenance_lease,base.group_user,1,1,1,1
 access_maintenance_request_category,maintenance.team.user,model_maintenance_request_category,base.group_user,1,1,1,1
-
 access_maintenance_request_equipment_manager,maintenance.group_equipment_manager,model_maintenance_request,maintenance.group_equipment_manager,1,1,1,1
 access_ir_config_parameter_system_equipment_manager,maintenance.group_equipment_manager,base.model_ir_config_parameter,maintenance.group_equipment_manager,1,0,0,0
 
