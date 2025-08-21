@@ -595,6 +595,56 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         return is_external_contractor
 
+    def update_parking_space_form_options(self, work_order_data):
+
+        print("updating parking space form options")
+        for item in work_order_data:
+
+            parking_space = item.get("parking_space")
+            lease = item["lease"]
+
+            print(f"Parking space: {parking_space}")
+            print(f"Lease: {lease}")
+
+            """
+            parking_space_data = {
+                'rentalId': '922-701-00-0009', 
+                'companyCode': '001', 
+                'companyName': 'BOSTADS AB MIMER', 
+                'managementUnitCode': '61125', 
+                'managementUnitName': '2: SKULTUNA 2', 
+                'propertyCode': '10102', 
+                'propertyName': 'SKULTUNABY 1:131', 
+                'buildingCode': None, 
+                'buildingName': None, 
+                'parkingSpace': {
+                    'propertyObjectId': '_1990IREALH69LQ', 
+                    'code': '0009', 
+                    'name': 'BANKVÄGEN 3', 
+                    'parkingNumber': '922-701-00-0009', 
+                    'parkingSpaceType': {
+                        'code': 'PPLMEL', 
+                        'name': 'Parkeringsplats med el'
+                    }
+                }, 
+                'address': {
+                    'streetAddress': 'Bankvägen 3', 
+                    'streetAddress2': None, 
+                    'postalCode': '726 31', 
+                    'city': 'VÄSTERÅS'
+                }
+            }
+
+
+            parking_space_option = self.env['maintenance.parking.space.option'].create(
+                {
+                    ...
+                }
+            )
+            """
+
+        return
+
     def update_rental_property_form_options(self, work_order_data):
         for item in work_order_data:
             property = item["rental_property"]
@@ -792,7 +842,11 @@ class OneCoreMaintenanceRequest(models.Model):
                     )
 
                 record._delete_options()
-                record.update_rental_property_form_options(work_order_data)
+
+                if self.space_caption == "Bilplats":
+                    record.update_parking_space_form_options(work_order_data)
+                else:
+                    record.update_rental_property_form_options(work_order_data)
 
                 property_records = self.env[
                     "maintenance.rental.property.option"
@@ -812,6 +866,12 @@ class OneCoreMaintenanceRequest(models.Model):
                 if lease_records:
                     record.lease_option_id = lease_records[0].id
 
+                parking_space_records = self.env[
+                    "maintenance.parking.space.option"
+                ].search([("user_id", "=", self.env.user.id)])
+                if parking_space_records:
+                    record.parking_space_option_id = parking_space_records[0].id
+
                 tenant_records = self.env["maintenance.tenant.option"].search(
                     [("user_id", "=", self.env.user.id)]
                 )
@@ -829,6 +889,9 @@ class OneCoreMaintenanceRequest(models.Model):
             [("user_id", "=", self.env.user.id)]
         ).unlink()
         self.env["maintenance.maintenance.unit.option"].search(
+            [("user_id", "=", self.env.user.id)]
+        ).unlink()
+        self.env["maintenance.parking.space.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()
         self.env["maintenance.lease.option"].search(
