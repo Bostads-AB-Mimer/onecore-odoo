@@ -284,6 +284,8 @@
                                         <field name="parking_space_option_id" string="Bilplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="create_date != False" />
+                                        <field name="parking_space_code" string="Kod"
+                                            invisible="not parking_space_code" />
                                         <field name="parking_space_type_name" string="P-platstyp"
                                             invisible="not parking_space_type_name" />
                                         <field name="parking_space_number" string="P-platsnummer"
