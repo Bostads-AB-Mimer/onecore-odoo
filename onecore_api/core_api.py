@@ -81,7 +81,6 @@ class CoreApi:
 
             # Filter response on space caption if needed
             if location_type is not None and location_type is not False:
-                print(f"FILTERING CONTENT BY TYPE: {location_type}")
                 filtered_content = self.filter_lease_on_location_type(
                     content, location_type
                 )
