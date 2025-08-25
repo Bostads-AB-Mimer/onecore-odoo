@@ -915,24 +915,37 @@ class OneCoreMaintenanceRequest(models.Model):
                 if building_records:
                     record.building_option_id = building_records[0]
             else:
-                work_order_data = self.get_core_api().fetch_form_data(
-                    record.search_type, record.search_value, record.space_caption
-                )
-
-                if not work_order_data:
-                    _logger.info("No data found in response.")
-                    raise exceptions.UserError(
-                        _(
-                            "Kunde inte hitta något resultat för %s",
-                            record.search_value,
-                        )
+                if record.space_caption == "Bilplats":
+                    work_order_data = self.get_core_api().fetch_form_data(
+                        record.search_type, record.search_value, record.space_caption
                     )
 
-                record._delete_options()
+                    if not work_order_data:
+                        _logger.info("No data found in response.")
+                        raise exceptions.UserError(
+                            _(
+                                "Kunde inte hitta något resultat för %s",
+                                record.search_value,
+                            )
+                        )
 
-                if self.space_caption == "Bilplats":
+                    record._delete_options()
                     record.update_parking_space_form_options(work_order_data)
                 else:
+                    work_order_data = self.get_core_api().fetch_form_data(
+                        record.search_type, record.search_value, record.space_caption
+                    )
+
+                    if not work_order_data:
+                        _logger.info("No data found in response.")
+                        raise exceptions.UserError(
+                            _(
+                                "Kunde inte hitta något resultat för %s",
+                                record.search_value,
+                            )
+                        )
+
+                    record._delete_options()
                     record.update_rental_property_form_options(work_order_data)
 
                 property_records = self.env[
@@ -1062,16 +1075,27 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
                 if tenant_records:
                     record.tenant_option_id = tenant_records[0].id
-                
+
                 # Handle parking space updates for "Bilplats" space type
-                if record.space_caption == "Bilplats" and record.lease_option_id.parking_space_option_id:
-                    record.parking_space_option_id = record.lease_option_id.parking_space_option_id.id
+                if (
+                    record.space_caption == "Bilplats"
+                    and record.lease_option_id.parking_space_option_id
+                ):
+                    record.parking_space_option_id = (
+                        record.lease_option_id.parking_space_option_id.id
+                    )
                 else:
                     # Handle rental property updates for other space types
                     rental_property_records = self.env[
                         "maintenance.rental.property.option"
                     ].search(
-                        [("id", "=", record.lease_option_id.rental_property_option_id.id)]
+                        [
+                            (
+                                "id",
+                                "=",
+                                record.lease_option_id.rental_property_option_id.id,
+                            )
+                        ]
                     )
                     if rental_property_records:
                         record.rental_property_option_id = rental_property_records[0].id
