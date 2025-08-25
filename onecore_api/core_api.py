@@ -80,24 +80,28 @@ class CoreApi:
             )
 
             # Filter response on space caption if needed
-            if location_type is not None and location_type is not False:
-                filtered_content = self.filter_lease_on_location_type(
-                    content, location_type
-                )
-                return (
-                    filtered_content
-                    if isinstance(filtered_content, list)
-                    else [filtered_content]
-                )
+            filtered_content = self.filter_lease_on_location_type(
+                content, location_type
+            )
 
-            return content if isinstance(content, list) else [content]
+            return (
+                filtered_content
+                if isinstance(filtered_content, list)
+                else [filtered_content]
+            )
+
         except requests.HTTPError as http_err:
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
 
     def filter_lease_on_location_type(self, data, location_type):
-        if location_type == "Bilplats":
+        if location_type == False or location_type == "Lägenhet":
+            filtered_content = [
+                item for item in data if item["type"].strip() == "Bostadskontrakt"
+            ]
+            return filtered_content
+        elif location_type == "Bilplats":
             filtered_content = [
                 item for item in data if item["type"].strip() == "P-Platskontrakt"
             ]
