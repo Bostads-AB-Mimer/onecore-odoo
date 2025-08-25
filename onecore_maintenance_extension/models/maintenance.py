@@ -413,7 +413,11 @@ class OneCoreMaintenanceRequest(models.Model):
     )
     def _compute_form_state(self):
         for record in self:
-            if record.space_caption == "Bilplats" or record.parking_space_id or record.parking_space_option_id:
+            if (
+                record.space_caption == "Bilplats"
+                or record.parking_space_id
+                or record.parking_space_option_id
+            ):
                 record.form_state = "parking-space"
             elif record.property_id or record.property_option_id:
                 record.form_state = "property"
@@ -662,39 +666,6 @@ class OneCoreMaintenanceRequest(models.Model):
 
             parking_space = item.get("parking_space")
             lease = item["lease"]
-
-            print(f"Parking space: {parking_space}")
-            print(f"Lease: {lease}")
-
-            """
-            parking_space_data = {
-                'rentalId': '922-701-00-0009', 
-                'companyCode': '001', 
-                'companyName': 'BOSTADS AB MIMER', 
-                'managementUnitCode': '61125', 
-                'managementUnitName': '2: SKULTUNA 2', 
-                'propertyCode': '10102', 
-                'propertyName': 'SKULTUNABY 1:131', 
-                'buildingCode': None, 
-                'buildingName': None, 
-                'parkingSpace': {
-                    'propertyObjectId': '_1990IREALH69LQ', 
-                    'code': '0009', 
-                    'name': 'BANKVÄGEN 3', 
-                    'parkingNumber': '922-701-00-0009', 
-                    'parkingSpaceType': {
-                        'code': 'PPLMEL', 
-                        'name': 'Parkeringsplats med el'
-                    }
-                }, 
-                'address': {
-                    'streetAddress': 'Bankvägen 3', 
-                    'streetAddress2': None, 
-                    'postalCode': '726 31', 
-                    'city': 'VÄSTERÅS'
-                }
-            }
-            """
 
             parking_space_info = (
                 parking_space.get("parkingSpace", {}) if parking_space else {}
