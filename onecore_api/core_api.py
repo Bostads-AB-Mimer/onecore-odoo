@@ -200,7 +200,7 @@ class CoreApi:
                                 "maintenance_units": maintenance_units,
                             }
                         )
-                    return data
+                return data
 
             return None
         except Exception as err:
