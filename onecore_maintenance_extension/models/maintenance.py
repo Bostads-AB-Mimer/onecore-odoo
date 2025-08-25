@@ -1062,13 +1062,19 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
                 if tenant_records:
                     record.tenant_option_id = tenant_records[0].id
-                rental_property_records = self.env[
-                    "maintenance.rental.property.option"
-                ].search(
-                    [("id", "=", record.lease_option_id.rental_property_option_id.id)]
-                )
-                if rental_property_records:
-                    record.rental_property_option_id = rental_property_records[0].id
+                
+                # Handle parking space updates for "Bilplats" space type
+                if record.space_caption == "Bilplats" and record.lease_option_id.parking_space_option_id:
+                    record.parking_space_option_id = record.lease_option_id.parking_space_option_id.id
+                else:
+                    # Handle rental property updates for other space types
+                    rental_property_records = self.env[
+                        "maintenance.rental.property.option"
+                    ].search(
+                        [("id", "=", record.lease_option_id.rental_property_option_id.id)]
+                    )
+                    if rental_property_records:
+                        record.rental_property_option_id = rental_property_records[0].id
 
     @api.onchange("tenant_option_id")
     def _onchange_tenant_option_id(self):
