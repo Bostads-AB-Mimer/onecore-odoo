@@ -35,3 +35,6 @@ class OnecoreMaintenanceParkingSpace(models.Model):
     address = fields.Char("Adress")
     postal_code = fields.Char("Postnummer")
     city = fields.Char("Stad")
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Maintenance Request", ondelete="cascade"
+    )

@@ -19,6 +19,9 @@ class OnecoreMaintenanceLeaseOption(models.TransientModel):
     contract_date = fields.Date("Kontraktsdatum")
     last_debit_date = fields.Date("Datum för senaste debitering")
     approval_date = fields.Date("Datum för godkännande")
+    parking_space_option_id = fields.Many2one(
+        "maintenance.parking.space.option", string="Parking Space Option"
+    )
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option", string="Rental Property Option"
     )

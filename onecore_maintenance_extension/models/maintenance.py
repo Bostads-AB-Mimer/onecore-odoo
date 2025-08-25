@@ -96,6 +96,13 @@ class OneCoreMaintenanceRequest(models.Model):
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
+    parking_space_option_id = fields.Many2one(
+        "maintenance.parking.space.option",
+        compute="_compute_search",
+        string="Parking Space",
+        domain=lambda self: [("user_id", "=", self.env.user.id)],
+        readonly=False,
+    )
     maintenance_request_category_id = fields.Many2one(
         "maintenance.request.category",
         string="Ärendekategori",
@@ -255,6 +262,53 @@ class OneCoreMaintenanceRequest(models.Model):
         "Kontrakt Slutdatum", related="lease_id.lease_end_date", depends=["lease_id"]
     )
 
+    #   PARKING SPACE  ---------------------------------------------------------------------------------------------------------------------
+
+    parking_space_id = fields.Many2one(
+        "maintenance.parking.space", string="Parking Space ID", store=True
+    )
+
+    parking_space_name = fields.Char(
+        "P-plats Namn", related="parking_space_id.name", depends=["parking_space_id"]
+    )
+    parking_space_code = fields.Char(
+        "P-plats Kod", related="parking_space_id.code", depends=["parking_space_id"]
+    )
+    parking_space_type_name = fields.Char(
+        "P-platstyp", related="parking_space_id.type_name", depends=["parking_space_id"]
+    )
+    parking_space_type_code = fields.Char(
+        "P-platstypkod",
+        related="parking_space_id.type_code",
+        depends=["parking_space_id"],
+    )
+    parking_space_number = fields.Char(
+        "P-platsnummer", related="parking_space_id.number", depends=["parking_space_id"]
+    )
+    parking_space_property_code = fields.Char(
+        "P-plats Fastighetskod",
+        related="parking_space_id.property_code",
+        depends=["parking_space_id"],
+    )
+    parking_space_property_name = fields.Char(
+        "P-plats Fastighet",
+        related="parking_space_id.property_name",
+        depends=["parking_space_id"],
+    )
+    parking_space_address = fields.Char(
+        "P-plats Adress",
+        related="parking_space_id.address",
+        depends=["parking_space_id"],
+    )
+    parking_space_postal_code = fields.Char(
+        "P-plats Postnummer",
+        related="parking_space_id.postal_code",
+        depends=["parking_space_id"],
+    )
+    parking_space_city = fields.Char(
+        "P-plats Stad", related="parking_space_id.city", depends=["parking_space_id"]
+    )
+
     # Comes from Mimer.nu
     pet = fields.Char("Husdjur", store=True)
     call_between = fields.Char("Nås mellan", store=True)
@@ -343,6 +397,7 @@ class OneCoreMaintenanceRequest(models.Model):
             ("rental-property", "Bostad"),
             ("property", "Fastighet"),
             ("building", "Byggnad"),
+            ("parking-space", "Bilplats"),
         ],
         compute="_compute_form_state",
     )
@@ -352,10 +407,15 @@ class OneCoreMaintenanceRequest(models.Model):
         "property_option_id",
         "building_id",
         "building_option_id",
+        "parking_space_id",
+        "parking_space_option_id",
+        "space_caption",
     )
     def _compute_form_state(self):
         for record in self:
-            if record.property_id or record.property_option_id:
+            if record.space_caption == "Bilplats" or record.parking_space_id or record.parking_space_option_id:
+                record.form_state = "parking-space"
+            elif record.property_id or record.property_option_id:
                 record.form_state = "property"
             elif record.building_id or record.building_option_id:
                 record.form_state = "building"
@@ -634,16 +694,72 @@ class OneCoreMaintenanceRequest(models.Model):
                     'city': 'VÄSTERÅS'
                 }
             }
-
-
-            parking_space_option = self.env['maintenance.parking.space.option'].create(
-                {
-                    ...
-                }
-            )
             """
 
-        return
+            parking_space_info = (
+                parking_space.get("parkingSpace", {}) if parking_space else {}
+            )
+            address_info = parking_space.get("address", {}) if parking_space else {}
+
+            parking_space_option = self.env["maintenance.parking.space.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": parking_space_info.get("name", "Namn saknas"),
+                    "code": parking_space_info.get("code"),
+                    "type_name": parking_space_info.get("parkingSpaceType", {}).get(
+                        "name"
+                    ),
+                    "type_code": parking_space_info.get("parkingSpaceType", {}).get(
+                        "code"
+                    ),
+                    "number": parking_space_info.get("parkingNumber"),
+                    "property_code": parking_space.get("propertyCode"),
+                    "property_name": parking_space.get("propertyName"),
+                    "address": address_info.get("streetAddress", ""),
+                    "postal_code": address_info.get("postalCode"),
+                    "city": address_info.get("city"),
+                }
+            )
+
+            lease_option = self.env["maintenance.lease.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": lease["leaseId"],
+                    "lease_number": lease["leaseNumber"],
+                    "parking_space_option_id": parking_space_option.id,
+                    "lease_type": lease["type"],
+                    "lease_start_date": lease["leaseStartDate"],
+                    "lease_end_date": lease["lastDebitDate"],
+                    "contract_date": lease["contractDate"],
+                    "approval_date": lease["approvalDate"],
+                }
+            )
+
+            for tenant in lease["tenants"]:
+                # Check if a tenant with the same contact_code already exists
+                existing_tenant = self.env["maintenance.tenant.option"].search(
+                    [("contact_code", "=", tenant["contactCode"])], limit=1
+                )
+
+                if not existing_tenant:
+                    name = self._get_tenant_name(tenant)
+                    phone_number = self._get_main_phone_number(tenant)
+
+                    self.env["maintenance.tenant.option"].create(
+                        {
+                            "user_id": self.env.user.id,
+                            "name": name,
+                            "contact_code": tenant["contactCode"],
+                            "contact_key": tenant["contactKey"],
+                            "national_registration_number": tenant.get(
+                                "nationalRegistrationNumber"
+                            ),
+                            "email_address": tenant.get("emailAddress"),
+                            "phone_number": phone_number,
+                            "is_tenant": tenant["isTenant"],
+                            "special_attention": tenant.get("specialAttention"),
+                        }
+                    )
 
     def update_rental_property_form_options(self, work_order_data):
         for item in work_order_data:
@@ -998,6 +1114,32 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.is_tenant = record.tenant_option_id.is_tenant
                 record.special_attention = record.tenant_option_id.special_attention
 
+    @api.onchange("parking_space_option_id")
+    def _onchange_parking_space_option_id(self):
+        if self.parking_space_option_id:
+            for record in self:
+                record.parking_space_id = record.parking_space_option_id.name
+                record.parking_space_name = record.parking_space_option_id.name
+                record.parking_space_code = record.parking_space_option_id.code
+                record.parking_space_type_name = (
+                    record.parking_space_option_id.type_name
+                )
+                record.parking_space_type_code = (
+                    record.parking_space_option_id.type_code
+                )
+                record.parking_space_number = record.parking_space_option_id.number
+                record.parking_space_property_code = (
+                    record.parking_space_option_id.property_code
+                )
+                record.parking_space_property_name = (
+                    record.parking_space_option_id.property_name
+                )
+                record.parking_space_address = record.parking_space_option_id.address
+                record.parking_space_postal_code = (
+                    record.parking_space_option_id.postal_code
+                )
+                record.parking_space_city = record.parking_space_option_id.city
+
     def _send_created_sms(self, phone_number):
         mail_message = self.env["mail.message"]
         message = f"Hej {self.tenant_name}!\n\nTack för din serviceanmälan. Du kan följa, uppdatera och prata med oss om ditt ärende på Mina sidor."
@@ -1140,6 +1282,31 @@ class OneCoreMaintenanceRequest(models.Model):
                 )
 
                 maintenance_request.write({"tenant_id": new_tenant_record.id})
+
+            # SAVE PARKING SPACE
+            if vals.get("parking_space_option_id"):
+                parking_space_option_record = self.env[
+                    "maintenance.parking.space.option"
+                ].search([("id", "=", vals.get("parking_space_option_id"))])
+                new_parking_space_record = self.env["maintenance.parking.space"].create(
+                    {
+                        "name": parking_space_option_record.name,
+                        "code": parking_space_option_record.code,
+                        "type_name": parking_space_option_record.type_name,
+                        "type_code": parking_space_option_record.type_code,
+                        "number": parking_space_option_record.number,
+                        "property_code": parking_space_option_record.property_code,
+                        "property_name": parking_space_option_record.property_name,
+                        "address": parking_space_option_record.address,
+                        "postal_code": parking_space_option_record.postal_code,
+                        "city": parking_space_option_record.city,
+                        "maintenance_request_id": maintenance_request.id,
+                    }
+                )
+
+                maintenance_request.write(
+                    {"parking_space_id": new_parking_space_record.id}
+                )
 
             # Fix for now to hide stuff specific for tvättstugeärenden
             if not vals.get("space_caption"):
