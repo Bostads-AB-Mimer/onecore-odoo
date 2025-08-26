@@ -96,14 +96,24 @@ class CoreApi:
             )
 
     def filter_lease_on_location_type(self, data, location_type):
+        # Handle case where data might not be a list or contain non-dict items
+        if not isinstance(data, list):
+            return data
+
         if location_type == False or location_type == "Lägenhet":
             filtered_content = [
-                item for item in data if item["type"].strip() == "Bostadskontrakt"
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "Bostadskontrakt"
             ]
             return filtered_content
         elif location_type == "Bilplats":
             filtered_content = [
-                item for item in data if item["type"].strip() == "P-Platskontrakt"
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "P-Platskontrakt"
             ]
             return filtered_content
         else:
