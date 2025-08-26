@@ -5,9 +5,10 @@
     "sequence": 50,
     "category": "Authentication",
     "description": "Keycloak authentication integration for ONECore.",
-    "depends": ["base"],
+    "depends": ["base", "web", "auth_oauth"],
     "data": [],
     "post_init_hook": "_post_init_hook",
-    "auto_install": True,
+    "installable": True,
+    "auto_install": False,
     "license": "LGPL-3",
 }
