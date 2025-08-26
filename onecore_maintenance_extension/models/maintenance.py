@@ -659,6 +659,54 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         return is_external_contractor
 
+    def _create_lease_option(self, lease, parking_space_option_id=None, rental_property_option_id=None):
+        """Create a lease option record with common lease data."""
+        lease_data = {
+            "user_id": self.env.user.id,
+            "name": lease["leaseId"],
+            "lease_number": lease["leaseNumber"],
+            "lease_type": lease["type"],
+            "lease_start_date": lease["leaseStartDate"],
+            "lease_end_date": lease["lastDebitDate"],
+            "contract_date": lease["contractDate"],
+            "approval_date": lease["approvalDate"],
+        }
+        
+        if parking_space_option_id:
+            lease_data["parking_space_option_id"] = parking_space_option_id
+        if rental_property_option_id:
+            lease_data["rental_property_option_id"] = rental_property_option_id
+            
+        return self.env["maintenance.lease.option"].create(lease_data)
+
+    def _create_tenant_options(self, tenants):
+        """Create tenant option records for a list of tenants."""
+        for tenant in tenants:
+            # Check if a tenant with the same contact_code already exists
+            existing_tenant = self.env["maintenance.tenant.option"].search(
+                [("contact_code", "=", tenant["contactCode"])], limit=1
+            )
+
+            if not existing_tenant:
+                name = self._get_tenant_name(tenant)
+                phone_number = self._get_main_phone_number(tenant)
+
+                self.env["maintenance.tenant.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": name,
+                        "contact_code": tenant["contactCode"],
+                        "contact_key": tenant["contactKey"],
+                        "national_registration_number": tenant.get(
+                            "nationalRegistrationNumber"
+                        ),
+                        "email_address": tenant.get("emailAddress"),
+                        "phone_number": phone_number,
+                        "is_tenant": tenant["isTenant"],
+                        "special_attention": tenant.get("specialAttention"),
+                    }
+                )
+
     def update_parking_space_form_options(self, work_order_data):
 
         print("updating parking space form options")
@@ -692,45 +740,9 @@ class OneCoreMaintenanceRequest(models.Model):
                 }
             )
 
-            lease_option = self.env["maintenance.lease.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": lease["leaseId"],
-                    "lease_number": lease["leaseNumber"],
-                    "parking_space_option_id": parking_space_option.id,
-                    "lease_type": lease["type"],
-                    "lease_start_date": lease["leaseStartDate"],
-                    "lease_end_date": lease["lastDebitDate"],
-                    "contract_date": lease["contractDate"],
-                    "approval_date": lease["approvalDate"],
-                }
-            )
+            lease_option = self._create_lease_option(lease, parking_space_option_id=parking_space_option.id)
 
-            for tenant in lease["tenants"]:
-                # Check if a tenant with the same contact_code already exists
-                existing_tenant = self.env["maintenance.tenant.option"].search(
-                    [("contact_code", "=", tenant["contactCode"])], limit=1
-                )
-
-                if not existing_tenant:
-                    name = self._get_tenant_name(tenant)
-                    phone_number = self._get_main_phone_number(tenant)
-
-                    self.env["maintenance.tenant.option"].create(
-                        {
-                            "user_id": self.env.user.id,
-                            "name": name,
-                            "contact_code": tenant["contactCode"],
-                            "contact_key": tenant["contactKey"],
-                            "national_registration_number": tenant.get(
-                                "nationalRegistrationNumber"
-                            ),
-                            "email_address": tenant.get("emailAddress"),
-                            "phone_number": phone_number,
-                            "is_tenant": tenant["isTenant"],
-                            "special_attention": tenant.get("specialAttention"),
-                        }
-                    )
+            self._create_tenant_options(lease["tenants"])
 
     def update_rental_property_form_options(self, work_order_data):
         for item in work_order_data:
@@ -759,45 +771,9 @@ class OneCoreMaintenanceRequest(models.Model):
                 }
             )
 
-            lease_option = self.env["maintenance.lease.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": lease["leaseId"],
-                    "lease_number": lease["leaseNumber"],
-                    "rental_property_option_id": rental_property_option.id,
-                    "lease_type": lease["type"],
-                    "lease_start_date": lease["leaseStartDate"],
-                    "lease_end_date": lease["lastDebitDate"],
-                    "contract_date": lease["contractDate"],
-                    "approval_date": lease["approvalDate"],
-                }
-            )
+            lease_option = self._create_lease_option(lease, rental_property_option_id=rental_property_option.id)
 
-            for tenant in lease["tenants"]:
-                # Check if a tenant with the same contact_code already exists
-                existing_tenant = self.env["maintenance.tenant.option"].search(
-                    [("contact_code", "=", tenant["contactCode"])], limit=1
-                )
-
-                if not existing_tenant:
-                    name = self._get_tenant_name(tenant)
-                    phone_number = self._get_main_phone_number(tenant)
-
-                    self.env["maintenance.tenant.option"].create(
-                        {
-                            "user_id": self.env.user.id,
-                            "name": name,
-                            "contact_code": tenant["contactCode"],
-                            "contact_key": tenant["contactKey"],
-                            "national_registration_number": tenant.get(
-                                "nationalRegistrationNumber"
-                            ),
-                            "email_address": tenant.get("emailAddress"),
-                            "phone_number": phone_number,
-                            "is_tenant": tenant["isTenant"],
-                            "special_attention": tenant.get("specialAttention"),
-                        }
-                    )
+            self._create_tenant_options(lease["tenants"])
 
             for maintenance_unit in maintenance_units:
                 self.env["maintenance.maintenance.unit.option"].create(
