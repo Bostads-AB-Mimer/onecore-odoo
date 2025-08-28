@@ -54,47 +54,47 @@ class OneCoreMaintenanceRequest(models.Model):
 
     property_option_id = fields.Many2one(
         "maintenance.property.option",
-        compute="_compute_search",
         string="Property Option Id",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
 
     building_option_id = fields.Many2one(
         "maintenance.building.option",
-        compute="_compute_search",
         string="Building Option Id",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
 
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option",
-        compute="_compute_search",
         string="Rental Property Option Id",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
     maintenance_unit_option_id = fields.Many2one(
         "maintenance.maintenance.unit.option",
-        compute="_compute_search",
         string="Maintenance Unit Option",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
     tenant_option_id = fields.Many2one(
         "maintenance.tenant.option",
-        compute="_compute_search",
         string="Tenant",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
     lease_option_id = fields.Many2one(
         "maintenance.lease.option",
-        compute="_compute_search",
         string="Lease",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
+        store=False,
     )
     maintenance_request_category_id = fields.Many2one(
         "maintenance.request.category",
@@ -713,16 +713,79 @@ class OneCoreMaintenanceRequest(models.Model):
         )
         # TODO get maintenance units for building
 
-    @api.onchange("search_value", "search_type", "space_caption")
+    @api.onchange("search_value", "search_type")
     def _compute_search(self):
-        if not self.search_value or not validators[self.search_type](self.search_value):
+        # Don't trigger search if search_value is False (likely from form state cleanup)
+        # Also don't search if search_value is empty (cleared by search_type change)
+        if self.search_value is False or not self.search_value:
+            return
+
+        # Don't trigger search if values don't pass validation
+        if not self.search_type or not validators[self.search_type](self.search_value):
+            print("invalid search type and search value")
+            return
+
+        # Store values before search to preserve them
+        search_value = self.search_value
+        search_type = self.search_type
+        space_caption = self.space_caption
+
+        self._perform_search()
+
+        # Return explicit values to preserve form state like space_caption does
+        if search_value and search_type:
+            return {
+                "value": {
+                    "search_value": search_value,
+                    "search_type": search_type,
+                    "space_caption": space_caption,
+                }
+            }
+
+    @api.onchange("space_caption")
+    def _onchange_space_caption(self):
+        # When space_caption changes, trigger a search if we have valid search inputs
+        # This allows fetching different data for different space types
+        if (
+            self.search_value
+            and self.search_type
+            and validators[self.search_type](self.search_value)
+        ):
+            # Store values before they can be lost
+            search_value = self.search_value
+            search_type = self.search_type
+            space_caption = self.space_caption
+
+            # Use context to indicate this is a space_caption change, not a new search
+            self.with_context(space_caption_change=True)._perform_search()
+
+            # Return a proper onchange result to ensure frontend gets the updated values
+            return {
+                "value": {
+                    "search_value": search_value,
+                    "search_type": search_type,
+                    "space_caption": space_caption,
+                }
+            }
+        return
+
+    def _perform_search(self):
+        # Store search parameters to prevent them from being lost during execution
+        search_value = self.search_value
+        search_type = self.search_type
+        space_caption = self.space_caption
+
+        if not search_value or not validators[search_type](search_value):
             self._delete_options()
             return
 
+        # Always delete existing options to prevent accumulation
+        self._delete_options()
+
         for record in self:
-            if self.search_type == "propertyName":
+            if search_type == "propertyName":
                 properties = self.get_core_api().fetch_properties(
-                    record.search_value, record.space_caption
+                    search_value, space_caption
                 )
 
                 if not properties:
@@ -730,11 +793,11 @@ class OneCoreMaintenanceRequest(models.Model):
                     raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
-                            record.search_value,
+                            search_value,
                         )
                     )
 
-                record._delete_options()
+                # Create new options
                 record.update_property_form_options(properties)
 
                 property_records = self.env["maintenance.property.option"].search(
@@ -743,6 +806,8 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if property_records:
                     record.property_option_id = property_records[0]
+                    # Manually trigger onchange to populate property fields
+                    record._onchange_property_option_id()
 
                 maintenance_unit_records = self.env[
                     "maintenance.maintenance.unit.option"
@@ -755,20 +820,22 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if maintenance_unit_records:
                     record.maintenance_unit_option_id = maintenance_unit_records[0]
+                    # Manually trigger onchange to populate maintenance unit fields
+                    record._onchange_maintenance_unit_option_id()
 
-            elif self.search_type == "buildingCode":
-                building = self.get_core_api().fetch_building(record.search_value)
+            elif search_type == "buildingCode":
+                building = self.get_core_api().fetch_building(search_value)
 
                 if not building:
                     _logger.info("No data found in response.")
                     raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
-                            record.search_value,
+                            search_value,
                         )
                     )
 
-                record._delete_options()
+                # Create new options
                 record.update_building_form_options(building)
 
                 building_records = self.env["maintenance.building.option"].search(
@@ -779,7 +846,7 @@ class OneCoreMaintenanceRequest(models.Model):
                     record.building_option_id = building_records[0]
             else:
                 work_order_data = self.get_core_api().fetch_form_data(
-                    record.search_type, record.search_value, record.space_caption
+                    search_type, search_value, space_caption
                 )
 
                 if not work_order_data:
@@ -787,11 +854,10 @@ class OneCoreMaintenanceRequest(models.Model):
                     raise exceptions.UserError(
                         _(
                             "Kunde inte hitta något resultat för %s",
-                            record.search_value,
+                            search_value,
                         )
                     )
 
-                record._delete_options()
                 record.update_rental_property_form_options(work_order_data)
 
                 property_records = self.env[
@@ -799,24 +865,32 @@ class OneCoreMaintenanceRequest(models.Model):
                 ].search([("user_id", "=", self.env.user.id)])
                 if property_records:
                     record.rental_property_option_id = property_records[0].id
+                    # Manually trigger onchange to populate rental property fields (Objektsinformation section)
+                    record._onchange_rental_property_option_id()
 
                 maintenance_unit_records = self.env[
                     "maintenance.maintenance.unit.option"
                 ].search([("user_id", "=", self.env.user.id)])
                 if maintenance_unit_records:
                     record.maintenance_unit_option_id = maintenance_unit_records[0].id
+                    # Manually trigger onchange to populate maintenance unit fields
+                    record._onchange_maintenance_unit_option_id()
 
                 lease_records = self.env["maintenance.lease.option"].search(
                     [("user_id", "=", self.env.user.id)]
                 )
                 if lease_records:
                     record.lease_option_id = lease_records[0].id
+                    # Manually trigger onchange to populate lease fields
+                    record._onchange_lease_option_id()
 
                 tenant_records = self.env["maintenance.tenant.option"].search(
                     [("user_id", "=", self.env.user.id)]
                 )
                 if tenant_records:
                     record.tenant_option_id = tenant_records[0].id
+                    # Manually trigger onchange to populate tenant fields (Hyresgäst section)
+                    record._onchange_tenant_option_id()
 
     def _delete_options(self):
         self.env["maintenance.property.option"].search(
@@ -850,6 +924,8 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange("property_option_id")
     def _onchange_property_option_id(self):
+        if self.env.context.get("skip_onchange"):
+            return
         if self.property_option_id:
             for record in self:
                 record.property_id = record.property_option_id.id
@@ -858,6 +934,8 @@ class OneCoreMaintenanceRequest(models.Model):
 
     @api.onchange("rental_property_option_id")
     def _onchange_rental_property_option_id(self):
+        if self.env.context.get("skip_onchange"):
+            return
         if self.rental_property_option_id:
             for record in self:
                 record.rental_property_id = record.rental_property_option_id.name
