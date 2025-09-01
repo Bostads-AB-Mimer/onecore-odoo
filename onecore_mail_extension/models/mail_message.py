@@ -52,7 +52,7 @@ class OneCoreMailMessage(models.Model):
             "text": text,
             "externalContractorName": team_name,
         }
-        url = f"{base_url}/workOrders/sendEmail"
+        url = f"{base_url}/work-orders/send-email"
 
         try:
             response = onecore_auth.onecore_request("POST", url, data=data)
@@ -72,7 +72,7 @@ class OneCoreMailMessage(models.Model):
             "text": text,
             "externalContractorName": team_name,
         }
-        url = f"{base_url}/workOrders/sendSms"
+        url = f"{base_url}/work-orders/send-sms"
 
         try:
             response = onecore_auth.onecore_request("POST", url, data=data)

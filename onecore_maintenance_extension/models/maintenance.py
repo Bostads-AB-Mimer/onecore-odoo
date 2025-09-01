@@ -522,7 +522,7 @@ class OneCoreMaintenanceRequest(models.Model):
         params = {
             "handler": search_type,
         }
-        url = f"{base_url}/workOrderData/{urllib.parse.quote(str(search_by_number), safe='')}"
+        url = f"{base_url}/work-orders/data/{urllib.parse.quote(str(search_by_number), safe='')}"
 
         try:
             response = onecore_auth.onecore_request("GET", url, params=params)
