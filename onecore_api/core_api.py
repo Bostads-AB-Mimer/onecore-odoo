@@ -65,7 +65,7 @@ class CoreApi:
             "leaseId": "/leases",
             "rentalObjectId": "/leases/by-rental-property-id",
             "contactCode": "/leases/by-contact-code",
-            "pnr": "/leases/for",
+            "pnr": "/leases/by-pnr",
         }
 
         if identifier not in paths:
@@ -85,17 +85,17 @@ class CoreApi:
 
     def fetch_residence(self, id):
         return self._get_json(
-            f"/propertyBase/residence/rental-id/{urllib.parse.quote(str(id), safe='')}"
+            f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
     def fetch_building(self, id):
         return self._get_json(
-            f"/propertyBase/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
+            f"/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
         )
 
     def fetch_properties(self, name, location_type):
         properties = self._get_json(
-            f"/propertyBase/properties/search", params={"q": name}
+            f"/properties/search", params={"q": name}
         )
         data = []
 
@@ -117,12 +117,12 @@ class CoreApi:
 
     def fetch_maintenance_units_for_property(self, code):
         return self._get_json(
-            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
+            f"/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
         )
 
     def fetch_maintenance_units(self, id, location_type):
         content = self._get_json(
-            f"/propertyBase/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
+            f"/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
         )
         return self.filter_maintenance_units_by_location_type(content, location_type)
 
