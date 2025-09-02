@@ -18,6 +18,7 @@
         # Load initial Data
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",
+        "data/mail_message_subtype.xml",
     ],
     "assets": {
         "web.assets_backend": [
