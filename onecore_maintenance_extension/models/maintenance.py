@@ -410,12 +410,12 @@ class OneCoreMaintenanceRequest(models.Model):
                 [
                     ("mail_message_id", "in", message_ids),
                     ("res_partner_id", "=", self.env.user.partner_id.id),
-                    ("is_read", "=", False),
+                    ("is_read", "!=", True),
                     ("notification_type", "=", "inbox"),
                     (
                         "mail_message_id.author_id.user_ids.login",
                         "=",
-                        "admin" if is_local() else "odoo@mimer.nu",
+                        "odoo@mimer.nu",
                     ),
                 ]
             )

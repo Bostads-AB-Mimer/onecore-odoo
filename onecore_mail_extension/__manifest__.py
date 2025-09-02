@@ -8,6 +8,9 @@
     "description": "Extends the mail module with ONECore features.",
     "depends": ["base", "mail"],
     "summary": "Extends the mail module with ONECore features.",
+    "data": [
+        "data/mail_subtypes.xml",
+    ],
     "assets": {
         "web._assets_primary_variables": [
             "mail/static/src/**/primary_variables.scss",
