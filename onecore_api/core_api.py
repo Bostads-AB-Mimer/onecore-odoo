@@ -62,7 +62,6 @@ class CoreApi:
         return response.json().get("content")
 
     def fetch_leases(self, identifier, value, location_type):
-        print(f"API - fetching leases for {location_type}!")
         paths = {
             "leaseId": "/leases",
             "rentalObjectId": "/leases/by-rental-property-id",
@@ -184,8 +183,6 @@ class CoreApi:
 
         try:
             leases = self.fetch_leases(identifier, value, location_type)
-
-            print(f"API - fetched {len(leases)} leases for {location_type}!")
 
             if leases and len(leases) > 0:
                 data = []
