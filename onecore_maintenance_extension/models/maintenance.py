@@ -1249,14 +1249,24 @@ class OneCoreMaintenanceRequest(models.Model):
                 tenant_option_record = self.env["maintenance.tenant.option"].search(
                     [("id", "=", vals.get("tenant_option_id"))]
                 )
+
+                # Use the phone number and email from vals if they exists (modified in form), otherwise use the option record's phone number/email
+                phone_number_to_save = vals.get(
+                    "phone_number", tenant_option_record.phone_number
+                )
+
+                email_to_save = vals.get(
+                    "email_address", tenant_option_record.email_address
+                )
+
                 new_tenant_record = self.env["maintenance.tenant"].create(
                     {
                         "name": tenant_option_record.name,
                         "contact_code": tenant_option_record.contact_code,
                         "contact_key": tenant_option_record.contact_key,
                         "national_registration_number": tenant_option_record.national_registration_number,
-                        "email_address": tenant_option_record.email_address,
-                        "phone_number": tenant_option_record.phone_number,
+                        "email_address": email_to_save,
+                        "phone_number": phone_number_to_save,
                         "is_tenant": tenant_option_record.is_tenant,
                         "special_attention": tenant_option_record.special_attention,
                         "maintenance_request_id": maintenance_request.id,
