@@ -278,6 +278,27 @@
                                         <field name="building_name"
                                             invisible="not building_name" />
                                     </group>
+                                    <group col="1"
+                                        invisible="form_state != 'parking-space'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="parking_space_option_id" string="Bilplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="parking_space_code" string="Kod"
+                                            invisible="not parking_space_code" />
+                                        <field name="parking_space_type_name" string="P-platstyp"
+                                            invisible="not parking_space_type_name" />
+                                        <field name="parking_space_number" string="P-platsnummer"
+                                            invisible="not parking_space_number" />
+                                        <field name="parking_space_property_name" string="Fastighet"
+                                            invisible="not parking_space_property_name" />
+                                        <field name="parking_space_address" string="Adress"
+                                            invisible="not parking_space_address" />
+                                        <field name="parking_space_postal_code" string="Postnummer"
+                                            invisible="not parking_space_postal_code" />
+                                        <field name="parking_space_city" string="Stad"
+                                            invisible="not parking_space_city" />
+                                    </group>
                                 </div>
                             </div>
                         </div>

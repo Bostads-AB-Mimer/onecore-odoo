@@ -1,6 +1,7 @@
 import requests
 import logging
 import urllib.parse
+import json
 
 _logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class CoreApi:
         response.raise_for_status()
         return response.json().get("content")
 
-    def fetch_leases(self, identifier, value):
+    def fetch_leases(self, identifier, value, location_type):
         paths = {
             "leaseId": "/leases",
             "rentalObjectId": "/leases/by-rental-property-id",
@@ -77,11 +78,45 @@ class CoreApi:
                 params={"includeContacts": "true"},
             )
 
-            return content if isinstance(content, list) else [content]
+            # Filter response on space caption if needed
+            filtered_content = self.filter_lease_on_location_type(
+                content, location_type
+            )
+
+            return (
+                filtered_content
+                if isinstance(filtered_content, list)
+                else [filtered_content]
+            )
+
         except requests.HTTPError as http_err:
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
+
+    def filter_lease_on_location_type(self, data, location_type):
+        # Handle case where data might not be a list or contain non-dict items
+        if not isinstance(data, list):
+            return data
+
+        if location_type == False or location_type == "Lägenhet":
+            filtered_content = [
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "Bostadskontrakt"
+            ]
+            return filtered_content
+        elif location_type == "Bilplats":
+            filtered_content = [
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "P-Platskontrakt"
+            ]
+            return filtered_content
+        else:
+            return data
 
     def fetch_residence(self, id):
         return self._get_json(
@@ -134,14 +169,20 @@ class CoreApi:
             maintenance_units,
         )
 
+    def fetch_parking_space(self, id):
+        return self._get_json(
+            f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        )
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
+            "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
         }
         lease_types_with_maintenance_units = ["Bostadskontrakt"]
 
         try:
-            leases = self.fetch_leases(identifier, value)
+            leases = self.fetch_leases(identifier, value, location_type)
 
             if leases and len(leases) > 0:
                 data = []
@@ -153,6 +194,7 @@ class CoreApi:
                         rental_property = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
+                        parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
                         maintenance_units = (
                             self.fetch_maintenance_units(
                                 rental_property["property"]["code"], location_type
@@ -165,6 +207,7 @@ class CoreApi:
                             {
                                 "lease": lease,
                                 "rental_property": rental_property,
+                                "parking_space": parking_space,
                                 "maintenance_units": maintenance_units,
                             }
                         )
