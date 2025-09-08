@@ -136,6 +136,30 @@ class OneCoreMaintenanceRequest(models.Model):
         depends=["building_id"],
     )
 
+    building_code = fields.Char(
+        "Byggnadskod",
+        related="building_id.code",
+        depends=["building_id"],
+    )
+
+    building_type_name = fields.Char(
+        "Byggnadstyp",
+        related="building_id.building_type_name",
+        depends=["building_id"],
+    )
+
+    building_construction_year = fields.Char(
+        "Byggår",
+        related="building_id.construction_year",
+        depends=["building_id"],
+    )
+
+    building_renovation_year = fields.Char(
+        "Renoveringsår",
+        related="building_id.renovation_year",
+        depends=["building_id"],
+    )
+
     #    RENTAL PROPERTY  ---------------------------------------------------------------------------------------------------------------------
 
     rental_property_id = fields.Many2one(
@@ -421,7 +445,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.form_state = "parking-space"
             elif record.property_id or record.property_option_id:
                 record.form_state = "property"
-            elif record.building_id or record.building_option_id:
+            elif record.space_caption == "Byggnad" or record.building_id or record.building_option_id:
                 record.form_state = "building"
             else:
                 record.form_state = "rental-property"
@@ -751,6 +775,7 @@ class OneCoreMaintenanceRequest(models.Model):
         for item in work_order_data:
             property = item["rental_property"]
             lease = item["lease"]
+            building = item.get("building")
             maintenance_units = item.get("maintenance_units", [])
 
             rental_property_option = self.env[
@@ -777,6 +802,10 @@ class OneCoreMaintenanceRequest(models.Model):
             lease_option = self._create_lease_option(
                 lease, rental_property_option_id=rental_property_option.id
             )
+
+            # Handle building data if available and space_caption is "Byggnad"
+            if building and self.space_caption == "Byggnad":
+                self.update_building_form_options(building)
 
             self._create_tenant_options(lease["tenants"])
 
@@ -827,6 +856,9 @@ class OneCoreMaintenanceRequest(models.Model):
                 "user_id": self.env.user.id,
                 "name": building["name"],
                 "code": building["code"],
+                "building_type_name": building.get("buildingType", {}).get("name"),
+                "construction_year": str(building.get("construction", {}).get("constructionYear")) if building.get("construction", {}).get("constructionYear") else None,
+                "renovation_year": str(building.get("construction", {}).get("renovationYear")) if building.get("construction", {}).get("renovationYear") else None,
             }
         )
         # TODO get maintenance units for building
@@ -959,6 +991,12 @@ class OneCoreMaintenanceRequest(models.Model):
                 if tenant_records:
                     record.tenant_option_id = tenant_records[0].id
 
+                building_records = self.env["maintenance.building.option"].search(
+                    [("user_id", "=", self.env.user.id)]
+                )
+                if building_records:
+                    record.building_option_id = building_records[0].id
+
     def _delete_options(self):
         self.env["maintenance.property.option"].search(
             [("user_id", "=", self.env.user.id)]
@@ -999,6 +1037,17 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.property_id = record.property_option_id.id
                 record.property_designation = record.property_option_id.designation
                 record.maintenance_unit_option_id = False
+
+    @api.onchange("building_option_id")
+    def _onchange_building_option_id(self):
+        if self.building_option_id:
+            for record in self:
+                record.building_id = record.building_option_id.id
+                record.building_name = record.building_option_id.name
+                record.building_code = record.building_option_id.code
+                record.building_type_name = record.building_option_id.building_type_name
+                record.building_construction_year = record.building_option_id.construction_year
+                record.building_renovation_year = record.building_option_id.renovation_year
 
     @api.onchange("rental_property_option_id")
     def _onchange_rental_property_option_id(self):
@@ -1167,6 +1216,9 @@ class OneCoreMaintenanceRequest(models.Model):
                     {
                         "name": building_option_record.name,
                         "code": building_option_record.code,
+                        "building_type_name": building_option_record.building_type_name,
+                        "construction_year": building_option_record.construction_year,
+                        "renovation_year": building_option_record.renovation_year,
                         "maintenance_request_id": maintenance_request.id,
                     }
                 )

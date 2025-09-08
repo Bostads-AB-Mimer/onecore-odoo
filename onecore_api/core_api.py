@@ -99,15 +99,15 @@ class CoreApi:
         if not isinstance(data, list):
             return data
 
-        if location_type == False or location_type == "Lägenhet":
+        if location_type != "Bilplats":
             filtered_content = [
                 item
                 for item in data
                 if isinstance(item, dict)
-                and item.get("type", "").strip() == "Bostadskontrakt"
+                and item.get("type", "").strip() != "P-Platskontrakt"
             ]
             return filtered_content
-        elif location_type == "Bilplats":
+        else:
             filtered_content = [
                 item
                 for item in data
@@ -115,8 +115,6 @@ class CoreApi:
                 and item.get("type", "").strip() == "P-Platskontrakt"
             ]
             return filtered_content
-        else:
-            return data
 
     def fetch_residence(self, id):
         return self._get_json(
@@ -129,9 +127,7 @@ class CoreApi:
         )
 
     def fetch_properties(self, name, location_type):
-        properties = self._get_json(
-            f"/properties/search", params={"q": name}
-        )
+        properties = self._get_json(f"/properties/search", params={"q": name})
         data = []
 
         # FIXME it would be nice if we could run these in parallel
@@ -195,6 +191,11 @@ class CoreApi:
                             lease["rentalPropertyId"]
                         )
                         parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
+                        building = (
+                            self.fetch_building(rental_property["building"]["code"])
+                            if "building" in rental_property
+                            else None
+                        )
                         maintenance_units = (
                             self.fetch_maintenance_units(
                                 rental_property["property"]["code"], location_type
@@ -208,6 +209,7 @@ class CoreApi:
                                 "lease": lease,
                                 "rental_property": rental_property,
                                 "parking_space": parking_space,
+                                "building": building,
                                 "maintenance_units": maintenance_units,
                             }
                         )
