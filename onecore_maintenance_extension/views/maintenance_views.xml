@@ -268,6 +268,21 @@
                                         <field name="maintenance_unit_caption"
                                             string="Underhållsenhet"
                                             invisible="not maintenance_unit_caption or not create_date" />
+                                        <field name="building_option_id"
+                                            string="Byggnad"
+                                            domain="[('property_option_id', '=', property_option_id)]"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not building_option_id and create_date"
+                                        />
+                                        <field name="building_code" string="Byggnadskod"
+                                            invisible="not building_code" />
+                                        <field name="building_type_name" string="Byggnadstyp"
+                                            invisible="not building_type_name" />
+                                        <field name="building_construction_year" string="Byggår"
+                                            invisible="not building_construction_year" />
+                                        <field name="building_renovation_year"
+                                            string="Renoveringsår"
+                                            invisible="not building_renovation_year" />
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'building'">

@@ -126,6 +126,11 @@ class CoreApi:
             f"/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    def fetch_buildings_for_property(self, property_code):
+        return self._get_json(
+            f"/buildings/by-property-code/{urllib.parse.quote(str(property_code), safe='')}"
+        )
+
     def fetch_properties(self, name, location_type):
         properties = self._get_json(f"/properties/search", params={"q": name})
         data = []
@@ -135,9 +140,14 @@ class CoreApi:
             maintenance_units = self.fetch_maintenance_units_for_property(
                 property["code"]
             )
+
+            # Fetch buildings related to the property
+            buildings = self.fetch_buildings_for_property(property["code"])
+
             data.append(
                 {
                     "property": property,
+                    "buildings": buildings,
                     "maintenance_units": self.filter_maintenance_units_by_location_type(
                         maintenance_units, location_type
                     ),

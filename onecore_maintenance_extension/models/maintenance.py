@@ -847,6 +847,7 @@ class OneCoreMaintenanceRequest(models.Model):
         for item in properties:
             property = item["property"]
             maintenance_units = item.get("maintenance_units", [])
+            buildings = item.get("buildings", [])
 
             property_option = self.env["maintenance.property.option"].create(
                 {
@@ -867,6 +868,27 @@ class OneCoreMaintenanceRequest(models.Model):
                         "caption": maintenance_unit["caption"],
                         "type": maintenance_unit["type"],
                         "code": maintenance_unit["code"],
+                        "property_option_id": property_option.id,
+                    }
+                )
+
+            for building in buildings:
+                building_option = self.env["maintenance.building.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": building.get("name", ""),
+                        "code": building.get("code", ""),
+                        "building_type_name": building.get("buildingType", {}).get("name"),
+                        "construction_year": (
+                            str(building.get("construction", {}).get("constructionYear"))
+                            if building.get("construction", {}).get("constructionYear")
+                            else None
+                        ),
+                        "renovation_year": (
+                            str(building.get("construction", {}).get("renovationYear"))
+                            if building.get("construction", {}).get("renovationYear")
+                            else None
+                        ),
                         "property_option_id": property_option.id,
                     }
                 )
@@ -934,6 +956,16 @@ class OneCoreMaintenanceRequest(models.Model):
 
                 if maintenance_unit_records:
                     record.maintenance_unit_option_id = maintenance_unit_records[0]
+
+                building_records = self.env["maintenance.building.option"].search(
+                    [
+                        ("user_id", "=", self.env.user.id),
+                        ("property_option_id", "=", record.property_option_id.id),
+                    ]
+                )
+
+                if building_records:
+                    record.building_option_id = building_records[0]
 
             elif self.search_type == "buildingCode":
                 building = self.get_core_api().fetch_building(record.search_value)
@@ -1066,6 +1098,7 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.property_id = record.property_option_id.id
                 record.property_designation = record.property_option_id.designation
                 record.maintenance_unit_option_id = False
+                record.building_option_id = False
 
     @api.onchange("building_option_id")
     def _onchange_building_option_id(self):

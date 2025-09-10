@@ -13,6 +13,11 @@ class OnecoreMaintenanceBuildingOption(models.TransientModel):
     renovation_year = fields.Char("Renoveringsår")
 
     user_id = fields.Many2one("res.users", "User", default=lambda self: self.env.user)
+    property_option_id = fields.Many2one(
+        "maintenance.property.option",
+        string="Property Option",
+        ondelete="cascade"
+    )
 
 
 class OnecoreMaintenanceBuilding(models.Model):
