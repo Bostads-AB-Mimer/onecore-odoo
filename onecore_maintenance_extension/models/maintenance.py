@@ -1451,10 +1451,19 @@ class OneCoreMaintenanceRequest(models.Model):
             changes = []
             for field, new_value in filtered_vals.items():
                 old_value = record[field]
-                if old_value == new_value:
-                    continue
-
                 field_obj = record._fields[field]
+                
+                # Handle comparison based on field type
+                if isinstance(field_obj, fields.Many2one):
+                    # For Many2one fields, compare IDs
+                    old_id = old_value.id if old_value else False
+                    new_id = new_value if isinstance(new_value, (int, bool)) else (new_value.id if new_value else False)
+                    if old_id == new_id:
+                        continue
+                else:
+                    # For other fields, direct comparison
+                    if old_value == new_value:
+                        continue
                 field_label = field_obj.get_description(self.env)["string"]
 
                 change_text = self._format_field_change(
