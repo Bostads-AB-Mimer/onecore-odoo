@@ -121,10 +121,30 @@ class CoreApi:
             f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
-    def fetch_building(self, id):
-        return self._get_json(
+    def fetch_building(self, id, location_type):
+        building = self._get_json(
             f"/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
         )
+        maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
+        if building:
+            maintenance_units = (
+                self.fetch_maintenance_units_for_building(building["code"])
+                if location_type in maintenance_unit_types
+                else []
+            )
+            print(maintenance_units)
+
+            return {
+                **building,
+                "maintenance_units": (
+                    self.filter_maintenance_units_by_location_type(
+                        maintenance_units, location_type
+                    )
+                    if maintenance_units
+                    else []
+                ),
+            }
+        return None
 
     def fetch_buildings_for_property(self, property_code):
         return self._get_json(
@@ -136,21 +156,39 @@ class CoreApi:
         data = []
 
         # FIXME it would be nice if we could run these in parallel
+        maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
+        building_types = ["Byggnad", "Övrigt"]
+
         for property in properties:
-            maintenance_units = self.fetch_maintenance_units_for_property(
-                property["code"]
+            # Om man vill skapa ärende på en maintenance_unit (tvättstuga, miljöbod, lekplats)
+            # så vill vi ändå visa information om fastigheten och byggnaden den ligger i.
+            buildings = []
+            maintenance_units = (
+                self.fetch_maintenance_units(property["code"], location_type)
+                if location_type in maintenance_unit_types
+                else []
+            )
+            # I alla ärenden som gäller byggnad vill vi bara visa info om byggnaden
+            buildings = (
+                self.fetch_buildings_for_property(property["code"])
+                if location_type in building_types
+                else []
             )
 
-            # Fetch buildings related to the property
-            buildings = self.fetch_buildings_for_property(property["code"])
+            # facilities = self.fetch_facilities_for_property(property["code"]) if location_type == "Lokal" else []
 
             data.append(
                 {
                     "property": property,
                     "buildings": buildings,
-                    "maintenance_units": self.filter_maintenance_units_by_location_type(
-                        maintenance_units, location_type
+                    "maintenance_units": (
+                        self.filter_maintenance_units_by_location_type(
+                            maintenance_units, location_type
+                        )
+                        if maintenance_units
+                        else []
                     ),
+                    # "facilities": facilities
                 }
             )
 
@@ -159,6 +197,11 @@ class CoreApi:
     def fetch_maintenance_units_for_property(self, code):
         return self._get_json(
             f"/maintenance-units/by-property-code/{urllib.parse.quote(str(code), safe='')}"
+        )
+
+    def fetch_maintenance_units_for_building(self, code):
+        return self._get_json(
+            f"/maintenance-units/by-building-code/{urllib.parse.quote(str(code), safe='')}"
         )
 
     def fetch_maintenance_units(self, id, location_type):
@@ -184,9 +227,11 @@ class CoreApi:
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
             "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
+            # "Lokalkontrakt": lambda id: self.fetch_facility(id),
         }
         lease_types_with_maintenance_units = ["Bostadskontrakt"]
 
+        maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
         try:
             leases = self.fetch_leases(identifier, value, location_type)
 
@@ -197,20 +242,20 @@ class CoreApi:
                 for lease in leases:
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
+                        # Se till att rental_property, parking_space, facility returnerar fastighet och byggnad.
                         rental_property = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
+
                         parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
-                        building = (
-                            self.fetch_building(rental_property["building"]["code"])
-                            if "building" in rental_property
-                            else None
-                        )
+                        # facility = #fetch_fns[lease_type](lease["rentalPropertyId"])
+
                         maintenance_units = (
                             self.fetch_maintenance_units(
                                 rental_property["property"]["code"], location_type
                             )
                             if lease_type in lease_types_with_maintenance_units
+                            and location_type in maintenance_unit_types
                             else []
                         )
 
@@ -219,7 +264,6 @@ class CoreApi:
                                 "lease": lease,
                                 "rental_property": rental_property,
                                 "parking_space": parking_space,
-                                "building": building,
                                 "maintenance_units": maintenance_units,
                             }
                         )

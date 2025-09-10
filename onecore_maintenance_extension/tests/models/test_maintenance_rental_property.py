@@ -41,6 +41,7 @@ class TestMaintenanceRentalPropertyModels(TransactionCase):
         )
         request.unlink()
         self.assertFalse(
-            self.env["maintenance.rental.property"].search([("maintenance_request_id", "=", request.id)])
+            self.env["maintenance.rental.property"].search(
+                [("maintenance_request_id", "=", request.id)]
+            )
         )
-
