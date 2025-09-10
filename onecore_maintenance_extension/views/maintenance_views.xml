@@ -277,7 +277,7 @@
                                             string="Byggnad"
                                             domain="[('property_option_id', '=', property_option_id)]"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not building_option_id and create_date"
+                                            invisible="(not building_option_id and create_date) or space_caption not in ['Byggnad', 'Uppgång', 'Vind', 'Källare', 'Cykelförråd', 'Gården/Utomhus', 'Övrigt']"
                                         />
                                         <field name="building_code" string="Byggnadskod"
                                             invisible="not building_code" />
