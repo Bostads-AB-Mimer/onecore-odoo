@@ -445,7 +445,20 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.form_state = "parking-space"
             elif record.property_id or record.property_option_id:
                 record.form_state = "property"
-            elif record.space_caption == "Byggnad" or record.building_id or record.building_option_id:
+            elif (
+                record.space_caption
+                in [
+                    "Byggnad",
+                    "Uppgång",
+                    "Vind",
+                    "Källare",
+                    "Cykelförråd",
+                    "Gården/Utomhus",
+                    "Övrigt",
+                ]
+                or record.building_id
+                or record.building_option_id
+            ):
                 record.form_state = "building"
             else:
                 record.form_state = "rental-property"
@@ -803,8 +816,16 @@ class OneCoreMaintenanceRequest(models.Model):
                 lease, rental_property_option_id=rental_property_option.id
             )
 
-            # Handle building data if available and space_caption is "Byggnad"
-            if building and self.space_caption == "Byggnad":
+            # Handle building data if available and space_caption is building-related
+            if building and self.space_caption in [
+                "Byggnad",
+                "Uppgång",
+                "Vind",
+                "Källare",
+                "Cykelförråd",
+                "Gården/Utomhus",
+                "Övrigt",
+            ]:
                 self.update_building_form_options(building)
 
             self._create_tenant_options(lease["tenants"])
@@ -857,8 +878,16 @@ class OneCoreMaintenanceRequest(models.Model):
                 "name": building["name"],
                 "code": building["code"],
                 "building_type_name": building.get("buildingType", {}).get("name"),
-                "construction_year": str(building.get("construction", {}).get("constructionYear")) if building.get("construction", {}).get("constructionYear") else None,
-                "renovation_year": str(building.get("construction", {}).get("renovationYear")) if building.get("construction", {}).get("renovationYear") else None,
+                "construction_year": (
+                    str(building.get("construction", {}).get("constructionYear"))
+                    if building.get("construction", {}).get("constructionYear")
+                    else None
+                ),
+                "renovation_year": (
+                    str(building.get("construction", {}).get("renovationYear"))
+                    if building.get("construction", {}).get("renovationYear")
+                    else None
+                ),
             }
         )
         # TODO get maintenance units for building
@@ -1046,8 +1075,12 @@ class OneCoreMaintenanceRequest(models.Model):
                 record.building_name = record.building_option_id.name
                 record.building_code = record.building_option_id.code
                 record.building_type_name = record.building_option_id.building_type_name
-                record.building_construction_year = record.building_option_id.construction_year
-                record.building_renovation_year = record.building_option_id.renovation_year
+                record.building_construction_year = (
+                    record.building_option_id.construction_year
+                )
+                record.building_renovation_year = (
+                    record.building_option_id.renovation_year
+                )
 
     @api.onchange("rental_property_option_id")
     def _onchange_rental_property_option_id(self):
