@@ -357,6 +357,17 @@ class OneCoreMaintenanceRequest(models.Model):
     ]
 
     SORTED_SPACES = sorted(SPACES)
+    
+    # Building-related space types
+    BUILDING_SPACE_TYPES = [
+        "Byggnad",
+        "Uppgång",
+        "Vind",
+        "Källare",
+        "Cykelförråd",
+        "Gården/Utomhus",
+        "Övrigt",
+    ]
 
     space_caption = fields.Selection(
         selection=SORTED_SPACES,
@@ -446,16 +457,7 @@ class OneCoreMaintenanceRequest(models.Model):
             elif record.property_id or record.property_option_id:
                 record.form_state = "property"
             elif (
-                record.space_caption
-                in [
-                    "Byggnad",
-                    "Uppgång",
-                    "Vind",
-                    "Källare",
-                    "Cykelförråd",
-                    "Gården/Utomhus",
-                    "Övrigt",
-                ]
+                record.space_caption in self.BUILDING_SPACE_TYPES
                 or record.building_id
                 or record.building_option_id
             ):
@@ -820,15 +822,7 @@ class OneCoreMaintenanceRequest(models.Model):
             )
 
             # Handle building data if available and space_caption is building-related
-            if building and self.space_caption in [
-                "Byggnad",
-                "Uppgång",
-                "Vind",
-                "Källare",
-                "Cykelförråd",
-                "Gården/Utomhus",
-                "Övrigt",
-            ]:
+            if building and self.space_caption in self.BUILDING_SPACE_TYPES:
                 self.update_building_form_options(building)
 
             self._create_tenant_options(lease["tenants"])
