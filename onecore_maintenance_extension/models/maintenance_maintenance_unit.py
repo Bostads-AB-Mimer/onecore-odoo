@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenanceMaintenanceUnitOption(models.TransientModel):
+class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
     _name = "maintenance.maintenance.unit.option"
     _description = "Maintenance Unit Option"
 
