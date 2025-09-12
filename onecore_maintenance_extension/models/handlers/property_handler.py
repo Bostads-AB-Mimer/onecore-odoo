@@ -22,12 +22,10 @@ class PropertyHandler(BaseMaintenanceHandler):
                 _logger.info("No data found in response.")
                 self._raise_no_results_error(search_value)
 
-
             self.update_form_options(properties)
             self._set_form_selections()
 
         elif search_type in ["pnr", "contactCode", "leaseId", "rentalObjectId"]:
-            # First get lease data to find the property
             work_order_data = self.core_api.fetch_form_data(
                 search_type, search_value, space_caption
             )
@@ -35,7 +33,6 @@ class PropertyHandler(BaseMaintenanceHandler):
             if not work_order_data:
                 _logger.info("No data found in response.")
                 self._raise_no_results_error(search_value)
-
 
             self.update_form_options_from_lease_data(work_order_data)
             self._set_form_selections()
@@ -48,8 +45,8 @@ class PropertyHandler(BaseMaintenanceHandler):
         """Update form options with property data."""
         for item in properties:
             property_data = item["property"]
-            maintenance_units = item.get("maintenance_units", [])
             buildings = item.get("buildings", [])
+            maintenance_units = item.get("maintenance_units", [])
 
             property_option = self.env["maintenance.property.option"].create(
                 {
@@ -58,19 +55,6 @@ class PropertyHandler(BaseMaintenanceHandler):
                     "code": property_data["code"],
                 }
             )
-
-            for maintenance_unit in maintenance_units:
-                self.env["maintenance.maintenance.unit.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "id": maintenance_unit["id"],
-                        "name": maintenance_unit["caption"],
-                        "caption": maintenance_unit["caption"],
-                        "type": maintenance_unit["type"],
-                        "code": maintenance_unit["code"],
-                        "property_option_id": property_option.id,
-                    }
-                )
 
             for building in buildings:
                 self.env["maintenance.building.option"].create(
@@ -93,6 +77,19 @@ class PropertyHandler(BaseMaintenanceHandler):
                             if building.get("construction", {}).get("renovationYear")
                             else None
                         ),
+                        "property_option_id": property_option.id,
+                    }
+                )
+
+            for maintenance_unit in maintenance_units:
+                self.env["maintenance.maintenance.unit.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "id": maintenance_unit["id"],
+                        "name": maintenance_unit["caption"],
+                        "caption": maintenance_unit["caption"],
+                        "type": maintenance_unit["type"],
+                        "code": maintenance_unit["code"],
                         "property_option_id": property_option.id,
                     }
                 )

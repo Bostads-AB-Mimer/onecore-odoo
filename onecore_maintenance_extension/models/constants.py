@@ -63,4 +63,5 @@ FORM_STATES = [
     ("building", "Byggnad"),
     ("parking-space", "Bilplats"),
     ("maintenance-unit", "Underhållsenhet"),
+    ("facility", "Lokal"),
 ]

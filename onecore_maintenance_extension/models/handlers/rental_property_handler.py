@@ -23,7 +23,6 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
                 _logger.info("No data found in response.")
                 self._raise_no_results_error(search_value)
 
-
             self.update_form_options(work_order_data)
             self._set_form_selections()
         else:

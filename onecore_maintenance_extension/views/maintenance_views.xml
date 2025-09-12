@@ -243,24 +243,19 @@
                                         <field name="create_date" invisible="1" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
-                                        <field name="maintenance_unit_caption" string="Tvättstuga"
-                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Tvättstuga'" />
+                                        <field name="maintenance_unit_id" string="Tvättstuga"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_option_id" string="Lekplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Lekplats'" />
-                                        <field name="maintenance_unit_caption" string="Lekplats"
-                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Lekplats'" />
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Lekplats'" />
+                                        <field name="maintenance_unit_id" string="Lekplats"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_option_id" string="Miljöbod"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Miljöbod'" />
-                                        <field name="maintenance_unit_caption" string="Miljöbod"
-                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Miljöbod'" />
-                                        <field name="maintenance_unit_type" string="Utrymme"
-                                            invisible="1" />
-                                        <field name="maintenance_unit_caption"
-                                            string="Adress"
-                                            invisible="not maintenance_unit_caption" />
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Miljöbod'" />
+                                        <field name="maintenance_unit_id" string="Miljöbod"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_code" string="Kod"
                                             invisible="not maintenance_unit_code" />
                                         <field name="building_code" invisible="not building_code"
@@ -337,7 +332,11 @@
                                         <field name="create_date" invisible="1" />
                                         <field name="parking_space_option_id" string="Bilplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="create_date != False" />
+                                            invisible="not parking_space_option_id or create_date" />
+                                        <field name="parking_space_id" string="Bilplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            readonly="1"
+                                            invisible="not parking_space_id and create_date != True" />
                                         <field name="parking_space_code" string="Kod"
                                             invisible="not parking_space_code" />
                                         <field name="parking_space_type_name" string="P-platstyp"
@@ -352,6 +351,43 @@
                                             invisible="not parking_space_postal_code" />
                                         <field name="parking_space_city" string="Stad"
                                             invisible="not parking_space_city" />
+                                    </group>
+                                    <group col="1" invisible="form_state != 'facility'">
+                                        <field name="create_date" invisible="1" />
+                                        <field
+                                            name="facility_option_id" string="Lokal"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="facility_id" string="Lokal"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            readonly="1"
+                                            invisible="not facility_id and create_date != True" />
+                                        <field
+                                            name="facility_code" string="Kod"
+                                            invisible="not facility_code" />
+                                        <field
+                                            name="facility_type_name" string="Typ"
+                                            invisible="not facility_type_name" />
+                                        <field
+                                            name="facility_type_code" string="Typkod"
+                                            invisible="not facility_type_code" />
+                                        <field
+                                            name="facility_rental_type" string="Hyrestyp"
+                                            invisible="not facility_rental_type" />
+                                        <field
+                                            name="facility_area" string="Yta"
+                                            invisible="not facility_area" />
+                                        <field
+                                            name="facility_building_name" string="Byggnad"
+                                            invisible="not facility_building_name" />
+                                        <field
+                                            name="facility_building_code" string="Byggnadskod"
+                                            invisible="not facility_building_code" />
+                                        <field name="facility_property_name" string="Fastighet"
+                                            invisible="not facility_property_name" />
+                                        <field
+                                            name="facility_property_code" string="Fastighetskod"
+                                            invisible="not facility_property_code" />
                                     </group>
                                 </div>
                             </div>
@@ -418,8 +454,7 @@
                                         <field name="recently_added_tenant" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            readonly="create_date != False"
-                                            invisible="not lease_option_id and create_date"
+                                            invisible="not lease_option_id or create_date"
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_name" string="Kontrakt"
                                             invisible="not lease_name"

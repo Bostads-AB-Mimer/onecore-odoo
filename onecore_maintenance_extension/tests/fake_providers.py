@@ -248,3 +248,46 @@ class MaintenanceProvider(BaseProvider):
     def parking_space_code(self):
         """Generate parking space code."""
         return self.bothify(text="PS###")
+
+    def facility_name(self):
+        """Generate facility name."""
+        return f"Lokal {self.random_int(1, 999)}"
+
+    def facility_code(self):
+        """Generate facility code."""
+        return self.bothify(text="F###")
+
+    def facility_type_name(self):
+        """Generate facility type name."""
+        return self.random_element([
+            "Butik",
+            "Kontor",
+            "Restaurang",
+            "Lager",
+            "Verkstad",
+            "Studio"
+        ])
+
+    def facility_type_code(self):
+        """Generate facility type code."""
+        return self.random_element([
+            "BTK",
+            "KON",
+            "RST",
+            "LGR",
+            "VRK",
+            "STD"
+        ])
+
+    def facility_rental_type(self):
+        """Generate facility rental type."""
+        return self.random_element([
+            "Kommersiell hyra",
+            "Industrilokaler",
+            "Kontorslokal",
+            "Butikslokaler"
+        ])
+
+    def facility_area(self):
+        """Generate facility area."""
+        return f"{self.random_int(20, 500)} m²"

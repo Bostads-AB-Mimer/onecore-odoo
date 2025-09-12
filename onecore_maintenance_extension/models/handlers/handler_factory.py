@@ -2,6 +2,7 @@ from .rental_property_handler import RentalPropertyHandler
 from .parking_space_handler import ParkingSpaceHandler
 from .property_handler import PropertyHandler
 from .building_handler import BuildingHandler
+from .facility_handler import FacilityHandler
 
 
 class HandlerFactory:
@@ -11,14 +12,9 @@ class HandlerFactory:
     combinations to the appropriate handler.
     """
 
-    # Matrix mapping (search_type, space_caption) -> handler_class
     HANDLER_MATRIX = {
-        # Property name searches always go to PropertyHandler
         # ============================================================================
         # DESSA RETURNERAR ALLTID BARA EN FASTIGHET
-        # Här kan vi antingen hämta hela fastigheten med all info nedan eller
-        # hämta fastigheten och informationen om space_caption separat.
-        # Då behöver vi skapa endpoints för allt: get_building/by-property-code/{code} osv
         # ============================================================================
         ("propertyName", "Fastighet"): PropertyHandler,
         ("propertyName", "Byggnad"): PropertyHandler,
@@ -26,13 +22,8 @@ class HandlerFactory:
         ("propertyName", "Tvättstuga"): PropertyHandler,
         ("propertyName", "Miljöbod"): PropertyHandler,
         ("propertyName", "Lekplats"): PropertyHandler,
-        ("propertyName", "Lokal"): PropertyHandler,
-        # Building code searches go to BuildingHandler
         # ============================================================================
         # DESSA RETURNERAR ALLTID BARA EN BYGGNAD
-        # Här kan vi antingen hämta hela byggnaden med all info nedan eller
-        # hämta byggnaden och informationen om space_caption separat.
-        # Då behöver vi skapa endpoints för allt.
         # ============================================================================
         ("buildingCode", "Byggnad"): BuildingHandler,
         ("buildingCode", "Uppgång"): BuildingHandler,
@@ -44,9 +35,7 @@ class HandlerFactory:
         ("buildingCode", "Tvättstuga"): BuildingHandler,
         ("buildingCode", "Miljöbod"): BuildingHandler,
         ("buildingCode", "Lekplats"): BuildingHandler,
-        ("buildingCode", "Lokal"): BuildingHandler,
         # Tenant/lease-based searches
-        # Personal number searches - can create requests on any space type
         # ============================================================================
         # I ALLA DESSA HÄMTAS LEASE FÖRST.
         # Sedan används propertyId för att hämta
@@ -70,9 +59,9 @@ class HandlerFactory:
         ("pnr", "Tvättstuga"): RentalPropertyHandler,
         ("pnr", "Miljöbod"): RentalPropertyHandler,
         ("pnr", "Lekplats"): RentalPropertyHandler,
-        ("pnr", "Lokal"): RentalPropertyHandler,
+        ("pnr", "Lokal"): FacilityHandler,
         ("pnr", "Bilplats"): ParkingSpaceHandler,
-        # Contact code searches
+        # ============================================================================
         ("contactCode", "Fastighet"): PropertyHandler,
         ("contactCode", "Byggnad"): BuildingHandler,
         ("contactCode", "Uppgång"): BuildingHandler,
@@ -85,9 +74,9 @@ class HandlerFactory:
         ("contactCode", "Tvättstuga"): RentalPropertyHandler,
         ("contactCode", "Miljöbod"): RentalPropertyHandler,
         ("contactCode", "Lekplats"): RentalPropertyHandler,
-        ("contactCode", "Lokal"): RentalPropertyHandler,
+        ("contactCode", "Lokal"): FacilityHandler,
         ("contactCode", "Bilplats"): ParkingSpaceHandler,
-        # Lease ID searches
+        # ============================================================================
         ("leaseId", "Fastighet"): PropertyHandler,
         ("leaseId", "Byggnad"): BuildingHandler,
         ("leaseId", "Uppgång"): BuildingHandler,
@@ -100,9 +89,9 @@ class HandlerFactory:
         ("leaseId", "Tvättstuga"): RentalPropertyHandler,
         ("leaseId", "Miljöbod"): RentalPropertyHandler,
         ("leaseId", "Lekplats"): RentalPropertyHandler,
-        ("leaseId", "Lokal"): RentalPropertyHandler,
+        ("leaseId", "Lokal"): FacilityHandler,
         ("leaseId", "Bilplats"): ParkingSpaceHandler,
-        # Rental object ID searches
+        # ===========================================================================
         ("rentalObjectId", "Fastighet"): PropertyHandler,
         ("rentalObjectId", "Byggnad"): BuildingHandler,
         ("rentalObjectId", "Uppgång"): BuildingHandler,
@@ -115,7 +104,7 @@ class HandlerFactory:
         ("rentalObjectId", "Tvättstuga"): RentalPropertyHandler,
         ("rentalObjectId", "Miljöbod"): RentalPropertyHandler,
         ("rentalObjectId", "Lekplats"): RentalPropertyHandler,
-        ("rentalObjectId", "Lokal"): RentalPropertyHandler,
+        ("rentalObjectId", "Lokal"): FacilityHandler,
         ("rentalObjectId", "Bilplats"): ParkingSpaceHandler,
     }
 

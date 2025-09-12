@@ -32,6 +32,7 @@ from .mixins import (
     TenantFieldsMixin,
     LeaseFieldsMixin,
     ParkingSpaceFieldsMixin,
+    FacilityFieldsMixin,
 )
 
 _logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class OneCoreMaintenanceRequest(
     TenantFieldsMixin,
     LeaseFieldsMixin,
     ParkingSpaceFieldsMixin,
+    FacilityFieldsMixin,
     models.Model,
 ):
     _inherit = "maintenance.request"
@@ -147,21 +149,13 @@ class OneCoreMaintenanceRequest(
     # ============================================================================
 
     @api.depends(
-        "property_id",
-        "property_option_id",
-        "building_id",
-        "building_option_id",
-        "parking_space_id",
-        "parking_space_option_id",
         "space_caption",
     )
     def _compute_form_state(self):
         for record in self:
             if record.space_caption == "Bilplats":
                 record.form_state = "parking-space"
-            elif record.space_caption == "Fastighet" and (
-                record.property_id or record.property_option_id
-            ):
+            elif record.space_caption == "Fastighet":
                 record.form_state = "property"
             elif record.space_caption in [
                 "Byggnad",
@@ -171,7 +165,7 @@ class OneCoreMaintenanceRequest(
                 "Cykelförråd",
                 "Gården/Utomhus",
                 "Övrigt",
-            ] and (record.building_id or record.building_option_id):
+            ]:
                 record.form_state = "building"
             elif record.space_caption in [
                 "Tvättstuga",
@@ -179,15 +173,15 @@ class OneCoreMaintenanceRequest(
                 "Lekplats",
             ]:
                 record.form_state = "maintenance-unit"
+            elif record.space_caption == "Lokal":
+                record.form_state = "facility"
             elif record.space_caption in [
                 "Lägenhet",
-                "Lokal",
             ]:
                 record.form_state = "rental-property"
             else:
                 # Fallback for any undefined space_caption
                 record.form_state = "rental-property"
-            print(record.form_state)
 
     @api.depends("rental_property_id", "rental_property_option_id")
     def _compute_floor_plan(self):
@@ -330,13 +324,18 @@ class OneCoreMaintenanceRequest(
             return
 
         # Check if the search combination is supported
-        if not HandlerFactory.is_combination_supported(self.search_type, self.space_caption):
+        if not HandlerFactory.is_combination_supported(
+            self.search_type, self.space_caption
+        ):
             return {
-                'warning': {
-                    'title': 'Kombinationen stöds inte',
-                    'message': f'Sökning med "{dict(SEARCH_TYPES).get(self.search_type, self.search_type)}" för utrymme "{self.space_caption}" stöds inte för tillfället. Välj en annan kombination av söktyp och utrymme.'
+                "warning": {
+                    "title": "Kombinationen stöds inte",
+                    "message": f'Sökning med "{dict(SEARCH_TYPES).get(self.search_type, self.search_type)}" för utrymme "{self.space_caption}" stöds inte för tillfället. Välj en annan kombination av söktyp och utrymme.',
                 }
             }
+
+        if not self.search_value or not validators[self.search_type](self.search_value):
+            return
 
         handler = HandlerFactory.get_handler(
             self, self.get_core_api(), self.search_type, self.space_caption
@@ -350,7 +349,6 @@ class OneCoreMaintenanceRequest(
             handler.handle_search(
                 record.search_type, record.search_value, record.space_caption
             )
-
 
     # ============================================================================
     # ONCHANGE METHODS
@@ -397,6 +395,12 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_parking_space_fields(record)
+
+    @api.onchange("facility_option_id")
+    def _onchange_facility_option_id(self):
+        field_manager = FormFieldService(self.env)
+        for record in self:
+            field_manager.update_facility_fields(record)
 
     # ============================================================================
     # CRUD OPERATIONS

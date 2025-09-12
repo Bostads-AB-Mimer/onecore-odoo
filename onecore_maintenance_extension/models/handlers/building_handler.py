@@ -21,7 +21,6 @@ class BuildingHandler(BaseMaintenanceHandler):
                 _logger.info("No data found in response.")
                 self._raise_no_results_error(search_value)
 
-
             self.update_form_options(building)
             self._set_form_selections()
 
@@ -34,7 +33,6 @@ class BuildingHandler(BaseMaintenanceHandler):
             if not work_order_data:
                 _logger.info("No data found in response.")
                 self._raise_no_results_error(search_value)
-
 
             self.update_form_options_from_lease_data(work_order_data)
             self._set_form_selections()
@@ -136,7 +134,7 @@ class BuildingHandler(BaseMaintenanceHandler):
         if building_records:
             self.record.building_option_id = building_records[0]
 
-        # Set maintenance unit option if available
+        # Set maintenance unit option if available (from building or rental property)
         maintenance_unit_records = self.env[
             "maintenance.maintenance.unit.option"
         ].search(
@@ -148,7 +146,6 @@ class BuildingHandler(BaseMaintenanceHandler):
         if maintenance_unit_records:
             self.record.maintenance_unit_option_id = maintenance_unit_records[0]
 
-        # Set lease option if available (from lease-based searches)
         lease_records = self.env["maintenance.lease.option"].search(
             [("user_id", "=", self.env.user.id)]
         )

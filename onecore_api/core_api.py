@@ -132,7 +132,6 @@ class CoreApi:
                 if location_type in maintenance_unit_types
                 else []
             )
-            print(maintenance_units)
 
             return {
                 **building,
@@ -155,27 +154,20 @@ class CoreApi:
         properties = self._get_json(f"/properties/search", params={"q": name})
         data = []
 
-        # FIXME it would be nice if we could run these in parallel
         maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
         building_types = ["Byggnad", "Övrigt"]
 
         for property in properties:
-            # Om man vill skapa ärende på en maintenance_unit (tvättstuga, miljöbod, lekplats)
-            # så vill vi ändå visa information om fastigheten och byggnaden den ligger i.
-            buildings = []
-            maintenance_units = (
-                self.fetch_maintenance_units(property["code"], location_type)
-                if location_type in maintenance_unit_types
-                else []
-            )
-            # I alla ärenden som gäller byggnad vill vi bara visa info om byggnaden
             buildings = (
                 self.fetch_buildings_for_property(property["code"])
                 if location_type in building_types
                 else []
             )
-
-            # facilities = self.fetch_facilities_for_property(property["code"]) if location_type == "Lokal" else []
+            maintenance_units = (
+                self.fetch_maintenance_units(property["code"], location_type)
+                if location_type in maintenance_unit_types
+                else []
+            )
 
             data.append(
                 {
@@ -188,7 +180,6 @@ class CoreApi:
                         if maintenance_units
                         else []
                     ),
-                    # "facilities": facilities
                 }
             )
 
@@ -223,13 +214,18 @@ class CoreApi:
             f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    def fetch_facility(self, id):
+        return self._get_json(
+            f"/propertyBase/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+        )
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
             "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
-            # "Lokalkontrakt": lambda id: self.fetch_facility(id),
+            "Lokalkontrakt": lambda id: self.fetch_facility(id),
         }
-        lease_types_with_maintenance_units = ["Bostadskontrakt"]
+        lease_types_with_maintenance_units = ["Bostadskontrakt", "Lokalkontrakt"]
 
         maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
         try:
@@ -238,17 +234,15 @@ class CoreApi:
             if leases and len(leases) > 0:
                 data = []
 
-                # FIXME it would be nice if we could run these in parallel
                 for lease in leases:
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
-                        # Se till att rental_property, parking_space, facility returnerar fastighet och byggnad.
                         rental_property = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
 
                         parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
-                        # facility = #fetch_fns[lease_type](lease["rentalPropertyId"])
+                        facility = fetch_fns[lease_type](lease["rentalPropertyId"])
 
                         maintenance_units = (
                             self.fetch_maintenance_units(
@@ -264,6 +258,7 @@ class CoreApi:
                                 "lease": lease,
                                 "rental_property": rental_property,
                                 "parking_space": parking_space,
+                                "facility": facility,
                                 "maintenance_units": maintenance_units,
                             }
                         )
