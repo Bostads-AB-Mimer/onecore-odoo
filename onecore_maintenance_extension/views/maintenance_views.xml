@@ -237,6 +237,10 @@
                                         <field name="building_code" invisible="1"
                                             string="Byggnadskod" />
                                         <field name="building" invisible="1" string="Byggnad" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'maintenance-unit'">
+                                        <field name="create_date" invisible="1" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
@@ -254,6 +258,21 @@
                                             invisible="not maintenance_unit_caption or not create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_type" string="Utrymme"
                                             invisible="1" />
+                                        <field name="maintenance_unit_caption"
+                                            string="Adress"
+                                            invisible="not maintenance_unit_caption" />
+                                        <field name="maintenance_unit_code" string="Kod"
+                                            invisible="not maintenance_unit_code" />
+                                        <field name="building_code" invisible="not building_code"
+                                            string="Byggnadskod" />
+                                        <field name="building_name" invisible="not building_name"
+                                            string="Tillhör byggnad" />
+                                        <field name="property_code" invisible="not property_code"
+                                            string="Fastighetskod" />
+                                        <field name="property_designation"
+                                            invisible="not property_designation"
+                                            string="Tillhör fastighet" />
+
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'property'">
@@ -264,7 +283,7 @@
                                         <field name="property_designation"
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
-                                        <field name="maintenance_unit_option_id"
+                                        <!-- <field name="maintenance_unit_option_id"
                                             string="Underhållsenhet"
                                             domain="[('property_option_id', '=', property_option_id)]"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -277,7 +296,9 @@
                                             string="Byggnad"
                                             domain="[('property_option_id', '=', property_option_id)]"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="(not building_option_id and create_date) or space_caption not in ['Byggnad', 'Uppgång', 'Vind', 'Källare', 'Cykelförråd', 'Gården/Utomhus', 'Övrigt']"
+                                            invisible="(not building_option_id and create_date) or space_caption not in ['Byggnad', 'Uppgång',
+                                        'Vind', 'Källare', 'Cykelförråd', 'Gården/Utomhus',
+                                        'Övrigt']"
                                         />
                                         <field name="building_code" string="Byggnadskod"
                                             invisible="not building_code" />
@@ -287,7 +308,7 @@
                                             invisible="not building_construction_year" />
                                         <field name="building_renovation_year"
                                             string="Renoveringsår"
-                                            invisible="not building_renovation_year" />
+                                            invisible="not building_renovation_year" /> -->
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'building'">
