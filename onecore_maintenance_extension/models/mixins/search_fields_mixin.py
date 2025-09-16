@@ -4,8 +4,9 @@ from ..constants import SEARCH_TYPES
 
 class SearchFieldsMixin(models.AbstractModel):
     """Mixin for search functionality fields."""
-    _name = 'maintenance.search.fields.mixin'
-    _description = 'Search Fields Mixin'
+
+    _name = "maintenance.search.fields.mixin"
+    _description = "Search Fields Mixin"
 
     # Search inputs
     search_value = fields.Char("Search", store=True)
@@ -57,6 +58,12 @@ class SearchFieldsMixin(models.AbstractModel):
     parking_space_option_id = fields.Many2one(
         "maintenance.parking.space.option",
         string="Parking Space",
+        domain=lambda self: [("user_id", "=", self.env.user.id)],
+        readonly=False,
+    )
+    facility_option_id = fields.Many2one(
+        "maintenance.facility.option",
+        string="Facility",
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )

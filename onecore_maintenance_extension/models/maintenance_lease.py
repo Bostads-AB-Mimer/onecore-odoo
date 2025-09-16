@@ -25,6 +25,9 @@ class OnecoreMaintenanceLeaseOption(models.Model):
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option", string="Rental Property Option"
     )
+    facility_option_id = fields.Many2one(
+        "maintenance.facility.option", string="Facility Option"
+    )
     tenants = fields.One2many("maintenance.tenant.option", "id", string="Hyresgäster")
 
 

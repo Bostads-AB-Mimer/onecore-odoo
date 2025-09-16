@@ -133,3 +133,19 @@ class FormFieldService:
         record.parking_space_address = record.parking_space_option_id.address
         record.parking_space_postal_code = record.parking_space_option_id.postal_code
         record.parking_space_city = record.parking_space_option_id.city
+
+    def update_facility_fields(self, record):
+        """Update facility-related fields."""
+        if not record.facility_option_id:
+            return
+
+        record.facility_id = record.facility_option_id.name
+        record.facility_code = record.facility_option_id.code
+        record.facility_type_name = record.facility_option_id.type_name
+        record.facility_type_code = record.facility_option_id.type_code
+        record.facility_rental_type = record.facility_option_id.rental_type
+        record.facility_area = record.facility_option_id.area
+        record.facility_building_code = record.facility_option_id.building_code
+        record.facility_building_name = record.facility_option_id.building_name
+        record.facility_property_code = record.facility_option_id.property_code
+        record.facility_property_name = record.facility_option_id.property_name

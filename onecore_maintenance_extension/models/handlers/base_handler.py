@@ -38,6 +38,9 @@ class BaseMaintenanceHandler:
         self.env["maintenance.parking.space.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()
+        self.env["maintenance.facility.option"].search(
+            [("user_id", "=", self.env.user.id)]
+        ).unlink()
         self.env["maintenance.lease.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()
@@ -45,7 +48,7 @@ class BaseMaintenanceHandler:
             [("user_id", "=", self.env.user.id)]
         ).unlink()
     
-    def _create_lease_option(self, lease, parking_space_option_id=None, rental_property_option_id=None):
+    def _create_lease_option(self, lease, parking_space_option_id=None, rental_property_option_id=None, facility_option_id=None):
         """Create a lease option record with common lease data."""
         lease_data = {
             "user_id": self.env.user.id,
@@ -62,6 +65,8 @@ class BaseMaintenanceHandler:
             lease_data["parking_space_option_id"] = parking_space_option_id
         if rental_property_option_id:
             lease_data["rental_property_option_id"] = rental_property_option_id
+        if facility_option_id:
+            lease_data["facility_option_id"] = facility_option_id
 
         return self.env["maintenance.lease.option"].create(lease_data)
     

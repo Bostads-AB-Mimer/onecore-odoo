@@ -566,7 +566,7 @@ class TestMaintenanceRequestNotifications(
     def setUp(self):
         super().setUp()
         self.internal_user = self._create_internal_user()
-        
+
         from ...models.services import FieldChangeTracker
         self.change_tracker = FieldChangeTracker(self.env)
 
@@ -779,43 +779,98 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
             }
         )
 
+        self.property_option = self.env["maintenance.property.option"].create(
+            {
+                "designation": self.fake.property_designation(),
+                "code": self.fake.property_code(),
+            }
+        )
+
         self.building = self.env["maintenance.building"].create(
             {"name": self.fake.building_name(), "code": self.fake.building_code()}
         )
 
-        self.parking_space = self.env["maintenance.parking.space"].create(
-            {
-                "name": self.fake.parking_space_name(),
-                "code": self.fake.parking_space_code(),
-            }
+        self.building_option = self.env["maintenance.building.option"].create(
+            {"name": self.fake.building_name(), "code": self.fake.building_code()}
         )
 
-    def test_form_state_parking_space_by_space_caption(self):
+    def test_form_state_parking_space(self):
         """Form state should be 'parking-space' when space_caption is 'Bilplats'"""
         request = self._create_maintenance_request(space_caption="Bilplats")
         self.assertEqual(request.form_state, "parking-space")
 
-    def test_form_state_parking_space_by_parking_space_id(self):
-        """Form state should be 'parking-space' when parking_space_id is set"""
+    def test_form_state_property_with_property_id(self):
+        """Form state should be 'property' when space_caption is 'Fastighet' and property_id is set"""
         request = self._create_maintenance_request(
-            parking_space_id=self.parking_space.id
+            space_caption="Fastighet", property_id=self.property.id
         )
-        self.assertEqual(request.form_state, "parking-space")
-
-    def test_form_state_property_by_property_id(self):
-        """Form state should be 'property' when property_id is set"""
-        request = self._create_maintenance_request(property_id=self.property.id)
         self.assertEqual(request.form_state, "property")
 
-    def test_form_state_building_by_building_id(self):
-        """Form state should be 'building' when building_id is set"""
-        request = self._create_maintenance_request(building_id=self.building.id)
+    def test_form_state_property_with_property_option_id(self):
+        """Form state should be 'property' when space_caption is 'Fastighet' and property_option_id is set"""
+        request = self._create_maintenance_request(
+            space_caption="Fastighet", property_option_id=self.property_option.id
+        )
+        self.assertEqual(request.form_state, "property")
+
+    def test_form_state_property_without_property_fields(self):
+        """Form state should not be 'property' when space_caption is 'Fastighet' but no property fields are set"""
+        request = self._create_maintenance_request(space_caption="Fastighet")
+        self.assertNotEqual(request.form_state, "property")
+        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+
+    def test_form_state_building_with_building_id(self):
+        """Form state should be 'building' when space_caption is building-related and building_id is set"""
+        building_space_captions = ["Byggnad", "Uppgång", "Vind", "Källare", "Cykelförråd", "Gården/Utomhus", "Övrigt"]
+
+        for space_caption in building_space_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(
+                    space_caption=space_caption, building_id=self.building.id
+                )
+                self.assertEqual(request.form_state, "building")
+
+    def test_form_state_building_with_building_option_id(self):
+        """Form state should be 'building' when space_caption is building-related and building_option_id is set"""
+        request = self._create_maintenance_request(
+            space_caption="Byggnad", building_option_id=self.building_option.id
+        )
         self.assertEqual(request.form_state, "building")
 
-    def test_form_state_defaults_to_rental_property(self):
+    def test_form_state_building_without_building_fields(self):
+        """Form state should not be 'building' when space_caption is building-related but no building fields are set"""
+        request = self._create_maintenance_request(space_caption="Byggnad")
+        self.assertNotEqual(request.form_state, "building")
+        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+
+    def test_form_state_maintenance_unit(self):
+        """Form state should be 'maintenance-unit' for maintenance unit space captions"""
+        maintenance_unit_captions = ["Tvättstuga", "Miljöbod", "Lekplats"]
+
+        for space_caption in maintenance_unit_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(space_caption=space_caption)
+                self.assertEqual(request.form_state, "maintenance-unit")
+
+    def test_form_state_rental_property(self):
+        """Form state should be 'rental-property' for rental property space captions"""
+        rental_property_captions = ["Lägenhet", "Lokal"]
+
+        for space_caption in rental_property_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(space_caption=space_caption)
+                self.assertEqual(request.form_state, "rental-property")
+
+    def test_form_state_fallback(self):
         """Form state should default to 'rental-property' when no specific conditions are met"""
+        # Test a space_caption that exists but doesn't have special handling in form state logic
+        # From the form state logic, any space_caption not explicitly handled should fallback to "rental-property"
         request = self._create_maintenance_request(space_caption="Lägenhet")
         self.assertEqual(request.form_state, "rental-property")
+
+        # Test another case - space_caption that would be "building" but without building fields
+        request_no_building = self._create_maintenance_request(space_caption="Övrigt")
+        self.assertEqual(request_no_building.form_state, "rental-property")
 
 
 @tagged("onecore")
@@ -825,7 +880,7 @@ class TestMaintenanceRequestUtilityMethods(
     def setUp(self):
         super().setUp()
         self.internal_user = self._create_internal_user()
-        
+
         from ...models.services import FieldChangeTracker
         from ...models.utils.helpers import get_tenant_name, get_main_phone_number
         self.change_tracker = FieldChangeTracker(self.env)

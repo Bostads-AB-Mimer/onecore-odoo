@@ -6,3 +6,4 @@ from .maintenance_unit_fields_mixin import MaintenanceUnitFieldsMixin
 from .tenant_fields_mixin import TenantFieldsMixin
 from .lease_fields_mixin import LeaseFieldsMixin
 from .parking_space_fields_mixin import ParkingSpaceFieldsMixin
+from .facility_fields_mixin import FacilityFieldsMixin

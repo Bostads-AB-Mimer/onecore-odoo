@@ -24,6 +24,7 @@ class RecordManagementService:
         self._save_lease(maintenance_request, vals)
         self._save_tenant(maintenance_request, vals)
         self._save_parking_space(maintenance_request, vals)
+        self._save_facility(maintenance_request, vals)
 
     def _save_property(self, maintenance_request, vals):
         """Save property data if present."""
@@ -193,6 +194,31 @@ class RecordManagementService:
             }
         )
         maintenance_request.write({"parking_space_id": new_parking_space_record.id})
+
+    def _save_facility(self, maintenance_request, vals):
+        """Save facility data if present."""
+        if not vals.get("facility_option_id"):
+            return
+
+        facility_option_record = self.env["maintenance.facility.option"].search(
+            [("id", "=", vals.get("facility_option_id"))]
+        )
+        new_facility_record = self.env["maintenance.facility"].create(
+            {
+                "name": facility_option_record.name,
+                "code": facility_option_record.code,
+                "type_name": facility_option_record.type_name,
+                "type_code": facility_option_record.type_code,
+                "rental_type": facility_option_record.rental_type,
+                "area": facility_option_record.area,
+                "building_code": facility_option_record.building_code,
+                "building_name": facility_option_record.building_name,
+                "property_code": facility_option_record.property_code,
+                "property_name": facility_option_record.property_name,
+                "maintenance_request_id": maintenance_request.id,
+            }
+        )
+        maintenance_request.write({"facility_id": new_facility_record.id})
 
     def handle_images(self, request, images):
         """Handle image attachments for maintenance request."""
