@@ -29,6 +29,9 @@ class BaseMaintenanceHandler:
         self.env["maintenance.building.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()
+        self.env["maintenance.staircase.option"].search(
+            [("user_id", "=", self.env.user.id)]
+        ).unlink()
         self.env["maintenance.rental.property.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()

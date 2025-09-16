@@ -27,6 +27,7 @@ from .mixins import (
     SearchFieldsMixin,
     PropertyFieldsMixin,
     BuildingFieldsMixin,
+    StaircaseFieldsMixin,
     RentalPropertyFieldsMixin,
     MaintenanceUnitFieldsMixin,
     TenantFieldsMixin,
@@ -42,6 +43,7 @@ class OneCoreMaintenanceRequest(
     SearchFieldsMixin,
     PropertyFieldsMixin,
     BuildingFieldsMixin,
+    StaircaseFieldsMixin,
     RentalPropertyFieldsMixin,
     MaintenanceUnitFieldsMixin,
     TenantFieldsMixin,
@@ -153,6 +155,7 @@ class OneCoreMaintenanceRequest(
     )
     def _compute_form_state(self):
         for record in self:
+
             if record.space_caption == "Bilplats":
                 record.form_state = "parking-space"
             elif record.space_caption == "Fastighet":
@@ -365,6 +368,12 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_building_fields(record)
+
+    @api.onchange("staircase_option_id")
+    def _onchange_staircase_option_id(self):
+        field_manager = FormFieldService(self.env)
+        for record in self:
+            field_manager.update_staircase_fields(record)
 
     @api.onchange("rental_property_option_id")
     def _onchange_rental_property_option_id(self):

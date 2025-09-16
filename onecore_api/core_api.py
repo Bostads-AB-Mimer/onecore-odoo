@@ -121,6 +121,13 @@ class CoreApi:
             f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    # Fetch staircases for specified building code
+    # Note: Fix the endpoint in OneCore so it follows the same naming structure?
+    def fetch_staircases_for_building(self, code):
+        return self._get_json(
+            f"/staircases?buildingCode={urllib.parse.quote(str(code), safe='')}"
+        )
+
     def fetch_building(self, id, location_type):
         building = self._get_json(
             f"/buildings/by-building-code/{urllib.parse.quote(str(id), safe='')}"
@@ -132,9 +139,16 @@ class CoreApi:
                 if location_type in maintenance_unit_types
                 else []
             )
+            # Fetch staircases if location_type is 'Uppgång'
+            staircases = (
+                self.fetch_staircases_for_building(building["code"])
+                if location_type == "Uppgång"
+                else []
+            )
 
             return {
                 **building,
+                "staircases": staircases,
                 "maintenance_units": (
                     self.filter_maintenance_units_by_location_type(
                         maintenance_units, location_type

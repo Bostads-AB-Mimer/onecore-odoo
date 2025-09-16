@@ -202,6 +202,22 @@
                                     <group col="1"
                                         invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
+
+                                        <!--Staircase -->
+                                        <field name="staircase_option_id" string="Trappuppgång"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False or space_caption != 'Uppgång'" />
+                                        <field name="staircase_name" string="Trappuppgång"
+                                            invisible="not staircase_name or not create_date or space_caption != 'Uppgång'" />
+                                        <field name="staircase_code" string="Trappuppgångskod"
+                                            invisible="not staircase_code or space_caption != 'Uppgång'" />
+                                        <field name="staircase_floor_plan" string="Våningsplan"
+                                            invisible="not staircase_floor_plan or space_caption != 'Uppgång'" />
+                                        <field name="staircase_accessible_by_elevator"
+                                            string="Tillgänglig med hiss"
+                                            invisible="not staircase_accessible_by_elevator or space_caption != 'Uppgång'" />
+
+                                        <!-- Rental property fields -->
                                         <field name="rental_property_option_id"
                                             string="Hyresobjekt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -209,6 +225,8 @@
 
                                         <field name="rental_property_name" string="Hyresobjekt"
                                             invisible="not rental_property_name" />
+
+
                                         <field name="property_type" invisible="not property_type"
                                             string="Fastighetstyp" />
                                         <field name="address" string="Adress" />
@@ -322,6 +340,20 @@
                                         <field name="building_renovation_year"
                                             string="Renoveringsår"
                                             invisible="not building_renovation_year" />
+
+                                        <!-- Staircases -->
+                                        <field name="staircase_option_id" string="Trappuppgång"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False or space_caption != 'Uppgång'" />
+                                        <field name="staircase_name" string="Trappuppgång"
+                                            invisible="not staircase_name or not create_date or space_caption != 'Uppgång'" />
+                                        <field name="staircase_code" string="Trappuppgångskod"
+                                            invisible="not staircase_code or space_caption != 'Uppgång'" />
+                                        <field name="staircase_floor_plan" string="Våningsplan"
+                                            invisible="not staircase_floor_plan or space_caption != 'Uppgång'" />
+                                        <field name="staircase_accessible_by_elevator"
+                                            string="Tillgänglig med hiss"
+                                            invisible="not staircase_accessible_by_elevator or space_caption != 'Uppgång'" />
                                         <field name="estate_code" invisible="1"
                                             string="Fastighetskod" />
                                         <field name="estate" invisible="not estate"

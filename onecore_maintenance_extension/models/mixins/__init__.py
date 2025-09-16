@@ -1,6 +1,7 @@
 from .search_fields_mixin import SearchFieldsMixin
 from .property_fields_mixin import PropertyFieldsMixin
 from .building_fields_mixin import BuildingFieldsMixin
+from .staircase_fields_mixin import StaircaseFieldsMixin
 from .rental_property_fields_mixin import RentalPropertyFieldsMixin
 from .maintenance_unit_fields_mixin import MaintenanceUnitFieldsMixin
 from .tenant_fields_mixin import TenantFieldsMixin
