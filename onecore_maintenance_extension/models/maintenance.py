@@ -296,10 +296,13 @@ class OneCoreMaintenanceRequest(models.Model):
 
             if id and record.space_caption == "Lägenhet":
                 url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
-                response = requests.get(url)
-                if response.status_code == 200:
-                    record.floor_plan_image = base64.b64encode(response.content)
-                else:
+                try:
+                    response = requests.get(url)
+                    if response.status_code == 200:
+                        record.floor_plan_image = base64.b64encode(response.content)
+                    else:
+                        record.floor_plan_image = ""
+                except (requests.RequestException, requests.Timeout):
                     record.floor_plan_image = ""
             else:
                 record.floor_plan_image = ""
