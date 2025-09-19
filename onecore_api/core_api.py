@@ -158,25 +158,6 @@ class CoreApi:
                 ),
             }
         return None
-        maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
-        if building:
-            maintenance_units = (
-                self.fetch_maintenance_units_for_building(building["code"])
-                if location_type in maintenance_unit_types
-                else []
-            )
-
-            return {
-                **building,
-                "maintenance_units": (
-                    self.filter_maintenance_units_by_location_type(
-                        maintenance_units, location_type
-                    )
-                    if maintenance_units
-                    else []
-                ),
-            }
-        return None
 
     def fetch_buildings_for_property(self, property_code):
         return self._get_json(
