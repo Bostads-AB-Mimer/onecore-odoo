@@ -172,53 +172,53 @@ class TestMaintenanceRequestDueDate(MaintenanceRequestTestMixin, TransactionCase
         self.assertFalse(request.due_date)
 
 
-@tagged("onecore")
-class TestMaintenanceRequestSearchAndOptionUpdate(
-    MaintenanceRequestTestMixin, TransactionCase
-):
-    def setUp(self):
-        super().setUp()
-        self.fake = Faker("sv_SE")
-        self.fake.add_provider(MaintenanceProvider)
-        self.tenant = self.env["maintenance.tenant.option"].create(
-            {
-                "user_id": self.env.user.id,
-                "name": self.fake.tenant_full_name(),
-                "contact_code": "T123",
-                "contact_key": "key123",
-            }
-        )
-        self.lease = self.env["maintenance.lease.option"].create(
-            {
-                "user_id": self.env.user.id,
-                "name": self.fake.lease_model_name(),
-                "lease_number": "L456",
-                "lease_type": "TypeA",
-            }
-        )
-        self.property = self.env["maintenance.rental.property.option"].create(
-            {
-                "user_id": self.env.user.id,
-                "name": self.fake.rental_property_name(),
-                "code": "P789",
-                "property_type": "Lägenhet",
-            }
-        )
-        self.request = self._create_maintenance_request(
-            tenant_option_id=self.tenant.id,
-            lease_option_id=self.lease.id,
-            rental_property_option_id=self.property.id,
-        )
+# @tagged("onecore")
+# class TestMaintenanceRequestSearchAndOptionUpdate(
+#     MaintenanceRequestTestMixin, TransactionCase
+# ):
+#     def setUp(self):
+#         super().setUp()
+#         self.fake = Faker("sv_SE")
+#         self.fake.add_provider(MaintenanceProvider)
+#         self.tenant = self.env["maintenance.tenant.option"].create(
+#             {
+#                 "user_id": self.env.user.id,
+#                 "name": self.fake.tenant_full_name(),
+#                 "contact_code": "T123",
+#                 "contact_key": "key123",
+#             }
+#         )
+#         self.lease = self.env["maintenance.lease.option"].create(
+#             {
+#                 "user_id": self.env.user.id,
+#                 "name": self.fake.lease_model_name(),
+#                 "lease_number": "L456",
+#                 "lease_type": "TypeA",
+#             }
+#         )
+#         self.property = self.env["maintenance.rental.property.option"].create(
+#             {
+#                 "user_id": self.env.user.id,
+#                 "name": self.fake.rental_property_name(),
+#                 "code": "P789",
+#                 "property_type": "Lägenhet",
+#             }
+#         )
+#         self.request = self._create_maintenance_request(
+#             tenant_option_id=self.tenant.id,
+#             lease_option_id=self.lease.id,
+#             rental_property_option_id=self.property.id,
+#         )
 
-    def test_compute_search_by_number(self):
-        """Search by number method exists and has basic functionality."""
-        # Skip test - requires network/API access, will add mock data later
-        self.skipTest("Skipping search test - requires mock API data")
+#     def test_compute_search_by_number(self):
+#         """Search by number method exists and has basic functionality."""
+#         # Skip test - requires network/API access, will add mock data later
+#         self.skipTest("Skipping search test - requires mock API data")
 
-    def test_update_form_options_updates_related_fields(self):
-        """update_form_options method exists and has basic functionality."""
-        # Skip test - requires network/API access, will add mock data later
-        self.skipTest("Skipping form options test - requires mock API data")
+#     def test_update_form_options_updates_related_fields(self):
+#         """update_form_options method exists and has basic functionality."""
+#         # Skip test - requires network/API access, will add mock data later
+#         self.skipTest("Skipping form options test - requires mock API data")
 
 
 @tagged("onecore")
@@ -567,13 +567,15 @@ class TestMaintenanceRequestNotifications(
         super().setUp()
         self.internal_user = self._create_internal_user()
 
+        from ...models.services import FieldChangeTracker
+        self.change_tracker = FieldChangeTracker(self.env)
+
     def test_field_change_tracking_and_exclusions(self):
         """Test field change tracking and skip_fields exclusions"""
         request = self._create_maintenance_request()
 
         # Excluded fields should not be tracked
-        excluded_changes = request._track_field_changes(
-            {
+        excluded_changes = self.change_tracker.track_field_changes(request, {
                 "stage_id": 1,
                 "message_ids": [(0, 0, {"body": "test"})],
                 "__last_update": "2023-01-01 12:00:00",
@@ -582,8 +584,7 @@ class TestMaintenanceRequestNotifications(
         self.assertEqual(excluded_changes, {})
 
         # Valid fields should be tracked
-        valid_changes = request._track_field_changes(
-            {
+        valid_changes = self.change_tracker.track_field_changes(request, {
                 "description": "New description",
                 "stage_id": 1,  # Should be ignored
             }
@@ -602,8 +603,7 @@ class TestMaintenanceRequestNotifications(
         )
 
         # Test multiple field changes at once
-        changes = request._track_field_changes(
-            {
+        changes = self.change_tracker.track_field_changes(request, {
                 "description": "New description",
                 "priority_expanded": "10",
                 "start_date": date(2023, 2, 20),
@@ -633,7 +633,7 @@ class TestMaintenanceRequestNotifications(
         request = self._create_maintenance_request()
 
         # Test assignment from empty
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             request._fields["user_id"], False, self.internal_user.id, "User"
         )
         self.assertIn("Inte valt", change)
@@ -641,7 +641,7 @@ class TestMaintenanceRequestNotifications(
         self.assertIn("→", change)
 
         # Test no change (should return None)
-        no_change = request._format_field_change(
+        no_change = self.change_tracker._format_field_change(
             request._fields["user_id"],
             self.internal_user,
             self.internal_user.id,
@@ -650,7 +650,7 @@ class TestMaintenanceRequestNotifications(
         self.assertIsNone(no_change)
 
         # Test unassignment
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             request._fields["user_id"], self.internal_user, False, "User"
         )
         self.assertIn(self.internal_user.display_name, change)
@@ -662,7 +662,7 @@ class TestMaintenanceRequestNotifications(
         request = self._create_maintenance_request()
 
         # Test priority change
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             request._fields["priority_expanded"], "5", "10", "Priority"
         )
         self.assertIn("5 dagar", change)
@@ -670,7 +670,7 @@ class TestMaintenanceRequestNotifications(
         self.assertIn("→", change)
 
         # Test from empty
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             request._fields["priority_expanded"], False, "7", "Priority"
         )
         self.assertIn("Inte satt", change)
@@ -682,7 +682,7 @@ class TestMaintenanceRequestNotifications(
         field_obj = request._fields["start_date"]
 
         # Test normal date change
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             field_obj, date(2023, 1, 15), date(2023, 2, 20), "Start Date"
         )
         self.assertIn("2023-01-15", change)
@@ -690,21 +690,21 @@ class TestMaintenanceRequestNotifications(
         self.assertIn("→", change)
 
         # Test string date input
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             field_obj, date(2023, 1, 15), "2023-02-20", "Start Date"
         )
         self.assertIn("2023-01-15", change)
         self.assertIn("2023-02-20", change)
 
         # Test empty to date
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             field_obj, False, date(2023, 2, 20), "Start Date"
         )
         self.assertIn("Inte satt", change)
         self.assertIn("2023-02-20", change)
 
         # Test invalid string handling
-        change = request._format_field_change(
+        change = self.change_tracker._format_field_change(
             field_obj, date(2023, 1, 15), "invalid-date", "Start Date"
         )
         self.assertIn("2023-01-15", change)
@@ -757,7 +757,7 @@ class TestMaintenanceRequestNotifications(
         requests = request1 | request2
 
         # Update both records
-        changes = requests._track_field_changes({"priority_expanded": "7"})
+        changes = self.change_tracker.track_field_changes(requests, {"priority_expanded": "7"})
 
         # Should track changes for both records
         self.assertIn(request1.id, changes)
@@ -779,43 +779,98 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
             }
         )
 
+        self.property_option = self.env["maintenance.property.option"].create(
+            {
+                "designation": self.fake.property_designation(),
+                "code": self.fake.property_code(),
+            }
+        )
+
         self.building = self.env["maintenance.building"].create(
             {"name": self.fake.building_name(), "code": self.fake.building_code()}
         )
 
-        self.parking_space = self.env["maintenance.parking.space"].create(
-            {
-                "name": self.fake.parking_space_name(),
-                "code": self.fake.parking_space_code(),
-            }
+        self.building_option = self.env["maintenance.building.option"].create(
+            {"name": self.fake.building_name(), "code": self.fake.building_code()}
         )
 
-    def test_form_state_parking_space_by_space_caption(self):
+    def test_form_state_parking_space(self):
         """Form state should be 'parking-space' when space_caption is 'Bilplats'"""
         request = self._create_maintenance_request(space_caption="Bilplats")
         self.assertEqual(request.form_state, "parking-space")
 
-    def test_form_state_parking_space_by_parking_space_id(self):
-        """Form state should be 'parking-space' when parking_space_id is set"""
+    def test_form_state_property_with_property_id(self):
+        """Form state should be 'property' when space_caption is 'Fastighet' and property_id is set"""
         request = self._create_maintenance_request(
-            parking_space_id=self.parking_space.id
+            space_caption="Fastighet", property_id=self.property.id
         )
-        self.assertEqual(request.form_state, "parking-space")
-
-    def test_form_state_property_by_property_id(self):
-        """Form state should be 'property' when property_id is set"""
-        request = self._create_maintenance_request(property_id=self.property.id)
         self.assertEqual(request.form_state, "property")
 
-    def test_form_state_building_by_building_id(self):
-        """Form state should be 'building' when building_id is set"""
-        request = self._create_maintenance_request(building_id=self.building.id)
+    def test_form_state_property_with_property_option_id(self):
+        """Form state should be 'property' when space_caption is 'Fastighet' and property_option_id is set"""
+        request = self._create_maintenance_request(
+            space_caption="Fastighet", property_option_id=self.property_option.id
+        )
+        self.assertEqual(request.form_state, "property")
+
+    def test_form_state_property_without_property_fields(self):
+        """Form state should not be 'property' when space_caption is 'Fastighet' but no property fields are set"""
+        request = self._create_maintenance_request(space_caption="Fastighet")
+        self.assertNotEqual(request.form_state, "property")
+        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+
+    def test_form_state_building_with_building_id(self):
+        """Form state should be 'building' when space_caption is building-related and building_id is set"""
+        building_space_captions = ["Byggnad", "Uppgång", "Vind", "Källare", "Cykelförråd", "Gården/Utomhus", "Övrigt"]
+
+        for space_caption in building_space_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(
+                    space_caption=space_caption, building_id=self.building.id
+                )
+                self.assertEqual(request.form_state, "building")
+
+    def test_form_state_building_with_building_option_id(self):
+        """Form state should be 'building' when space_caption is building-related and building_option_id is set"""
+        request = self._create_maintenance_request(
+            space_caption="Byggnad", building_option_id=self.building_option.id
+        )
         self.assertEqual(request.form_state, "building")
 
-    def test_form_state_defaults_to_rental_property(self):
+    def test_form_state_building_without_building_fields(self):
+        """Form state should not be 'building' when space_caption is building-related but no building fields are set"""
+        request = self._create_maintenance_request(space_caption="Byggnad")
+        self.assertNotEqual(request.form_state, "building")
+        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+
+    def test_form_state_maintenance_unit(self):
+        """Form state should be 'maintenance-unit' for maintenance unit space captions"""
+        maintenance_unit_captions = ["Tvättstuga", "Miljöbod", "Lekplats"]
+
+        for space_caption in maintenance_unit_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(space_caption=space_caption)
+                self.assertEqual(request.form_state, "maintenance-unit")
+
+    def test_form_state_rental_property(self):
+        """Form state should be 'rental-property' for rental property space captions"""
+        rental_property_captions = ["Lägenhet", "Lokal"]
+
+        for space_caption in rental_property_captions:
+            with self.subTest(space_caption=space_caption):
+                request = self._create_maintenance_request(space_caption=space_caption)
+                self.assertEqual(request.form_state, "rental-property")
+
+    def test_form_state_fallback(self):
         """Form state should default to 'rental-property' when no specific conditions are met"""
+        # Test a space_caption that exists but doesn't have special handling in form state logic
+        # From the form state logic, any space_caption not explicitly handled should fallback to "rental-property"
         request = self._create_maintenance_request(space_caption="Lägenhet")
         self.assertEqual(request.form_state, "rental-property")
+
+        # Test another case - space_caption that would be "building" but without building fields
+        request_no_building = self._create_maintenance_request(space_caption="Övrigt")
+        self.assertEqual(request_no_building.form_state, "rental-property")
 
 
 @tagged("onecore")
@@ -826,10 +881,15 @@ class TestMaintenanceRequestUtilityMethods(
         super().setUp()
         self.internal_user = self._create_internal_user()
 
+        from ...models.services import FieldChangeTracker
+        from ...models.utils.helpers import get_tenant_name, get_main_phone_number
+        self.change_tracker = FieldChangeTracker(self.env)
+        self.get_tenant_name = get_tenant_name
+        self.get_main_phone_number = get_main_phone_number
+
     def test_get_tenant_name_with_first_last_name(self):
         """_get_tenant_name should construct name from firstName and lastName"""
         self._setup_faker()
-        request = self._create_maintenance_request()
 
         first_name = self.fake.first_name()
         last_name = self.fake.last_name()
@@ -841,32 +901,29 @@ class TestMaintenanceRequestUtilityMethods(
             "fullName": full_name,
         }
 
-        name = request._get_tenant_name(tenant_data)
+        name = self.get_tenant_name(tenant_data)
         self.assertEqual(name, f"{first_name} {last_name}")
 
     def test_get_tenant_name_with_full_name_only(self):
         """_get_tenant_name should use fullName when firstName/lastName not available"""
         self._setup_faker()
-        request = self._create_maintenance_request()
 
         full_name = self.fake.tenant_full_name()
         tenant_data = {"fullName": full_name}
 
-        name = request._get_tenant_name(tenant_data)
+        name = self.get_tenant_name(tenant_data)
         self.assertEqual(name, full_name)
 
     def test_get_tenant_name_with_empty_data(self):
         """_get_tenant_name should return empty string for empty data"""
-        request = self._create_maintenance_request()
         tenant_data = {}
 
-        name = request._get_tenant_name(tenant_data)
+        name = self.get_tenant_name(tenant_data)
         self.assertEqual(name, "")
 
     def test_get_main_phone_number_finds_main_number(self):
         """_get_main_phone_number should find the phone number marked as main"""
         self._setup_faker()
-        request = self._create_maintenance_request()
 
         phone1 = self.fake.phone_number()
         phone2 = self.fake.phone_number()
@@ -880,13 +937,12 @@ class TestMaintenanceRequestUtilityMethods(
             ]
         }
 
-        phone = request._get_main_phone_number(tenant_data)
+        phone = self.get_main_phone_number(tenant_data)
         self.assertEqual(phone, phone2)
 
     def test_get_main_phone_number_no_main_number(self):
         """_get_main_phone_number should return None when no main number exists"""
         self._setup_faker()
-        request = self._create_maintenance_request()
 
         phone1 = self.fake.phone_number()
         phone2 = self.fake.phone_number()
@@ -898,23 +954,21 @@ class TestMaintenanceRequestUtilityMethods(
             ]
         }
 
-        phone = request._get_main_phone_number(tenant_data)
+        phone = self.get_main_phone_number(tenant_data)
         self.assertIsNone(phone)
 
     def test_get_main_phone_number_empty_phone_numbers(self):
         """_get_main_phone_number should return None for empty phoneNumbers"""
-        request = self._create_maintenance_request()
         tenant_data = {"phoneNumbers": []}
 
-        phone = request._get_main_phone_number(tenant_data)
+        phone = self.get_main_phone_number(tenant_data)
         self.assertIsNone(phone)
 
     def test_get_main_phone_number_no_phone_numbers_key(self):
         """_get_main_phone_number should return None when phoneNumbers key missing"""
-        request = self._create_maintenance_request()
         tenant_data = {}
 
-        phone = request._get_main_phone_number(tenant_data)
+        phone = self.get_main_phone_number(tenant_data)
         self.assertIsNone(phone)
 
     def test_maintenance_team_domain_computation(self):

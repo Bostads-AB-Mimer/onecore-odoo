@@ -1,5 +1,6 @@
 from . import test_maintenance
 from . import test_maintenance_building
+from . import test_maintenance_facility
 from . import test_maintenance_lease
 from . import test_maintenance_maintenance_unit
 from . import test_maintenance_parking_space

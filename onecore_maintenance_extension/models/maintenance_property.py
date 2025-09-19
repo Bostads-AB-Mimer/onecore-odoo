@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenancePropertyOption(models.TransientModel):
+class OnecoreMaintenancePropertyOption(models.Model):
     _name = "maintenance.property.option"
     _description = "Property"
     _rec_name = "designation"
