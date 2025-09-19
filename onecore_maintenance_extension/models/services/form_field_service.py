@@ -28,6 +28,19 @@ class FormFieldService:
         record.building_construction_year = record.building_option_id.construction_year
         record.building_renovation_year = record.building_option_id.renovation_year
 
+    def update_staircase_fields(self, record):
+        """Update staircase-related fields."""
+        if not record.staircase_option_id:
+            return
+
+        record.staircase_id = record.staircase_option_id.id
+        record.staircase_name = record.staircase_option_id.name
+        record.staircase_code = record.staircase_option_id.code
+        record.staircase_floor_plan = record.staircase_option_id.floor_plan
+        record.staircase_accessible_by_elevator = (
+            record.staircase_option_id.accessible_by_elevator
+        )
+
     def update_rental_property_fields(self, record):
         """Update rental property-related fields."""
         if not record.rental_property_option_id:

@@ -19,6 +19,7 @@ class RecordManagementService:
         """Create all related records for a maintenance request."""
         self._save_property(maintenance_request, vals)
         self._save_building(maintenance_request, vals)
+        self._save_staircase(maintenance_request, vals)
         self._save_rental_property(maintenance_request, vals)
         self._save_maintenance_unit(maintenance_request, vals)
         self._save_lease(maintenance_request, vals)
@@ -62,6 +63,26 @@ class RecordManagementService:
             }
         )
         maintenance_request.write({"building_id": new_building_record.id})
+
+    def _save_staircase(self, maintenance_request, vals):
+        """Save staircase data if present."""
+        if not vals.get("staircase_option_id"):
+            return
+
+        staircase_option_record = self.env["maintenance.staircase.option"].search(
+            [("id", "=", vals.get("staircase_option_id"))]
+        )
+        new_staircase_record = self.env["maintenance.staircase"].create(
+            {
+                "staircase_id": staircase_option_record.staircase_id,
+                "name": staircase_option_record.name,
+                "code": staircase_option_record.code,
+                "floor_plan": staircase_option_record.floor_plan,
+                "accessible_by_elevator": staircase_option_record.accessible_by_elevator,
+                "maintenance_request_id": maintenance_request.id,
+            }
+        )
+        maintenance_request.write({"staircase_id": new_staircase_record.id})
 
     def _save_rental_property(self, maintenance_request, vals):
         """Save rental property data if present."""

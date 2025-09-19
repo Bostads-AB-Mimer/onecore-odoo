@@ -3,6 +3,7 @@ access_maintenance_rental_property_option,maintenance.team.user,model_maintenanc
 access_maintenance_property_option,maintenance.team.user,model_maintenance_property_option,base.group_user,1,1,1,1
 access_maintenance_building_option,maintenance.team.user,model_maintenance_building_option,base.group_user,1,1,1,1
 access_maintenance_maintenance_unit_option,maintenance.team.user,model_maintenance_maintenance_unit_option,base.group_user,1,1,1,1
+access_maintenance_staircase_option,maintenance.team.user,model_maintenance_staircase_option,base.group_user,1,1,1,1
 access_maintenance_tenant_option,maintenance.team.user,model_maintenance_tenant_option,base.group_user,1,1,1,1
 access_maintenance_lease_option,maintenance.team.user,model_maintenance_lease_option,base.group_user,1,1,1,1
 access_maintenance_parking_space_option,maintenance.team.user,model_maintenance_parking_space_option,base.group_user,1,1,1,1
@@ -10,7 +11,7 @@ access_maintenance_facility_option,maintenance.team.user,model_maintenance_facil
 access_maintenance_rental_property,maintenance.team.user,model_maintenance_rental_property,base.group_user,1,1,1,1
 access_maintenance_property,maintenance.team.user,model_maintenance_property,base.group_user,1,1,1,1
 access_maintenance_building,maintenance.team.user,model_maintenance_building,base.group_user,1,1,1,1
-access_maintenance_maintenance_unit,maintenance.team.user,model_maintenance_maintenance_unit,base.group_user,1,1,1,1
+access_maintenance_staircase,maintenance.team.user,model_maintenance_staircase,base.group_user,1,1,1,1
 access_maintenance_tenant,maintenance.team.user,model_maintenance_tenant,base.group_user,1,1,1,1
 access_maintenance_parking_space,maintenance.team.user,model_maintenance_parking_space,base.group_user,1,1,1,1
 access_maintenance_facility,maintenance.team.user,model_maintenance_facility,base.group_user,1,1,1,1
