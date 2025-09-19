@@ -7,20 +7,22 @@ _logger = logging.getLogger(__name__)
 
 class BaseMaintenanceHandler:
     """Base class for handling different types of maintenance requests."""
-    
+
     def __init__(self, maintenance_request, core_api):
         self.record = maintenance_request
         self.env = maintenance_request.env
         self.core_api = core_api
-    
+
     def handle_search(self, search_type, search_value, space_caption):
         """Handle search logic for this type of maintenance request."""
         raise NotImplementedError("Subclasses must implement handle_search method")
-    
+
     def update_form_options(self, data):
         """Update form options with search results."""
-        raise NotImplementedError("Subclasses must implement update_form_options method")
-    
+        raise NotImplementedError(
+            "Subclasses must implement update_form_options method"
+        )
+
     def _delete_options(self):
         """Delete existing user options."""
         self.env["maintenance.property.option"].search(
@@ -50,8 +52,14 @@ class BaseMaintenanceHandler:
         self.env["maintenance.tenant.option"].search(
             [("user_id", "=", self.env.user.id)]
         ).unlink()
-    
-    def _create_lease_option(self, lease, parking_space_option_id=None, rental_property_option_id=None, facility_option_id=None):
+
+    def _create_lease_option(
+        self,
+        lease,
+        parking_space_option_id=None,
+        rental_property_option_id=None,
+        facility_option_id=None,
+    ):
         """Create a lease option record with common lease data."""
         lease_data = {
             "user_id": self.env.user.id,
@@ -72,7 +80,7 @@ class BaseMaintenanceHandler:
             lease_data["facility_option_id"] = facility_option_id
 
         return self.env["maintenance.lease.option"].create(lease_data)
-    
+
     def _create_tenant_options(self, tenants):
         """Create tenant option records for a list of tenants."""
         for tenant in tenants:
@@ -99,9 +107,7 @@ class BaseMaintenanceHandler:
                         "special_attention": tenant.get("specialAttention"),
                     }
                 )
-    
 
-    
     def _raise_no_results_error(self, search_value):
         """Raise a user error when no results are found."""
         raise exceptions.UserError(
