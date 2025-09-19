@@ -5,23 +5,13 @@ from ..fake_providers import MaintenanceProvider
 
 
 @tagged("onecore")
-class TestMaintenanceRentalPropertyModels(TransactionCase):
+class TestMaintenanceFacility(TransactionCase):
     def setUp(self):
         super().setUp()
         self.fake = Faker("sv_SE")
         self.fake.add_provider(MaintenanceProvider)
 
-    def test_rental_property_option_user_id_defaults_to_current_user(self):
-        """user_id should default to current user."""
-        property_option = self.env["maintenance.rental.property.option"].create(
-            {
-                "name": self.fake.rental_property_name(),
-                "property_type": self.fake.building_type(),
-            }
-        )
-        self.assertEqual(property_option.user_id, self.env.user)
-
-    def test_rental_property_cascade_delete_when_maintenance_request_deleted(self):
+    def test_facility_cascade_delete_when_maintenance_request_deleted(self):
         """Test cascade delete when maintenance request is deleted."""
         request = self.env["maintenance.request"].create(
             {
@@ -32,16 +22,24 @@ class TestMaintenanceRentalPropertyModels(TransactionCase):
                 "space_caption": self.fake.space_caption(),
             }
         )
-        self.env["maintenance.rental.property"].create(
+        self.env["maintenance.facility"].create(
             {
-                "name": self.fake.rental_property_name(),
-                "property_type": self.fake.building_type(),
+                "name": self.fake.facility_name(),
+                "code": self.fake.facility_code(),
+                "type_name": self.fake.facility_type_name(),
+                "type_code": self.fake.facility_type_code(),
+                "rental_type": self.fake.facility_rental_type(),
+                "area": self.fake.facility_area(),
+                "building_code": self.fake.building_code(),
+                "building_name": self.fake.building_name(),
+                "property_code": self.fake.property_code(),
+                "property_name": self.fake.building_name(),
                 "maintenance_request_id": request.id,
             }
         )
         request.unlink()
         self.assertFalse(
-            self.env["maintenance.rental.property"].search(
+            self.env["maintenance.facility"].search(
                 [("maintenance_request_id", "=", request.id)]
             )
         )

@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenanceTenantOption(models.TransientModel):
+class OnecoreMaintenanceTenantOption(models.Model):
     _name = "maintenance.tenant.option"
     _description = "Tenant Option"
 

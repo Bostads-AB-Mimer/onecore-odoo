@@ -1,7 +1,7 @@
 from odoo import models, fields
 
 
-class OnecoreMaintenanceLeaseOption(models.TransientModel):
+class OnecoreMaintenanceLeaseOption(models.Model):
     _name = "maintenance.lease.option"
     _description = "Lease Option"
 
@@ -24,6 +24,9 @@ class OnecoreMaintenanceLeaseOption(models.TransientModel):
     )
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option", string="Rental Property Option"
+    )
+    facility_option_id = fields.Many2one(
+        "maintenance.facility.option", string="Facility Option"
     )
     tenants = fields.One2many("maintenance.tenant.option", "id", string="Hyresgäster")
 
