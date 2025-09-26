@@ -6,10 +6,17 @@
                 <b class="o_kanban_record_title">
                     <t t-esc="record.name.raw_value"/>
                 </b>
-                <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value || record.recently_added_tenant.raw_value">
-                    <span class="mimer-badge">
-                        Ny kundinfo
-                    </span>
+                <div class="d-flex flex-column">
+                    <div class="o_kanban_badge" t-if="record.new_mimer_notification.raw_value || record.recently_added_tenant.raw_value">
+                        <span class="mimer-badge">
+                            Ny kundinfo
+                        </span>
+                    </div>
+                    <div class="o_kanban_badge" t-if="record.special_attention.raw_value">
+                        <span class="mimer-badge bg-danger text-white">
+                            Viktig kundinfo
+                        </span>
+                    </div>
                 </div>
             </div>
 

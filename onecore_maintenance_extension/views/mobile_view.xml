@@ -47,6 +47,7 @@
         <field name="today_date" />
         <field name="new_mimer_notification" />
         <field name="recently_added_tenant" />
+        <field name="special_attention" />
       </mobile>
     </field>
   </record>
