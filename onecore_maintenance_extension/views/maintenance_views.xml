@@ -522,6 +522,7 @@
                     <field name="hidden_from_my_pages" />
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
+                    <field name="special_attention" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
