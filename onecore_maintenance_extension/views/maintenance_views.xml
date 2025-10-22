@@ -563,6 +563,17 @@
             <field name="view_mode">tree,form</field>
         </record>
 
+        <!-- Action for external link to create maintenance request -->
+        <record id="action_maintenance_request_create" model="ir.actions.act_window">
+            <field name="name">Skapa felanmälan</field>
+            <field name="res_model">maintenance.request</field>
+            <field name="view_mode">form</field>
+            <field name="target">current</field>
+            <field name="context">{
+                'form_view_initial_mode': 'edit',
+            }</field>
+        </record>
+
         <menuitem
             id="menu_maintenance_request_category"
             name="Ärendekategorier"
