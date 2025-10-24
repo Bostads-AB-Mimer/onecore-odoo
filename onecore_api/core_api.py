@@ -211,12 +211,12 @@ class CoreApi:
 
     def fetch_parking_space(self, id):
         return self._get_json(
-            f"/propertyBase/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+            f"/parking-spaces/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
     def fetch_facility(self, id):
         return self._get_json(
-            f"/propertyBase/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+            f"/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
     def fetch_form_data(self, identifier, value, location_type):
