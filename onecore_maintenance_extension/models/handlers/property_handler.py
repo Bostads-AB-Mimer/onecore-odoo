@@ -101,6 +101,14 @@ class PropertyHandler(BaseMaintenanceHandler):
             lease = item["lease"]
             maintenance_units = item.get("maintenance_units", [])
 
+            self.env["maintenance.property.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "designation": property_data["property"].get("name"),
+                    "code": property_data["property"].get("code"),
+                }
+            )
+
             rental_property_option = self.env[
                 "maintenance.rental.property.option"
             ].create(
