@@ -107,6 +107,15 @@ class BuildingHandler(BaseMaintenanceHandler):
                 }
             )
 
+            # Add building option based on rental property building info
+            self.env["maintenance.building.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": property_data["building"].get("name"),
+                    "code": property_data["building"].get("code"),
+                }
+            )
+
             self._create_lease_option(
                 lease, rental_property_option_id=rental_property_option.id
             )
