@@ -458,32 +458,37 @@ class OneCoreMaintenanceRequest(
         return maintenance_requests
 
     def write(self, vals):
-        if self.env.context.get("creating_records"):
-            return super().write(vals)
+        # Check if we're in the initial creation phase
+        skip_tracking = self.env.context.get("creating_records")
 
         stage_manager = MaintenanceStageManager(self.env)
         external_contractor_service = ExternalContractorService(self.env)
 
-        # Handle stage transitions
+        # Handle stage transitions (always validate, even during creation)
         if "stage_id" in vals:
             external_contractor_service.validate_stage_transition(
                 self, vals["stage_id"]
             )
             stage_manager.handle_stage_change(self, vals["stage_id"])
 
-        # Handle resource assignment workflow
+        # Handle resource assignment workflow (always run, even during creation)
         if "user_id" in vals:
             workflow_updates = stage_manager.handle_resource_assignment(
                 self, vals.get("user_id")
             )
             vals.update(workflow_updates)
 
+        # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
-        changes_by_record = change_tracker.track_field_changes(self, vals)
+        changes_by_record = (
+            {} if skip_tracking else change_tracker.track_field_changes(self, vals)
+        )
 
         result = super().write(vals)
 
-        change_tracker.post_change_notifications(self, changes_by_record)
+        # Only post notifications if not in creation phase
+        if not skip_tracking:
+            change_tracker.post_change_notifications(self, changes_by_record)
 
         return result
 

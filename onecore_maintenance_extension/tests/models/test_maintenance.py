@@ -568,6 +568,7 @@ class TestMaintenanceRequestNotifications(
         self.internal_user = self._create_internal_user()
 
         from ...models.services import FieldChangeTracker
+
         self.change_tracker = FieldChangeTracker(self.env)
 
     def test_field_change_tracking_and_exclusions(self):
@@ -575,19 +576,23 @@ class TestMaintenanceRequestNotifications(
         request = self._create_maintenance_request()
 
         # Excluded fields should not be tracked
-        excluded_changes = self.change_tracker.track_field_changes(request, {
+        excluded_changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "stage_id": 1,
                 "message_ids": [(0, 0, {"body": "test"})],
                 "__last_update": "2023-01-01 12:00:00",
-            }
+            },
         )
         self.assertEqual(excluded_changes, {})
 
         # Valid fields should be tracked
-        valid_changes = self.change_tracker.track_field_changes(request, {
+        valid_changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "description": "New description",
                 "stage_id": 1,  # Should be ignored
-            }
+            },
         )
         self.assertIn(request.id, valid_changes)
         self.assertEqual(len(valid_changes[request.id]), 1)
@@ -603,13 +608,15 @@ class TestMaintenanceRequestNotifications(
         )
 
         # Test multiple field changes at once
-        changes = self.change_tracker.track_field_changes(request, {
+        changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "description": "New description",
                 "priority_expanded": "10",
                 "start_date": date(2023, 2, 20),
                 "hidden_from_my_pages": True,
                 "user_id": self.internal_user.id,
-            }
+            },
         )
 
         self.assertIn(request.id, changes)
@@ -757,7 +764,9 @@ class TestMaintenanceRequestNotifications(
         requests = request1 | request2
 
         # Update both records
-        changes = self.change_tracker.track_field_changes(requests, {"priority_expanded": "7"})
+        changes = self.change_tracker.track_field_changes(
+            requests, {"priority_expanded": "7"}
+        )
 
         # Should track changes for both records
         self.assertIn(request1.id, changes)
@@ -814,14 +823,22 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
         self.assertEqual(request.form_state, "property")
 
     def test_form_state_property_without_property_fields(self):
-        """Form state should not be 'property' when space_caption is 'Fastighet' but no property fields are set"""
+        """Form state should be 'property' when space_caption is 'Fastighet' even without property fields set"""
+        # form_state is based on space_caption to show correct form fields, not on whether IDs exist
         request = self._create_maintenance_request(space_caption="Fastighet")
-        self.assertNotEqual(request.form_state, "property")
-        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+        self.assertEqual(request.form_state, "property")
 
     def test_form_state_building_with_building_id(self):
         """Form state should be 'building' when space_caption is building-related and building_id is set"""
-        building_space_captions = ["Byggnad", "Uppgång", "Vind", "Källare", "Cykelförråd", "Gården/Utomhus", "Övrigt"]
+        building_space_captions = [
+            "Byggnad",
+            "Uppgång",
+            "Vind",
+            "Källare",
+            "Cykelförråd",
+            "Gården/Utomhus",
+            "Övrigt",
+        ]
 
         for space_caption in building_space_captions:
             with self.subTest(space_caption=space_caption):
@@ -838,10 +855,10 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
         self.assertEqual(request.form_state, "building")
 
     def test_form_state_building_without_building_fields(self):
-        """Form state should not be 'building' when space_caption is building-related but no building fields are set"""
+        """Form state should be 'building' when space_caption is building-related even without building fields set"""
+        # form_state is based on space_caption to show correct form fields, not on whether IDs exist
         request = self._create_maintenance_request(space_caption="Byggnad")
-        self.assertNotEqual(request.form_state, "building")
-        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+        self.assertEqual(request.form_state, "building")
 
     def test_form_state_maintenance_unit(self):
         """Form state should be 'maintenance-unit' for maintenance unit space captions"""
@@ -854,23 +871,25 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
 
     def test_form_state_rental_property(self):
         """Form state should be 'rental-property' for rental property space captions"""
-        rental_property_captions = ["Lägenhet", "Lokal"]
-
-        for space_caption in rental_property_captions:
-            with self.subTest(space_caption=space_caption):
-                request = self._create_maintenance_request(space_caption=space_caption)
-                self.assertEqual(request.form_state, "rental-property")
-
-    def test_form_state_fallback(self):
-        """Form state should default to 'rental-property' when no specific conditions are met"""
-        # Test a space_caption that exists but doesn't have special handling in form state logic
-        # From the form state logic, any space_caption not explicitly handled should fallback to "rental-property"
+        # Only "Lägenhet" maps to rental-property
+        # "Lokal" has its own "facility" form state
         request = self._create_maintenance_request(space_caption="Lägenhet")
         self.assertEqual(request.form_state, "rental-property")
 
-        # Test another case - space_caption that would be "building" but without building fields
-        request_no_building = self._create_maintenance_request(space_caption="Övrigt")
-        self.assertEqual(request_no_building.form_state, "rental-property")
+    def test_form_state_facility(self):
+        """Form state should be 'facility' for Lokal space caption"""
+        request = self._create_maintenance_request(space_caption="Lokal")
+        self.assertEqual(request.form_state, "facility")
+
+    def test_form_state_fallback(self):
+        """Form state should default to 'rental-property' when no specific conditions are met"""
+        # Test Lägenhet - explicitly mapped to rental-property
+        request = self._create_maintenance_request(space_caption="Lägenhet")
+        self.assertEqual(request.form_state, "rental-property")
+
+        # Test Övrigt - is a building-related space_caption, should be "building"
+        request_building = self._create_maintenance_request(space_caption="Övrigt")
+        self.assertEqual(request_building.form_state, "building")
 
 
 @tagged("onecore")
@@ -883,6 +902,7 @@ class TestMaintenanceRequestUtilityMethods(
 
         from ...models.services import FieldChangeTracker
         from ...models.utils.helpers import get_tenant_name, get_main_phone_number
+
         self.change_tracker = FieldChangeTracker(self.env)
         self.get_tenant_name = get_tenant_name
         self.get_main_phone_number = get_main_phone_number
