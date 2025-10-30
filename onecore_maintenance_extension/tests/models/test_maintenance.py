@@ -823,10 +823,10 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
         self.assertEqual(request.form_state, "property")
 
     def test_form_state_property_without_property_fields(self):
-        """Form state should not be 'property' when space_caption is 'Fastighet' but no property fields are set"""
+        """Form state should be 'property' when space_caption is 'Fastighet' even without property fields set"""
+        # form_state is based on space_caption to show correct form fields, not on whether IDs exist
         request = self._create_maintenance_request(space_caption="Fastighet")
-        self.assertNotEqual(request.form_state, "property")
-        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+        self.assertEqual(request.form_state, "property")
 
     def test_form_state_building_with_building_id(self):
         """Form state should be 'building' when space_caption is building-related and building_id is set"""
@@ -855,10 +855,10 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
         self.assertEqual(request.form_state, "building")
 
     def test_form_state_building_without_building_fields(self):
-        """Form state should not be 'building' when space_caption is building-related but no building fields are set"""
+        """Form state should be 'building' when space_caption is building-related even without building fields set"""
+        # form_state is based on space_caption to show correct form fields, not on whether IDs exist
         request = self._create_maintenance_request(space_caption="Byggnad")
-        self.assertNotEqual(request.form_state, "building")
-        self.assertEqual(request.form_state, "rental-property")  # Should fallback
+        self.assertEqual(request.form_state, "building")
 
     def test_form_state_maintenance_unit(self):
         """Form state should be 'maintenance-unit' for maintenance unit space captions"""
@@ -871,23 +871,25 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
 
     def test_form_state_rental_property(self):
         """Form state should be 'rental-property' for rental property space captions"""
-        rental_property_captions = ["Lägenhet", "Lokal"]
-
-        for space_caption in rental_property_captions:
-            with self.subTest(space_caption=space_caption):
-                request = self._create_maintenance_request(space_caption=space_caption)
-                self.assertEqual(request.form_state, "rental-property")
-
-    def test_form_state_fallback(self):
-        """Form state should default to 'rental-property' when no specific conditions are met"""
-        # Test a space_caption that exists but doesn't have special handling in form state logic
-        # From the form state logic, any space_caption not explicitly handled should fallback to "rental-property"
+        # Only "Lägenhet" maps to rental-property
+        # "Lokal" has its own "facility" form state
         request = self._create_maintenance_request(space_caption="Lägenhet")
         self.assertEqual(request.form_state, "rental-property")
 
-        # Test another case - space_caption that would be "building" but without building fields
-        request_no_building = self._create_maintenance_request(space_caption="Övrigt")
-        self.assertEqual(request_no_building.form_state, "rental-property")
+    def test_form_state_facility(self):
+        """Form state should be 'facility' for Lokal space caption"""
+        request = self._create_maintenance_request(space_caption="Lokal")
+        self.assertEqual(request.form_state, "facility")
+
+    def test_form_state_fallback(self):
+        """Form state should default to 'rental-property' when no specific conditions are met"""
+        # Test Lägenhet - explicitly mapped to rental-property
+        request = self._create_maintenance_request(space_caption="Lägenhet")
+        self.assertEqual(request.form_state, "rental-property")
+
+        # Test Övrigt - is a building-related space_caption, should be "building"
+        request_building = self._create_maintenance_request(space_caption="Övrigt")
+        self.assertEqual(request_building.form_state, "building")
 
 
 @tagged("onecore")
