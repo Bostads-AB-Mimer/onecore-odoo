@@ -568,6 +568,7 @@ class TestMaintenanceRequestNotifications(
         self.internal_user = self._create_internal_user()
 
         from ...models.services import FieldChangeTracker
+
         self.change_tracker = FieldChangeTracker(self.env)
 
     def test_field_change_tracking_and_exclusions(self):
@@ -575,19 +576,23 @@ class TestMaintenanceRequestNotifications(
         request = self._create_maintenance_request()
 
         # Excluded fields should not be tracked
-        excluded_changes = self.change_tracker.track_field_changes(request, {
+        excluded_changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "stage_id": 1,
                 "message_ids": [(0, 0, {"body": "test"})],
                 "__last_update": "2023-01-01 12:00:00",
-            }
+            },
         )
         self.assertEqual(excluded_changes, {})
 
         # Valid fields should be tracked
-        valid_changes = self.change_tracker.track_field_changes(request, {
+        valid_changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "description": "New description",
                 "stage_id": 1,  # Should be ignored
-            }
+            },
         )
         self.assertIn(request.id, valid_changes)
         self.assertEqual(len(valid_changes[request.id]), 1)
@@ -603,13 +608,15 @@ class TestMaintenanceRequestNotifications(
         )
 
         # Test multiple field changes at once
-        changes = self.change_tracker.track_field_changes(request, {
+        changes = self.change_tracker.track_field_changes(
+            request,
+            {
                 "description": "New description",
                 "priority_expanded": "10",
                 "start_date": date(2023, 2, 20),
                 "hidden_from_my_pages": True,
                 "user_id": self.internal_user.id,
-            }
+            },
         )
 
         self.assertIn(request.id, changes)
@@ -757,7 +764,9 @@ class TestMaintenanceRequestNotifications(
         requests = request1 | request2
 
         # Update both records
-        changes = self.change_tracker.track_field_changes(requests, {"priority_expanded": "7"})
+        changes = self.change_tracker.track_field_changes(
+            requests, {"priority_expanded": "7"}
+        )
 
         # Should track changes for both records
         self.assertIn(request1.id, changes)
@@ -821,7 +830,15 @@ class TestMaintenanceRequestFormState(MaintenanceRequestTestMixin, TransactionCa
 
     def test_form_state_building_with_building_id(self):
         """Form state should be 'building' when space_caption is building-related and building_id is set"""
-        building_space_captions = ["Byggnad", "Uppgång", "Vind", "Källare", "Cykelförråd", "Gården/Utomhus", "Övrigt"]
+        building_space_captions = [
+            "Byggnad",
+            "Uppgång",
+            "Vind",
+            "Källare",
+            "Cykelförråd",
+            "Gården/Utomhus",
+            "Övrigt",
+        ]
 
         for space_caption in building_space_captions:
             with self.subTest(space_caption=space_caption):
@@ -883,6 +900,7 @@ class TestMaintenanceRequestUtilityMethods(
 
         from ...models.services import FieldChangeTracker
         from ...models.utils.helpers import get_tenant_name, get_main_phone_number
+
         self.change_tracker = FieldChangeTracker(self.env)
         self.get_tenant_name = get_tenant_name
         self.get_main_phone_number = get_main_phone_number
