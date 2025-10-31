@@ -195,8 +195,16 @@ class BuildingHandler(BaseMaintenanceHandler):
                 ("building_option_id", "=", self.record.building_option_id.id),
             ]
         )
+        if not staircase_records:
+            # Also check for staircases linked to rental property (from lease-based searches)
+            staircase_records = self.env["maintenance.staircase.option"].search(
+                [
+                    ("user_id", "=", self.env.user.id),
+                    ("rental_property_option_id", "!=", False),
+                ]
+            )
         if staircase_records:
-            self.record.staircase_option_id = staircase_records[0]
+            self.record.staircase_option_id = staircase_records[0].id
 
         # Set lease option if available (from lease-based searches)
         lease_records = self.env["maintenance.lease.option"].search(
