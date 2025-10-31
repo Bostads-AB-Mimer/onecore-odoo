@@ -123,7 +123,7 @@ class CoreApi:
 
     # Fetch staircases for specified building code
     # Note: Fix the endpoint in OneCore so it follows the same naming structure?
-    def fetch_staircases_for_building(self, code, location_type):
+    def fetch_staircases_for_building(self, code):
         return self._get_json(
             f"/staircases?buildingCode={urllib.parse.quote(str(code), safe='')}"
         )
