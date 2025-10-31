@@ -44,6 +44,7 @@ class BuildingHandler(BaseMaintenanceHandler):
     def update_form_options(self, building):
         """Update form options with building data from direct building lookup."""
         maintenance_units = building.get("maintenance_units", [])
+        staircases = building.get("staircases", [])
 
         building_option = self.env["maintenance.building.option"].create(
             {
@@ -77,12 +78,28 @@ class BuildingHandler(BaseMaintenanceHandler):
                 }
             )
 
+        for staircase in staircases:
+            self.env["maintenance.staircase.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "staircase_id": staircase["id"],
+                    "name": staircase["name"],
+                    "code": staircase["code"],
+                    "floor_plan": staircase.get("features", {}).get("floorPlan"),
+                    "accessible_by_elevator": staircase.get("features", {}).get(
+                        "accessibleByElevator", False
+                    ),
+                    "building_option_id": building_option.id,
+                }
+            )
+
     def update_form_options_from_lease_data(self, work_order_data):
         """Update form options with rental property data."""
         for item in work_order_data:
             property_data = item["rental_property"]
             lease = item["lease"]
             maintenance_units = item.get("maintenance_units", [])
+            staircase = property_data.get("staircase")
 
             rental_property_option = self.env[
                 "maintenance.rental.property.option"
@@ -135,6 +152,22 @@ class BuildingHandler(BaseMaintenanceHandler):
                     }
                 )
 
+            # Create staircase option if staircase data is available
+            if staircase:
+                self.env["maintenance.staircase.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "staircase_id": staircase["id"],
+                        "name": staircase["name"],
+                        "code": staircase["code"],
+                        "floor_plan": staircase.get("features", {}).get("floorPlan"),
+                        "accessible_by_elevator": staircase.get("features", {}).get(
+                            "accessibleByElevator", False
+                        ),
+                        "rental_property_option_id": rental_property_option.id,
+                    }
+                )
+
     def _set_form_selections(self):
         """Set the form field selections after creating options."""
         building_records = self.env["maintenance.building.option"].search(
@@ -155,6 +188,25 @@ class BuildingHandler(BaseMaintenanceHandler):
         if maintenance_unit_records:
             self.record.maintenance_unit_option_id = maintenance_unit_records[0]
 
+        # Set staircase option if available (from building-based searches)
+        staircase_records = self.env["maintenance.staircase.option"].search(
+            [
+                ("user_id", "=", self.env.user.id),
+                ("building_option_id", "=", self.record.building_option_id.id),
+            ]
+        )
+        if not staircase_records:
+            # Also check for staircases linked to rental property (from lease-based searches)
+            staircase_records = self.env["maintenance.staircase.option"].search(
+                [
+                    ("user_id", "=", self.env.user.id),
+                    ("rental_property_option_id", "!=", False),
+                ]
+            )
+        if staircase_records:
+            self.record.staircase_option_id = staircase_records[0].id
+
+        # Set lease option if available (from lease-based searches)
         lease_records = self.env["maintenance.lease.option"].search(
             [("user_id", "=", self.env.user.id)]
         )
