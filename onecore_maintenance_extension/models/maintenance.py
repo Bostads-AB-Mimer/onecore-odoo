@@ -493,6 +493,37 @@ class OneCoreMaintenanceRequest(models.Model):
         return res
 
     @api.model
+    def default_get(self, fields_list):
+        """Override to set default values from context for non-stored fields"""
+        res = super().default_get(fields_list)
+
+        # Handle context passed via URL (it comes as a JSON string in params)
+        # /web#action=onecore_maintenance_extension.action_maintenance_request_create&context=xxx
+
+        url_context = {}
+        if "params" in self.env.context and "context" in self.env.context["params"]:
+            try:
+                url_context = json.loads(self.env.context["params"]["context"])
+            except (json.JSONDecodeError, TypeError) as e:
+                _logger.warning(f"Failed to parse URL context: {e}")
+
+        # Merge URL context with regular context (URL context takes precedence)
+        combined_context = dict(self.env.context)
+        combined_context.update(url_context)
+
+        # Set search_type from context if provided
+        if "search_type" in fields_list:
+            res["search_type"] = combined_context.get("default_search_type", "pnr")
+
+        # Set search_by_number from context if provided
+        if "search_by_number" in fields_list and combined_context.get(
+            "default_search_by_number"
+        ):
+            res["search_by_number"] = combined_context.get("default_search_by_number")
+
+        return res
+
+    @api.model
     def fetch_tenant_contact_data(self, thread_id):
         record = self.env["maintenance.request"].search([("id", "=", thread_id)])
 
