@@ -316,6 +316,12 @@ class OneCoreMaintenanceRequest(
         record = self.env["maintenance.request"].search([("id", "=", thread_id)])
         return {"hidden_from_my_pages": record.hidden_from_my_pages}
 
+    @api.model
+    def is_user_external_contractor(self):
+        """Check if current user is an external contractor - callable from RPC."""
+        external_contractor_service = ExternalContractorService(self.env)
+        return external_contractor_service.is_external_contractor()
+
     # ============================================================================
     # SEARCH FUNCTIONALITY
     # ============================================================================
