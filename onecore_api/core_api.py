@@ -95,19 +95,15 @@ class CoreApi:
             )
 
     def filter_lease_on_location_type(self, data, location_type):
+        """
+        Filter leases based on location type.
+        """
+
         # Handle case where data might not be a list or contain non-dict items
         if not isinstance(data, list):
             return data
 
-        if location_type != "Bilplats":
-            filtered_content = [
-                item
-                for item in data
-                if isinstance(item, dict)
-                and item.get("type", "").strip() != "P-Platskontrakt"
-            ]
-            return filtered_content
-        else:
+        if location_type == "Bilplats":
             filtered_content = [
                 item
                 for item in data
@@ -115,6 +111,25 @@ class CoreApi:
                 and item.get("type", "").strip() == "P-Platskontrakt"
             ]
             return filtered_content
+
+        if location_type == "Lokal":
+            filtered_content = [
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "Lokalkontrakt"
+            ]
+            return filtered_content
+
+        # Default to "Bostadskontrakt"
+        filtered_content = [
+            item
+            for item in data
+            if isinstance(item, dict)
+            and item.get("type", "").strip() == "Bostadskontrakt"
+        ]
+
+        return filtered_content
 
     def fetch_residence(self, id):
         return self._get_json(
