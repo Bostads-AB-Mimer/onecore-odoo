@@ -325,9 +325,6 @@ class OneCoreMaintenanceRequest(
 
     @api.onchange("search_value", "search_type", "space_caption")
     def _compute_search(self):
-        base_handler = BaseMaintenanceHandler(self, self.get_core_api())
-        base_handler._delete_options()
-
         if not self.space_caption:
             return
 
@@ -345,13 +342,27 @@ class OneCoreMaintenanceRequest(
         if not self.search_value or not validators[self.search_type](self.search_value):
             return
 
+        # Preserve search values before deleting options - they get cleared by
+        # onchange cascade, which leads to very clunky UX.
+        saved_search_value = self.search_value
+        saved_search_type = self.search_type
+        saved_space_caption = self.space_caption
+
+        # Only delete old options when we're about to perform a valid search.
+        base_handler = BaseMaintenanceHandler(self, self.get_core_api())
+        base_handler._delete_options()
+
+        # Restore search values after deletion.
+        self.search_value = saved_search_value
+        self.search_type = saved_search_type
+        self.space_caption = saved_space_caption
+
         handler = HandlerFactory.get_handler(
             self, self.get_core_api(), self.search_type, self.space_caption
         )
 
-        # if not self.search_value or not validators[self.search_type](self.search_value):
-        #     handler._delete_options()
-        #     return
+        if not handler:
+            return
 
         for record in self:
             handler.handle_search(
