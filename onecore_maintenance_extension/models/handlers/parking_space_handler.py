@@ -20,8 +20,7 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
 
             if not work_order_data:
                 _logger.info("No data found in response.")
-                self._raise_no_results_error(search_value)
-
+                return self._return_no_results_warning(search_value)
 
             self.update_form_options(work_order_data)
             self._set_form_selections()

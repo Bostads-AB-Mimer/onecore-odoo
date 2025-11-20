@@ -78,10 +78,18 @@ class CoreApi:
                 params={"includeContacts": "true"},
             )
 
+            # If no content returned, return empty list.
+            if content is None:
+                return []
+
             # Filter response on space caption if needed
             filtered_content = self.filter_lease_on_location_type(
                 content, location_type
             )
+
+            # If filter returned None or empty, return empty list.
+            if filtered_content is None:
+                return []
 
             return (
                 filtered_content
@@ -264,6 +272,10 @@ class CoreApi:
                 data = []
 
                 for lease in leases:
+                    # Skip if lease is None or missing required fields.
+                    if not lease or not lease.get("type"):
+                        continue
+
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
                         rental_property = fetch_fns[lease_type](
