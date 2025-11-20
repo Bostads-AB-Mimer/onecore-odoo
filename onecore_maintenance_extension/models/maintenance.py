@@ -365,9 +365,12 @@ class OneCoreMaintenanceRequest(
             return
 
         for record in self:
-            handler.handle_search(
+            result = handler.handle_search(
                 record.search_type, record.search_value, record.space_caption
             )
+            # If handler returns a warning, propagate it to the UI
+            if result and isinstance(result, dict) and result.get("warning"):
+                return result
 
     # ============================================================================
     # ONCHANGE METHODS

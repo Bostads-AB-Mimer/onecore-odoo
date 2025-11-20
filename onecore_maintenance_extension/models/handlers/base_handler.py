@@ -116,3 +116,12 @@ class BaseMaintenanceHandler:
                 search_value,
             )
         )
+
+    def _return_no_results_warning(self, search_value):
+        """Return a warning dict when no results are found (non-disruptive)."""
+        return {
+            "warning": {
+                "title": "Inga resultat",
+                "message": f"Kunde inte hitta något resultat för {search_value}. Kontrollera att sökvärdet är korrekt.",
+            }
+        }
