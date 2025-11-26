@@ -64,7 +64,7 @@ class CoreApi:
     def fetch_leases(self, identifier, value, location_type):
         paths = {
             "leaseId": "/leases",
-            "rentalObjectId": "/leases/by-rental-property-id",
+            "rentalObjectId": "/leases/by-rental-object-code",
             "contactCode": "/leases/by-contact-code",
             "pnr": "/leases/by-pnr",
         }
