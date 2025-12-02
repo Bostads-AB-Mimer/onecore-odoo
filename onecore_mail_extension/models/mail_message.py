@@ -57,7 +57,7 @@ class OneCoreMailMessage(models.Model):
 
         try:
             response = self.get_core_api().request(
-                "POST", "/workOrders/sendEmail", data=data
+                "POST", "/work-orders/send-email", data=data
             )
             response.raise_for_status()
             return response.json()
@@ -76,7 +76,7 @@ class OneCoreMailMessage(models.Model):
 
         try:
             response = self.get_core_api().request(
-                "POST", "/workOrders/sendSms", data=data
+                "POST", "/work-orders/send-sms", data=data
             )
             response.raise_for_status()
             return response.json()
