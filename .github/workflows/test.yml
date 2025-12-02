@@ -1,0 +1,68 @@
+name: Test Suite
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_USER: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐳 Build Odoo Docker Image
+        run: |
+          docker build -t onecore-odoo:test .
+
+      - name: 🧪 Run Tests
+        run: |
+          docker run --rm \
+            --network host \
+            -v $(pwd):/opt/bitnami/odoo/addons-onecore \
+            -e DB_HOST=localhost \
+            -e DB_PORT=5432 \
+            -e DB_USER=odoo \
+            -e DB_PASSWORD=odoo \
+            onecore-odoo:test \
+            bash -c "
+              TEST_DB_NAME=\"test_onecore_\$(date +%s)\"
+              echo \"Running tests with database: \$TEST_DB_NAME\"
+
+              ONECORE_MODULES=\"onecore_base_extension,onecore_api,onecore_ui,onecore_web_extension,onecore_mail_extension,onecore_maintenance_extension\"
+
+              /opt/bitnami/odoo/venv/bin/python3 /opt/bitnami/odoo/bin/odoo-bin \
+                --addons-path=\"/opt/bitnami/odoo/odoo/addons,/opt/bitnami/odoo/addons-onecore\" \
+                -d \"\$TEST_DB_NAME\" \
+                --db_user=\"\$DB_USER\" \
+                --db_password=\"\$DB_PASSWORD\" \
+                --db_host=\"\$DB_HOST\" \
+                --db_port=\"\$DB_PORT\" \
+                -i \$ONECORE_MODULES \
+                --test-enable \
+                --stop-after-init \
+                --test-tags=onecore \
+                --log-level=test
+            "

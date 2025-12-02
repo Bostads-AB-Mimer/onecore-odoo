@@ -15,7 +15,7 @@
                         <field string="Telefonnummer" name="phone_number" />
                         <field string="Kundnummer" name="contact_code" />
                         <field string="Tvättstuga" name="maintenance_unit_id" />
-                        <field string="Hyresobjekt" name="rental_property_id"/>
+                        <field string="Hyresobjekt" name="rental_property_id" />
                         <field name="category_id" />
                         <field name="user_id" />
                         <field name="equipment_id" />
@@ -104,7 +104,7 @@
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
                         invisible="create_date != False">
                         <field class="w-25 my-0 p-2 border-end bg-light" name="search_type" />
-                        <field class="flex-grow-1 my-0 p-2" name="search_by_number" string="Search"
+                        <field class="flex-grow-1 my-0 p-2" name="search_value" string="Search"
                             placeholder="Ange personnummer, telefonnummer, kontraktnummer eller hyresobjekt" />
                     </div>
                 </xpath>
@@ -198,14 +198,35 @@
                             <div id="flush-collapse1" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
-                                    <group col="1">
+                                    <field name="form_state" invisible="1" />
+                                    <group col="1"
+                                        invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
-                                        <field name="rental_property_option_id" string="Hyresobjekt"
+
+                                        <!--Staircase -->
+                                        <field name="staircase_option_id" string="Trappuppgång"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False or space_caption != 'Uppgång'" />
+                                        <field name="staircase_name" string="Trappuppgång"
+                                            invisible="not staircase_name or not create_date or space_caption != 'Uppgång'" />
+                                        <field name="staircase_code" string="Trappuppgångskod"
+                                            invisible="not staircase_code or space_caption != 'Uppgång'" />
+                                        <field name="staircase_floor_plan" string="Våningsplan"
+                                            invisible="not staircase_floor_plan or space_caption != 'Uppgång'" />
+                                        <field name="staircase_accessible_by_elevator"
+                                            string="Tillgänglig med hiss"
+                                            invisible="not staircase_accessible_by_elevator or space_caption != 'Uppgång'" />
+
+                                        <!-- Rental property fields -->
+                                        <field name="rental_property_option_id"
+                                            string="Hyresobjekt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="create_date != False" />
 
                                         <field name="rental_property_name" string="Hyresobjekt"
                                             invisible="not rental_property_name" />
+
+
                                         <field name="property_type" invisible="not property_type"
                                             string="Fastighetstyp" />
                                         <field name="address" string="Adress" />
@@ -234,13 +255,173 @@
                                         <field name="building_code" invisible="1"
                                             string="Byggnadskod" />
                                         <field name="building" invisible="1" string="Byggnad" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'maintenance-unit'">
+                                        <field name="create_date" invisible="1" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="(not maintenance_unit_option_id and create_date) or space_caption != 'Tvättstuga'" />
-                                        <field name="maintenance_unit_caption" string="Tvättstuga"
-                                            invisible="not maintenance_unit_caption or not create_date or space_caption != 'Tvättstuga'" />
-                                        <field name="maintenance_unit_type" string="Utrymme"
-                                            invisible="1" />
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Tvättstuga'" />
+                                        <field name="maintenance_unit_id" string="Tvättstuga"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Tvättstuga'" />
+                                        <field name="maintenance_unit_option_id" string="Lekplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Lekplats'" />
+                                        <field name="maintenance_unit_id" string="Lekplats"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Lekplats'" />
+                                        <field name="maintenance_unit_option_id" string="Miljöbod"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Miljöbod'" />
+                                        <field name="maintenance_unit_id" string="Miljöbod"
+                                            invisible="not maintenance_unit_id or not create_date or space_caption != 'Miljöbod'" />
+                                        <field name="maintenance_unit_code" string="Kod"
+                                            invisible="not maintenance_unit_code" />
+                                        <field name="building_code" invisible="not building_code"
+                                            string="Byggnadskod" />
+                                        <field name="building_name" invisible="not building_name"
+                                            string="Tillhör byggnad" />
+                                        <field name="property_code" invisible="not property_code"
+                                            string="Fastighetskod" />
+                                        <field name="property_designation"
+                                            invisible="not property_designation"
+                                            string="Tillhör fastighet" />
+
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'property'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="property_option_id" string="Fastighet"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="property_designation"
+                                            string="Fastighetsbeteckning"
+                                            invisible="not property_designation" />
+                                        <!-- <field name="maintenance_unit_option_id"
+                                            string="Underhållsenhet"
+                                            domain="[('property_option_id', '=', property_option_id)]"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not maintenance_unit_option_id and create_date"
+                                        />
+                                        <field name="maintenance_unit_caption"
+                                            string="Underhållsenhet"
+                                            invisible="not maintenance_unit_caption or not create_date" />
+                                        <field name="building_option_id"
+                                            string="Byggnad"
+                                            domain="[('property_option_id', '=', property_option_id)]"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="(not building_option_id and create_date) or space_caption not in ['Byggnad', 'Uppgång',
+                                        'Vind', 'Källare', 'Cykelförråd', 'Gården/Utomhus',
+                                        'Övrigt']"
+                                        />
+                                        <field name="building_code" string="Byggnadskod"
+                                            invisible="not building_code" />
+                                        <field name="building_type_name" string="Byggnadstyp"
+                                            invisible="not building_type_name" />
+                                        <field name="building_construction_year" string="Byggår"
+                                            invisible="not building_construction_year" />
+                                        <field name="building_renovation_year"
+                                            string="Renoveringsår"
+                                            invisible="not building_renovation_year" /> -->
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'building'">
+                                        <field name="create_date" invisible="1" />
+
+                                        <!-- Staircases -->
+                                        <field name="staircase_option_id" string="Trappuppgång"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False or space_caption != 'Uppgång'" />
+                                        <field name="staircase_name" string="Trappuppgång"
+                                            invisible="not staircase_name or not create_date or space_caption != 'Uppgång'" />
+                                        <field name="staircase_code" string="Trappuppgångskod"
+                                            invisible="not staircase_code or space_caption != 'Uppgång'" />
+                                        <field name="staircase_floor_plan" string="Våningsplan"
+                                            invisible="not staircase_floor_plan or space_caption != 'Uppgång'" />
+                                        <field name="staircase_accessible_by_elevator"
+                                            string="Tillgänglig med hiss"
+                                            invisible="not staircase_accessible_by_elevator or space_caption != 'Uppgång'" />
+
+
+                                        <field name="building_option_id" string="Byggnad"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="building_name" string="Byggnad"
+                                            invisible="not building_name or not create_date" />
+                                        <field name="building_code" string="Byggnadskod"
+                                            invisible="not building_code" />
+                                        <field name="building_type_name" string="Byggnadstyp"
+                                            invisible="not building_type_name" />
+                                        <field name="building_construction_year" string="Byggår"
+                                            invisible="not building_construction_year" />
+                                        <field name="building_renovation_year"
+                                            string="Renoveringsår"
+                                            invisible="not building_renovation_year" />
+                                        <field name="estate_code" invisible="1"
+                                            string="Fastighetskod" />
+                                        <field name="estate" invisible="not estate"
+                                            string="Tillhör fastighet" />
+                                    </group>
+                                    <group col="1"
+                                        invisible="form_state != 'parking-space'">
+                                        <field name="create_date" invisible="1" />
+                                        <field name="parking_space_option_id" string="Bilplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="not parking_space_option_id or create_date" />
+                                        <field name="parking_space_id" string="Bilplats"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            readonly="1"
+                                            invisible="not parking_space_id and create_date != True" />
+                                        <field name="parking_space_code" string="Kod"
+                                            invisible="not parking_space_code" />
+                                        <field name="parking_space_type_name" string="P-platstyp"
+                                            invisible="not parking_space_type_name" />
+                                        <field name="parking_space_number" string="P-platsnummer"
+                                            invisible="not parking_space_number" />
+                                        <field name="parking_space_property_name" string="Fastighet"
+                                            invisible="not parking_space_property_name" />
+                                        <field name="parking_space_address" string="Adress"
+                                            invisible="not parking_space_address" />
+                                        <field name="parking_space_postal_code" string="Postnummer"
+                                            invisible="not parking_space_postal_code" />
+                                        <field name="parking_space_city" string="Stad"
+                                            invisible="not parking_space_city" />
+                                    </group>
+                                    <group col="1" invisible="form_state != 'facility'">
+                                        <field name="create_date" invisible="1" />
+                                        <field
+                                            name="facility_option_id" string="Lokal"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            invisible="create_date != False" />
+                                        <field name="facility_id" string="Lokal"
+                                            options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
+                                            readonly="1"
+                                            invisible="not facility_id and create_date != True" />
+                                        <field
+                                            name="facility_code" string="Kod"
+                                            invisible="not facility_code" />
+                                        <field
+                                            name="facility_type_name" string="Typ"
+                                            invisible="not facility_type_name" />
+                                        <field
+                                            name="facility_type_code" string="Typkod"
+                                            invisible="not facility_type_code" />
+                                        <field
+                                            name="facility_rental_type" string="Hyrestyp"
+                                            invisible="not facility_rental_type" />
+                                        <field
+                                            name="facility_area" string="Yta"
+                                            invisible="not facility_area" />
+                                        <field
+                                            name="facility_building_name" string="Byggnad"
+                                            invisible="not facility_building_name" />
+                                        <field
+                                            name="facility_building_code" string="Byggnadskod"
+                                            invisible="not facility_building_code" />
+                                        <field name="facility_property_name" string="Fastighet"
+                                            invisible="not facility_property_name" />
+                                        <field
+                                            name="facility_property_code" string="Fastighetskod"
+                                            invisible="not facility_property_code" />
                                     </group>
                                 </div>
                             </div>
@@ -307,15 +488,14 @@
                                         <field name="recently_added_tenant" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            readonly="create_date != False"
-                                            invisible="not lease_option_id and create_date"
+                                            invisible="not lease_option_id or create_date"
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_name" string="Kontrakt"
                                             invisible="not lease_name"
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
-                                        
+
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"

@@ -1,30 +1,36 @@
-import os
-from dotenv import dotenv_values
-
-
 def _post_init_hook(env):
-    _insert_env_variables(env)
+    """Setup Keycloak configuration after module installation."""
+    _setup_keycloak_auth(env)
 
 
-def _insert_env_variables(env):
-    # Load variables from .env.template
-    env_template_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), ".env.template"
+def _setup_keycloak_auth(env):
+    """Configure Keycloak authentication settings following OpenID Connect pattern."""
+    import os
+
+    oauth_provider = env["auth.oauth.provider"].search(
+        [("name", "=", "Login with Keycloak")]
     )
-    env_template_config = dotenv_values(env_template_path)
 
-    # Check if all variables from .env.template are present in odoo-env secret
-    all_in_secret = all(var in os.environ for var in env_template_config)
+    if not oauth_provider:
+        client_secret = os.environ.get("KEYCLOAK_CLIENT_SECRET", "")
 
-    if all_in_secret:
-        for key in env_template_config:
-            env["ir.config_parameter"].set_param(key, os.environ[key])
-    else:
-        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
-        env_config = dotenv_values(env_path)
+        oauth_provider = env["auth.oauth.provider"].create(
+            {
+                "name": "Login with Keycloak",
+                "client_id": "odoo",
+                "client_secret": client_secret,
+                "auth_endpoint": "https://auth.dev.mimer.nu/realms/master/protocol/openid-connect/auth",
+                "scope": "openid",
+                "validation_endpoint": "https://auth.dev.mimer.nu/realms/master/protocol/openid-connect/token",
+                "data_endpoint": "https://auth.dev.mimer.nu/realms/master/protocol/openid-connect/userinfo",
+                "jwks_uri": "https://auth.dev.mimer.nu/realms/master/protocol/openid-connect/certs",
+                "token_map": "sub:user_id",
+                "enabled": True,
+                "css_class": "fa fa-key",
+                "body": "Login with Keycloak",
+            }
+        )
+    config = env["ir.config_parameter"].sudo()
+    config.set_param("auth_oauth.allow_oauth", True)
 
-        for key, value in env_template_config.items():
-            if key in env_config:
-                env["ir.config_parameter"].set_param(key, env_config[key])
-            else:
-                env["ir.config_parameter"].set_param(key, value)
+    print(f"Keycloak OAuth provider configured: {oauth_provider.name}")

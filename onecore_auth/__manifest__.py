@@ -1,15 +1,14 @@
+# -*- coding: utf-8 -*-
 {
-    "name": "ONECore Auth",
+    "name": "ONECore Authentication",
     "version": "1.0",
-    "sequence": 100,
-    "category": "ONECore",
-    "description": "Provides a wrapper for api calls to ONECore services.",
-    "depends": [],
-    "summary": "Provides a wrapper for api calls to ONECore services.",
-    "data": [
-        "security/ir.model.access.csv",
-    ],
+    "sequence": 50,
+    "category": "Authentication",
+    "description": "Keycloak authentication integration for ONECore.",
+    "depends": ["base", "web", "auth_oauth"],
+    "data": [],
     "post_init_hook": "_post_init_hook",
+    "installable": True,
     "auto_install": False,
     "license": "LGPL-3",
 }
