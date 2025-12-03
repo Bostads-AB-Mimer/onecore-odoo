@@ -75,7 +75,7 @@ class CoreApi:
         try:
             content = self._get_json(
                 f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-                params={"includeContacts": "true"},
+                params={"includeContacts": "true", "includeUpcomingLeases": "true"},
             )
 
             # If no content returned, return empty list.
