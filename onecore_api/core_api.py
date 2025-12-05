@@ -295,7 +295,7 @@ class CoreApi:
                             lease["rentalPropertyId"]
                         )
 
-                        rental_property = fetched_data if lease_type == "Bostadskontrakt" else None
+                        rental_property = fetched_data if lease_type == "Bostadskontrakt" or lease_type == "Kooperativ hyresrätt" else None
                         parking_space = fetched_data if lease_type == "P-Platskontrakt" else None
                         facility = fetched_data if lease_type == "Lokalkontrakt" else None
 

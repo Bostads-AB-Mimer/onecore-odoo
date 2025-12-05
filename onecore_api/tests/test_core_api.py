@@ -82,6 +82,31 @@ class TestFilterLeaseOnLocationType:
         assert result[0]["id"] == 1
         assert result[1]["id"] == 3
 
+    def test_falls_back_to_kooperativ_hyresrätt(self, api):
+        """Should fall back to Kooperativ hyresrätt when no Bostadskontrakt found."""
+        data = [
+            {"type": "Kooperativ hyresrätt", "id": 1},
+            {"type": "P-Platskontrakt", "id": 2},
+            {"type": " Kooperativ hyresrätt", "id": 3},  # with leading space
+            {"type": "Lokalkontrakt", "id": 4},
+        ]
+        result = api.filter_lease_on_location_type(data, "Bostad")
+        assert len(result) == 2
+        assert result[0]["id"] == 1
+        assert result[1]["id"] == 3
+
+    def test_prefers_bostadskontrakt_over_kooperativ(self, api):
+        """Should prefer Bostadskontrakt over Kooperativ hyresrätt when both exist."""
+        data = [
+            {"type": "Bostadskontrakt", "id": 1},
+            {"type": "Kooperativ hyresrätt", "id": 2},
+            {"type": "P-Platskontrakt", "id": 3},
+        ]
+        result = api.filter_lease_on_location_type(data, "Bostad")
+        assert len(result) == 1
+        assert result[0]["id"] == 1
+        assert result[0]["type"] == "Bostadskontrakt"
+
     def test_handles_empty_list(self, api):
         """Should return empty list for empty input."""
         result = api.filter_lease_on_location_type([], "Bilplats")
@@ -336,7 +361,7 @@ class TestFetchLeases:
 
         mock_get_json.assert_called_once_with(
             "/leases/123",
-            params={"includeContacts": "true"}
+            params={"includeContacts": "true", "includeUpcomingLeases": "true"}
         )
         assert isinstance(result, list)
 
@@ -567,6 +592,28 @@ class TestFetchFormData:
         assert result[0]["rental_property"]["property"]["code"] == "P1"
 
     @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_residence')
+    def test_fetches_residence_for_kooperativ_hyresrätt(
+        self, mock_fetch_residence, mock_fetch_leases, api
+    ):
+        """Should fetch residence for Kooperativ hyresrätt."""
+        mock_fetch_leases.return_value = [{
+            "type": "Kooperativ hyresrätt",
+            "rentalPropertyId": "R123"
+        }]
+        mock_fetch_residence.return_value = {
+            "property": {"code": "P1"}
+        }
+
+        with patch.object(api, 'fetch_maintenance_units', return_value=[]):
+            result = api.fetch_form_data("leaseId", "123", "Bostad")
+
+        mock_fetch_residence.assert_called_once_with("R123")
+        assert result[0]["rental_property"]["property"]["code"] == "P1"
+        assert result[0]["parking_space"] is None
+        assert result[0]["facility"] is None
+
+    @patch.object(CoreApi, 'fetch_leases')
     @patch.object(CoreApi, 'fetch_parking_space')
     def test_fetches_parking_space_for_p_platskontrakt(
         self, mock_fetch_parking, mock_fetch_leases, api
@@ -612,6 +659,27 @@ class TestFetchFormData:
         """Should fetch maintenance units for Bostadskontrakt with Tvättstuga."""
         mock_fetch_leases.return_value = [{
             "type": "Bostadskontrakt",
+            "rentalPropertyId": "R123"
+        }]
+        mock_fetch_residence.return_value = {
+            "property": {"code": "P1"}
+        }
+        mock_fetch_units.return_value = [{"type": "Tvättstuga"}]
+
+        result = api.fetch_form_data("leaseId", "123", "Tvättstuga")
+
+        mock_fetch_units.assert_called_once_with("P1", "Tvättstuga")
+        assert result[0]["maintenance_units"] == [{"type": "Tvättstuga"}]
+
+    @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_residence')
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    def test_fetches_maintenance_units_for_kooperativ_hyresrätt_with_tvättstuga(
+        self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
+    ):
+        """Should fetch maintenance units for Kooperativ hyresrätt with Tvättstuga."""
+        mock_fetch_leases.return_value = [{
+            "type": "Kooperativ hyresrätt",
             "rentalPropertyId": "R123"
         }]
         mock_fetch_residence.return_value = {
