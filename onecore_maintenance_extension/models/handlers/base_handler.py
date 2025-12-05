@@ -84,29 +84,29 @@ class BaseMaintenanceHandler:
     def _create_tenant_options(self, tenants):
         """Create tenant option records for a list of tenants."""
         for tenant in tenants:
-            existing_tenant = self.env["maintenance.tenant.option"].search(
-                [("contact_code", "=", tenant["contactCode"])], limit=1
+            # Clear existing lease and tenant options when no lease data is available
+            self.env["maintenance.tenant.option"].search(
+                [("user_id", "=", self.env.user.id)]
+            ).unlink()
+
+            name = get_tenant_name(tenant)
+            phone_number = get_main_phone_number(tenant)
+
+            self.env["maintenance.tenant.option"].create(
+                {
+                    "user_id": self.env.user.id,
+                    "name": name,
+                    "contact_code": tenant["contactCode"],
+                    "contact_key": tenant["contactKey"],
+                    "national_registration_number": tenant.get(
+                        "nationalRegistrationNumber"
+                    ),
+                    "email_address": tenant.get("emailAddress"),
+                    "phone_number": phone_number,
+                    "is_tenant": tenant["isTenant"],
+                    "special_attention": tenant.get("specialAttention"),
+                }
             )
-
-            if not existing_tenant:
-                name = get_tenant_name(tenant)
-                phone_number = get_main_phone_number(tenant)
-
-                self.env["maintenance.tenant.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "name": name,
-                        "contact_code": tenant["contactCode"],
-                        "contact_key": tenant["contactKey"],
-                        "national_registration_number": tenant.get(
-                            "nationalRegistrationNumber"
-                        ),
-                        "email_address": tenant.get("emailAddress"),
-                        "phone_number": phone_number,
-                        "is_tenant": tenant["isTenant"],
-                        "special_attention": tenant.get("specialAttention"),
-                    }
-                )
 
     def _raise_no_results_error(self, search_value):
         """Raise a user error when no results are found."""
