@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="maintenance_component_wizard_form" model="ir.ui.view">
+            <field name="name">maintenance.component.wizard.form</field>
+            <field name="model">maintenance.component.wizard</field>
+            <field name="arch" type="xml">
+                <form string="Uppdatera/lägg till Komponent" class="o_form_responsive">
+                    <sheet>
+                        <field name="maintenance_request_id" invisible="1" readonly="1"/>
+                        <field name="form_state" invisible="1"/>
+                        <field name="api_error" invisible="1"/>
+
+                        <!-- SECTION 1: Component List (Always Visible) -->
+                        <group string="Befintliga komponenter" class="mb-4">
+                            <field name="component_ids" nolabel="1" widget="one2many">
+                                <tree editable="bottom" create="true" delete="true">
+                                    <field name="component" string="Komponent"/>
+                                    <field name="model" string="Modell"/>
+                                    <field name="manufacturer" string="Tillverkare"/>
+                                    <field name="installation_date" string="Installationsdatum"/>
+                                </tree>
+                            </field>
+                        </group>
+
+                        <separator string="Lägg till ny komponent" class="mt-4"/>
+
+                        <!-- SECTION 2: Add New Component Form -->
+
+                        <!-- STATE: Upload -->
+                        <div invisible="form_state != 'upload'" class="text-center mt-3">
+                            <group>
+                                <field name="temp_image"
+                                       widget="image"
+                                       class="o_field_image mb-3"
+                                       options="{'size': [0, 400]}"/>
+                                <label for="temp_image" string="Ta bild eller välj från bibliotek"/>
+
+                                <field name="temp_additional_image"
+                                       widget="image"
+                                       class="o_field_image mb-3 mt-4"
+                                       options="{'size': [0, 400]}"/>
+                                <label for="temp_additional_image" string="Lägg till ytterligare bild (valfritt)"/>
+                            </group>
+
+                            <div class="mt-4">
+                                <button name="action_analyze_images"
+                                        type="object"
+                                        string="Analysera bilder med AI"
+                                        class="btn btn-primary btn-lg oe_highlight"
+                                        icon="fa-magic"
+                                        invisible="not temp_image"/>
+                                <p class="mt-3">
+                                    <a name="action_manual_entry"
+                                       type="object"
+                                       string="Eller fyll i manuellt"
+                                       class="btn-link"/>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- STATE: Analyzing -->
+                        <div invisible="form_state != 'analyzing'" class="text-center mt-5 mb-5">
+                            <div class="fa fa-spinner fa-spin fa-3x text-primary mb-3"/>
+                            <h3>Analyserar bilder...</h3>
+                            <p class="text-muted">Detta kan ta 5-15 sekunder</p>
+                            <p class="text-muted small mt-3">AI:n identifierar komponenttyp, tillverkare, modell och andra detaljer</p>
+                        </div>
+
+                        <!-- STATE: Review -->
+                        <div invisible="form_state != 'review'">
+                            <!-- Error message if AI failed -->
+                            <div invisible="not api_error" class="alert alert-danger" role="alert">
+                                <h4 class="alert-heading">
+                                    <i class="fa fa-exclamation-triangle"/> AI-analys misslyckades
+                                </h4>
+                                <field name="error_message" readonly="1" nolabel="1"/>
+                                <div class="mt-3">
+                                    <button name="action_retry_upload"
+                                            type="object"
+                                            string="Försök igen"
+                                            class="btn btn-warning me-2"/>
+                                    <button name="action_manual_entry"
+                                            type="object"
+                                            string="Fyll i manuellt istället"
+                                            class="btn btn-secondary"/>
+                                </div>
+                            </div>
+
+                            <!-- Success: Show AI results or manual form -->
+                            <div invisible="api_error">
+                                <!-- Confidence indicator (only if AI suggested) -->
+                                <div class="alert alert-info mb-3" invisible="not form_ai_suggested">
+                                    <strong>AI-säkerhet: </strong>
+                                    <field name="form_confidence" widget="progressbar" nolabel="1" class="d-inline-block" style="width: 200px;"/>
+                                    <span invisible="form_confidence &lt; 0.8" class="text-success ms-2">
+                                        <i class="fa fa-check-circle"/> Hög säkerhet
+                                    </span>
+                                    <span invisible="form_confidence >= 0.8 or form_confidence &lt; 0.5" class="text-warning ms-2">
+                                        <i class="fa fa-warning"/> Medel säkerhet - kontrollera noggrant
+                                    </span>
+                                    <span invisible="form_confidence >= 0.5" class="text-danger ms-2">
+                                        <i class="fa fa-times-circle"/> Låg säkerhet - kontrollera noggrant
+                                    </span>
+                                </div>
+
+                                <!-- Uploaded images preview (only if images exist) -->
+                                <group string="Uppladdade bilder" col="2" invisible="not temp_image">
+                                    <field name="temp_image" widget="image" readonly="1" nolabel="1"
+                                           options="{'size': [0, 200]}"/>
+                                    <field name="temp_additional_image" widget="image" readonly="1" nolabel="1"
+                                           invisible="not temp_additional_image"
+                                           options="{'size': [0, 200]}"/>
+                                </group>
+
+                                <!-- Editable component fields -->
+                                <group string="Grundläggande information">
+                                    <group>
+                                        <field name="form_component" placeholder="T.ex. Kylskåp, Spis, Diskmaskin"/>
+                                        <field name="form_subtype" placeholder="T.ex. 60cm integrerad"/>
+                                        <field name="form_model" placeholder="T.ex. DM 6010"/>
+                                        <field name="form_category"/>
+                                    </group>
+                                </group>
+
+                                <group string="Detaljer">
+                                    <group>
+                                        <field name="form_manufacturer" placeholder="T.ex. Electrolux, Cylinda"/>
+                                        <field name="form_serial_number" placeholder="Serienummer från typskylt"/>
+                                        <field name="form_installation_date"/>
+                                    </group>
+                                </group>
+
+                                <group string="Skick och garanti">
+                                    <group>
+                                        <field name="form_estimated_age" placeholder="T.ex. 3-5 år, Okänd"/>
+                                        <field name="form_condition" placeholder="T.ex. Gott skick, Nyskick"/>
+                                        <field name="form_warranty_months"/>
+                                    </group>
+                                </group>
+
+                                <group string="Tekniska specifikationer">
+                                    <field name="form_specifications"
+                                           widget="text"
+                                           placeholder="T.ex. 230V, 50Hz, 2100W, Energiklass A++"
+                                           nolabel="1"/>
+                                    <field name="form_dimensions" placeholder="T.ex. 60x60x85 cm"/>
+                                    <field name="form_ncs_code" placeholder="T.ex. S 1002-Y"/>
+                                </group>
+
+                                <group string="Ytterligare information">
+                                    <field name="form_additional_information"
+                                           widget="text"
+                                           placeholder="Övrig information om komponenten"
+                                           nolabel="1"/>
+                                </group>
+
+                                <!-- Hidden field for AI suggested flag -->
+                                <field name="form_ai_suggested" invisible="1"/>
+
+                                <!-- Action buttons -->
+                                <div class="mt-3">
+                                    <button name="action_add_to_list"
+                                            type="object"
+                                            string="Lägg till i listan"
+                                            class="btn btn-primary btn-lg oe_highlight"
+                                            icon="fa-check"/>
+                                    <button name="action_reset_form"
+                                            type="object"
+                                            string="Rensa formulär"
+                                            class="btn btn-secondary ms-2"/>
+                                </div>
+                            </div>
+                        </div>
+                    </sheet>
+                    <footer>
+                        <button string="Spara alla"
+                                class="btn-primary"
+                                type="object"
+                                name="action_save_all"/>
+                        <button string="Stäng"
+                                class="btn-secondary"
+                                special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+    </data>
+</odoo>

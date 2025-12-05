@@ -15,6 +15,7 @@
         "views/maintenance_views.xml",
         "views/maintenance_team_view.xml",
         "views/mobile_view.xml",
+        "views/maintenance_component_wizard_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",
