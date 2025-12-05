@@ -75,7 +75,7 @@ class CoreApi:
         try:
             content = self._get_json(
                 f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-                params={"includeContacts": "true"},
+                params={"includeContacts": "true", "includeUpcomingLeases": "true"},
             )
 
             # If no content returned, return empty list.
@@ -129,13 +129,21 @@ class CoreApi:
             ]
             return filtered_content
 
-        # Default to "Bostadskontrakt"
+        # Default to "Bostadskontrakt", fallback to "Kooperativ hyresrätt"
         filtered_content = [
             item
             for item in data
             if isinstance(item, dict)
             and item.get("type", "").strip() == "Bostadskontrakt"
         ]
+
+        if not filtered_content:
+            filtered_content = [
+                item
+                for item in data
+                if isinstance(item, dict)
+                and item.get("type", "").strip() == "Kooperativ hyresrätt"
+            ]
 
         return filtered_content
 
@@ -259,10 +267,15 @@ class CoreApi:
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
+            "Kooperativ hyresrätt": lambda id: self.fetch_residence(id),
             "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
             "Lokalkontrakt": lambda id: self.fetch_facility(id),
         }
-        lease_types_with_maintenance_units = ["Bostadskontrakt", "Lokalkontrakt"]
+        lease_types_with_maintenance_units = [
+            "Bostadskontrakt",
+            "Kooperativ hyresrätt",
+            "Lokalkontrakt",
+        ]
 
         maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
         try:
