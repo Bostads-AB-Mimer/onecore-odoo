@@ -659,3 +659,16 @@ class OneCoreMaintenanceRequest(
             "url": url,
             "target": "self",
         }
+
+    def open_component_wizard(self):
+        self.ensure_one()
+        return {
+            "name": "Uppdatera/lägg till Komponent",
+            "type": "ir.actions.act_window",
+            "res_model": "maintenance.component.wizard",
+            "view_mode": "form",
+            "view_type": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": {"default_maintenance_request_id": self.id},
+        }
