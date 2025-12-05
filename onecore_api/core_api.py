@@ -318,6 +318,74 @@ class CoreApi:
                         )
                 return data
 
+            # Handle case when identifier is "rentalObjectId" (Hyresobjekt) and leases array is empty
+            # Fetch rental property directly using the search value as rental property ID
+            if identifier == "rentalObjectId" and (not leases or len(leases) == 0):
+                data = []
+
+                # Use space caption (location_type) to determine which fetch method to call
+                try:
+                    if location_type == "Bilplats":
+                        # Fetch parking space
+                        parking_space = self.fetch_parking_space(value)
+                        if parking_space:
+                            data.append(
+                                {
+                                    "lease": None,
+                                    "rental_property": None,
+                                    "parking_space": parking_space,
+                                    "facility": None,
+                                    "maintenance_units": [],
+                                }
+                            )
+                            return data
+                    elif location_type == "Lokal":
+                        # Fetch facility
+                        facility = self.fetch_facility(value)
+                        if facility:
+                            maintenance_units = (
+                                self.fetch_maintenance_units(
+                                    facility["property"]["code"], location_type
+                                )
+                                if location_type in maintenance_unit_types
+                                else []
+                            )
+
+                            data.append(
+                                {
+                                    "lease": None,
+                                    "rental_property": None,
+                                    "parking_space": None,
+                                    "facility": facility,
+                                    "maintenance_units": maintenance_units,
+                                }
+                            )
+                            return data
+                    else:
+                        # Default to fetching as residence (for "Lägenhet" and other residence types)
+                        rental_property = self.fetch_residence(value)
+                        if rental_property:
+                            maintenance_units = (
+                                self.fetch_maintenance_units(
+                                    rental_property["property"]["code"], location_type
+                                )
+                                if location_type in maintenance_unit_types
+                                else []
+                            )
+
+                            data.append(
+                                {
+                                    "lease": None,
+                                    "rental_property": rental_property,
+                                    "parking_space": None,
+                                    "facility": None,
+                                    "maintenance_units": maintenance_units,
+                                }
+                            )
+                            return data
+                except Exception:
+                    pass
+
             return None
         except Exception as err:
             _logger.error(f"An error occurred: {err}")
