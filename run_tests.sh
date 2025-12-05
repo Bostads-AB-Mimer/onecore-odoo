@@ -1,6 +1,8 @@
 #!/bin/bash
 
-source .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$SCRIPT_DIR/.env"
 
 TEST_DB_NAME="test_onecore_$(date +%s)"
 

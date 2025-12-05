@@ -291,16 +291,17 @@ class CoreApi:
 
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
-                        rental_property = fetch_fns[lease_type](
+                        fetched_data = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
 
-                        parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
-                        facility = fetch_fns[lease_type](lease["rentalPropertyId"])
+                        rental_property = fetched_data if lease_type == "Bostadskontrakt" or lease_type == "Kooperativ hyresrätt" else None
+                        parking_space = fetched_data if lease_type == "P-Platskontrakt" else None
+                        facility = fetched_data if lease_type == "Lokalkontrakt" else None
 
                         maintenance_units = (
                             self.fetch_maintenance_units(
-                                rental_property["property"]["code"], location_type
+                                fetched_data["property"]["code"], location_type
                             )
                             if lease_type in lease_types_with_maintenance_units
                             and location_type in maintenance_unit_types

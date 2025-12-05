@@ -1,3 +1,41 @@
+# Temporary files
+anonymize-db.sql
+
+# Python
 **/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# pytest
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# IDEs
 .DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
 .env
+
+# Odoo
+odoo.log
+filestore/
+
+# Claude Code
+CLAUDE.md
+**/CLAUDE.md
