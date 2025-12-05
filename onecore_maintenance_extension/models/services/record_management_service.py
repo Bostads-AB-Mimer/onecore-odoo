@@ -5,6 +5,7 @@ import datetime
 import logging
 from odoo import fields
 from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ....onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
 
@@ -290,22 +291,31 @@ class RecordManagementService:
 
     def _create_missing_lease_and_tenant(self, record):
         """Create missing lease and tenant data from API."""
-        data = self.env["onecore.api"].fetch_property_data(
-            "rentalObjectId", record.rental_property_id.name
+        api = core_api.CoreApi(self.env)
+        data = api.fetch_form_data(
+            "rentalObjectId",
+            record.rental_property_id.rental_property_id,
+            record.space_caption,
         )
         if not data:
             return
 
-        for property_data in data:
-            if not property_data["leases"] or len(property_data["leases"]) == 0:
-                return  # No leases found in response.
+        for item in data:
+            lease = item.get("lease")
 
-            for lease in property_data["leases"]:
-                new_lease_record = self._create_lease(lease, record)
-                record.lease_id = new_lease_record.id
+            # If lease is None (no active lease for this rental property), skip lease/tenant creation
+            if not lease:
+                _logger.info(
+                    "No lease found for rental property %s. Skipping lease and tenant creation.",
+                    record.rental_property_id.rental_property_id,
+                )
+                return
 
-                if new_lease_record:
-                    self._create_tenant(lease["tenants"], record)
+            new_lease_record = self._create_lease(lease, record)
+            record.lease_id = new_lease_record.id
+
+            if new_lease_record and lease.get("tenants"):
+                self._create_tenant(lease["tenants"], record)
 
     def _create_lease(self, lease, record):
         """Create a lease record from API data."""
