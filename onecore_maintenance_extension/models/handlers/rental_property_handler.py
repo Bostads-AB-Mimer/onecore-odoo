@@ -60,12 +60,20 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
                 }
             )
 
-            self._create_lease_option(
-                lease, rental_property_option_id=rental_property_option.id
-            )
-
-            self._create_tenant_options(lease["tenants"])
-            print(maintenance_units)
+            # Only create lease and tenant options if lease data exists
+            if lease:
+                self._create_lease_option(
+                    lease, rental_property_option_id=rental_property_option.id
+                )
+                self._create_tenant_options(lease["tenants"])
+            else:
+                # Clear existing lease and tenant options when no lease data is available
+                self.env["maintenance.lease.option"].search(
+                    [("user_id", "=", self.env.user.id)]
+                ).unlink()
+                self.env["maintenance.tenant.option"].search(
+                    [("user_id", "=", self.env.user.id)]
+                ).unlink()
 
             for maintenance_unit in maintenance_units:
                 self.env["maintenance.maintenance.unit.option"].create(
