@@ -3,6 +3,7 @@ import base64
 import uuid
 import requests
 import logging
+import json
 
 from odoo import api, fields, models, _
 
@@ -436,6 +437,46 @@ class OneCoreMaintenanceRequest(
     # ============================================================================
     # CRUD OPERATIONS
     # ============================================================================
+
+    @api.model
+    def default_get(self, fields_list):
+        """Override to handle context values for pre-filling form fields."""
+
+        defaults = super(OneCoreMaintenanceRequest, self).default_get(fields_list)
+
+        # Parse context from params if it exists (for URL parameters)
+        url_context = {}
+        params = self.env.context.get("params", {})
+        if "context" in params and isinstance(params["context"], str):
+            try:
+                url_context = json.loads(params["context"])
+                _logger.info(f"Parsed URL context: {url_context}")
+            except (json.JSONDecodeError, TypeError) as e:
+                _logger.warning(f"Failed to parse context from params: {e}")
+
+        # Handle search_type - check both direct context and URL context
+        search_type = self.env.context.get("default_search_type") or url_context.get(
+            "default_search_type"
+        )
+        if search_type:
+            defaults["search_type"] = search_type
+
+        # Handle search_value - check both direct context and URL context
+        search_value = self.env.context.get("default_search_value") or url_context.get(
+            "default_search_value"
+        )
+        if search_value:
+            _logger.info(f"Setting search_value to: {search_value}")
+            defaults["search_value"] = search_value
+
+        # Handle space_caption - check both direct context and URL context
+        space_caption = self.env.context.get(
+            "default_space_caption"
+        ) or url_context.get("default_space_caption")
+        if space_caption:
+            defaults["space_caption"] = space_caption
+
+        return defaults
 
     @api.model_create_multi
     def create(self, vals_list):
