@@ -718,6 +718,8 @@
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                     <field name="special_attention" />
+                    <field name="has_loan_product" />
+                    <field name="loan_product_details" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
