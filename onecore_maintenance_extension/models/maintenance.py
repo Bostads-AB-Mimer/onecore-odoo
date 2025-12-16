@@ -5,6 +5,7 @@ import requests
 import logging
 import json
 
+from markupsafe import Markup
 from odoo import api, fields, models, _
 
 from ...onecore_api import core_api
@@ -77,6 +78,18 @@ class OneCoreMaintenanceRequest(
     start_date = fields.Date("Startdatum", store=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
+    )
+
+    has_loan_product = fields.Boolean(
+        "Låneprodukt utlämnad",
+        store=True,
+        default=False,
+        help="Indikerar om en låneprodukt har lämnats ut till kunden"
+    )
+    loan_product_details = fields.Char(
+        "Detaljer låneprodukt",
+        store=True,
+        help="Beskrivning av vilken produkt som lämnats ut"
     )
 
     space_caption = fields.Selection(
@@ -517,6 +530,12 @@ class OneCoreMaintenanceRequest(
 
             request._send_creation_sms()
 
+            # Post loan product message if loan product was issued during creation
+            if vals.get('has_loan_product') and vals.get('loan_product_details'):
+                request._post_loan_product_messages({
+                    request.id: f"Låneprodukt utlämnad: {vals['loan_product_details']}"
+                })
+
         maintenance_requests.activity_update()
 
         return maintenance_requests
@@ -542,6 +561,11 @@ class OneCoreMaintenanceRequest(
             )
             vals.update(workflow_updates)
 
+        # Custom loan product tracking
+        loan_product_messages = (
+            {} if skip_tracking else self._track_loan_product_changes(vals)
+        )
+
         # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
         changes_by_record = (
@@ -550,11 +574,62 @@ class OneCoreMaintenanceRequest(
 
         result = super().write(vals)
 
-        # Only post notifications if not in creation phase
+        # Post loan product messages first, then other change notifications
         if not skip_tracking:
+            self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
 
         return result
+
+    def _track_loan_product_changes(self, vals):
+        """Track loan product changes for existing records."""
+        loan_product_messages = {}
+
+        if "has_loan_product" not in vals and "loan_product_details" not in vals:
+            return loan_product_messages
+
+        for record in self:
+            # Current state (before this write)
+            old_has_loan = record.has_loan_product
+            old_details = record.loan_product_details or ""
+
+            # New state (after this write)
+            new_has_loan = vals.get("has_loan_product", old_has_loan)
+            new_details = vals.get("loan_product_details", old_details) or ""
+
+            message = None
+
+            # Loan product being returned (toggle OFF)
+            if not new_has_loan and old_has_loan:
+                message = f"Låneprodukt återlämnad: {old_details}" if old_details else "Låneprodukt återlämnad"
+
+            # Loan product being issued (toggle ON with details)
+            elif new_has_loan and not old_has_loan and new_details:
+                message = f"Låneprodukt utlämnad: {new_details}"
+
+            # Details added to already-active loan product
+            elif new_has_loan and old_has_loan and not old_details and new_details:
+                message = f"Låneprodukt utlämnad: {new_details}"
+
+            # Details updated while loan product is active
+            elif new_has_loan and old_has_loan and old_details and new_details != old_details:
+                message = f"Låneprodukt uppdaterad: {new_details}"
+
+            if message:
+                loan_product_messages[record.id] = message
+
+        return loan_product_messages
+
+    def _post_loan_product_messages(self, loan_product_messages):
+        """Post loan product change messages to records."""
+        for record in self:
+            if record.id in loan_product_messages:
+                html_content = f"<div><strong>{loan_product_messages[record.id]}</strong></div>"
+                record.message_post(
+                    body=Markup(html_content),
+                    message_type="notification",
+                    subtype_xmlid="mail.mt_note",
+                )
 
     # ============================================================================
     # INTEGRATION METHODS

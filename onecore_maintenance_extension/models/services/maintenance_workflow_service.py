@@ -67,6 +67,8 @@ class FieldChangeTracker:
         "__last_update",
         "display_name",
         "stage_id",
+        "has_loan_product",      # Custom logging in write()
+        "loan_product_details",  # Custom logging in write()
     }
 
     def __init__(self, env):
