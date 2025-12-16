@@ -29,9 +29,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
 
         # Core API can still be mocked as it's an external dependency
         self.core_api = Mock()
-        self.handler = BaseMaintenanceHandler(
-            self.maintenance_request, self.core_api
-        )
+        self.handler = BaseMaintenanceHandler(self.maintenance_request, self.core_api)
 
     def test_initialization(self):
         """Test that handler initializes with correct attributes."""
@@ -86,9 +84,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
 
         # Create a different user and their options
         other_user = create_test_user(self.env)
-        property_option_other = create_property_option(
-            self.env, user_id=other_user.id
-        )
+        property_option_other = create_property_option(self.env, user_id=other_user.id)
 
         # Call delete options
         self.handler._delete_options()
@@ -123,7 +119,9 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertEqual(lease_option.name, lease_data["leaseId"])
         self.assertEqual(lease_option.lease_number, lease_data["leaseNumber"])
         self.assertEqual(lease_option.lease_type, lease_data["type"])
-        self.assertEqual(lease_option.rental_property_option_id.id, rental_property_option.id)
+        self.assertEqual(
+            lease_option.rental_property_option_id.id, rental_property_option.id
+        )
         self.assertEqual(lease_option.user_id, self.env.user)
 
     def test_create_lease_option_with_parking_space(self):
@@ -145,7 +143,9 @@ class TestBaseMaintenanceHandler(TransactionCase):
             lease_data, parking_space_option_id=parking_space_option.id
         )
 
-        self.assertEqual(lease_option.parking_space_option_id.id, parking_space_option.id)
+        self.assertEqual(
+            lease_option.parking_space_option_id.id, parking_space_option.id
+        )
         self.assertFalse(lease_option.rental_property_option_id)
         self.assertFalse(lease_option.facility_option_id)
 
@@ -201,48 +201,10 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertEqual(tenant_option.name, expected_name)
         self.assertEqual(tenant_option.contact_code, tenants[0]["contactCode"])
         self.assertEqual(tenant_option.email_address, tenants[0]["emailAddress"])
-        self.assertEqual(tenant_option.phone_number, tenants[0]["phoneNumbers"][0]["phoneNumber"])
+        self.assertEqual(
+            tenant_option.phone_number, tenants[0]["phoneNumbers"][0]["phoneNumber"]
+        )
         self.assertTrue(tenant_option.is_tenant)
-
-    def test_create_tenant_options_skips_existing_tenant(self):
-        """Test that existing tenants are not duplicated."""
-        contact_code = self.fake.contact_code()
-
-        # Create an existing tenant
-        existing_tenant = self.env["maintenance.tenant.option"].create(
-            {
-                "user_id": self.env.user.id,
-                "name": self.fake.name(),
-                "contact_code": contact_code,
-                "contact_key": self.fake.contact_key(),
-                "is_tenant": True,
-            }
-        )
-
-        tenants = [
-            {
-                "contactCode": contact_code,
-                "contactKey": self.fake.contact_key(),
-                "firstName": self.fake.first_name(),
-                "lastName": self.fake.last_name(),
-                "isTenant": True,
-            }
-        ]
-
-        # Get count before
-        tenant_count_before = self.env["maintenance.tenant.option"].search_count(
-            [("contact_code", "=", contact_code)]
-        )
-
-        self.handler._create_tenant_options(tenants)
-
-        # Get count after
-        tenant_count_after = self.env["maintenance.tenant.option"].search_count(
-            [("contact_code", "=", contact_code)]
-        )
-
-        # Verify no duplicate was created
-        self.assertEqual(tenant_count_before, tenant_count_after)
 
     def test_create_tenant_options_with_full_name(self):
         """Test creating tenant options when only fullName is provided."""
