@@ -6,6 +6,11 @@
 - Clone this repo (duh)
 - Run Odoo with `ENV=local python3 odoo-bin --addons-path="addons, {PATH TO onecore-odoo}" -d odoo --db_user={DB_USER} --db_host={DB_HOST} --db_port={DB_PORT} -i base -u onecore_maintenance_extension -u onecore_mail_extension -u onecore_ui -u onecore_web_extension --dev xml`
 
+### Tests
+
+- Run native Odoo test suite with `bash run_tests.sh`
+- Navigate to onecore_api and follow README to run ONECore specific tests
+
 ## Deploying to test environment
 
 This assumes you are using [Lens](https://k8slens.dev/), but you can of course use for example `kubectl` instead if you want.
