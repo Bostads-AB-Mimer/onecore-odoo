@@ -599,6 +599,21 @@
                                             string="Dold från Mimer.nu"
                                             widget="boolean_toggle"
                                             readonly="user_is_external_contractor" />
+
+                                        <field
+                                            name="has_loan_product"
+                                            string="Låneprodukt"
+                                            widget="boolean_toggle"
+                                            readonly="user_is_external_contractor" />
+
+                                        <field
+                                            name="loan_product_details"
+                                            string="Detaljer låneprodukt"
+                                            placeholder="Beskriv vilken produkt som lämnats ut"
+                                            readonly="user_is_external_contractor"
+                                            invisible="not has_loan_product"
+                                            required="has_loan_product" />
+
                                         <field
                                             name="call_between" invisible="not call_between"
                                             string="Kund nås dessa tider"
@@ -703,6 +718,8 @@
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                     <field name="special_attention" />
+                    <field name="has_loan_product" />
+                    <field name="loan_product_details" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
