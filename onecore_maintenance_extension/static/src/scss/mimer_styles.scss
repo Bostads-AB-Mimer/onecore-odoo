@@ -13,3 +13,163 @@
     font-size: 0.75em;
     border-radius: 50rem;
 }
+
+/* Component wizard - component list table styling */
+.o_maintenance_component_wizard_form {
+    .o_field_one2many {
+        width: 100%;
+
+        .o_list_renderer {
+            width: 100%;
+        }
+    }
+}
+
+/* Component wizard - circular upload button styling */
+
+/* Target the Odoo field wrapper to center it */
+.o_field_widget:has(.image-upload-button-container) {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.image-upload-button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .upload-btn-wrapper {
+        display: flex;
+        justify-content: center;
+    }
+
+    .upload-btn-circle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background-color: #714B67; /* Odoo purple */
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: white;
+
+        &:hover {
+            background-color: #5a3c52;
+            transform: scale(1.05);
+        }
+
+        &:active {
+            transform: scale(0.95);
+        }
+
+        .fa-camera {
+            font-size: 28px;
+        }
+    }
+
+    /* Secondary style (gray for optional image) */
+    .upload-btn-secondary {
+        background-color: #6c757d;
+
+        &:hover {
+            background-color: #5a6268;
+        }
+    }
+
+    /* Uploaded image preview */
+    .uploaded-image-preview {
+        img {
+            max-width: 100%;
+            max-height: 120px;
+            object-fit: contain;
+            border-radius: 0.5rem;
+            transition: opacity 0.2s;
+
+            &:hover {
+                opacity: 0.8;
+            }
+        }
+    }
+}
+
+/* Model search widget styling */
+.model-search {
+    .dropdown-menu {
+        z-index: 1050;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .dropdown-item {
+        cursor: pointer;
+        padding: 0.5rem 1rem;
+
+        &.active {
+            background-color: #714B67;
+            color: white;
+
+            .text-muted {
+                color: rgba(255, 255, 255, 0.8) !important;
+            }
+        }
+
+        &:hover:not(.active) {
+            background-color: #f8f9fa;
+        }
+    }
+
+    .input-group {
+        .form-control {
+            border-right: 0;
+        }
+
+        .btn-outline-secondary {
+            border-color: #ced4da;
+            background-color: white;
+
+            &:hover {
+                background-color: #f8f9fa;
+            }
+        }
+    }
+}
+
+/* JSON Dropdown widget styling */
+.json-dropdown {
+    .dropdown-menu {
+        z-index: 1050;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .dropdown-item {
+        cursor: pointer;
+        padding: 0.5rem 1rem;
+
+        &.active {
+            background-color: #714B67;
+            color: white;
+        }
+
+        &:hover:not(.active) {
+            background-color: #f8f9fa;
+        }
+    }
+
+    .input-group {
+        .form-control {
+            border-right: 0;
+        }
+
+        .btn-outline-secondary {
+            border-color: #ced4da;
+            background-color: white;
+
+            &:hover {
+                background-color: #f8f9fa;
+            }
+        }
+    }
+}

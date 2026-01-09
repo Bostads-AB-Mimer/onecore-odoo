@@ -18,8 +18,7 @@ class MaintenanceComponentLine(models.TransientModel):
     additional_image = fields.Binary(string="Ytterligare bild", attachment=False)
 
     # AI-extracted component data (maps to API response)
-    typ = fields.Char(string="Typ")  # Legacy - keep for backward compatibility
-    component = fields.Char(string="Komponent")  # Stores componentType from AI
+    typ = fields.Char(string="Typ")  
     subtype = fields.Char(string="Undertyp")
     model = fields.Char(string="Modell")
     category = fields.Char(string="Kategori")
@@ -34,7 +33,13 @@ class MaintenanceComponentLine(models.TransientModel):
     additional_information = fields.Text(string="Ytterligare information")
     installation_date = fields.Date(string="Installationsdatum")
 
-    # AI metadata
-    confidence = fields.Float(string="AI-säkerhet", digits=(3, 2))
-    ai_suggested = fields.Boolean(string="AI-föreslagen", default=False)
-    manually_reviewed = fields.Boolean(string="Manuellt granskad", default=False)
+    # OneCore metadata
+    is_from_onecore = fields.Boolean(string="Från OneCore", default=False)
+    room_name = fields.Char(string="Rum")
+    onecore_component_id = fields.Char(string="OneCore Komponent-ID")
+
+    # IDs for API submission
+    room_id = fields.Char(string="Rum-ID")
+    category_id = fields.Char(string="Kategori-ID")
+    type_id = fields.Char(string="Typ-ID")
+    subtype_id = fields.Char(string="Undertyp-ID")
