@@ -264,6 +264,63 @@ class CoreApi:
             f"/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    def fetch_rooms(self, residence_id):
+        """Fetch rooms for a residence."""
+        return self._get_json(
+            f"/rooms?residenceId={urllib.parse.quote(str(residence_id), safe='')}"
+        )
+
+    def fetch_components_by_room(self, room_id):
+        """Fetch components for a specific room."""
+        return self._get_json(
+            f"/components/by-room/{urllib.parse.quote(str(room_id), safe='')}"
+        )
+
+    def fetch_component_models(self, model_name, page=1, limit=20, type_id=None, subtype_id=None):
+        """Fetch component models matching the given model name.
+
+        Args:
+            model_name: The model name to search for
+            page: Page number for pagination
+            limit: Number of results per page
+            type_id: Optional component type ID to filter by
+            subtype_id: Optional component subtype ID to filter by
+        """
+        params = {
+            "modelName": model_name,
+            "page": page,
+            "limit": limit,
+        }
+        if type_id:
+            params["typeId"] = type_id
+        if subtype_id:
+            params["subtypeId"] = subtype_id
+        return self._get_json("/component-models", params=params)
+
+    def fetch_component_categories(self):
+        """Fetch all component categories."""
+        return self._get_json("/component-categories")
+
+    def fetch_component_types(self, category_id, page=1, limit=100):
+        """Fetch component types for a category."""
+        return self._get_json(
+            "/component-types",
+            params={"categoryId": category_id, "page": page, "limit": limit}
+        )
+
+    def fetch_component_subtypes(self, type_id, page=1, limit=100):
+        """Fetch component subtypes for a type."""
+        return self._get_json(
+            "/component-subtypes",
+            params={"typeId": type_id, "page": page, "limit": limit}
+        )
+
+    def create_component(self, payload):
+        """Create a component using the unified add-component process."""
+        response = self.request("POST", "/processes/add-component", json=payload)
+        response.raise_for_status()
+        return response.json()
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
