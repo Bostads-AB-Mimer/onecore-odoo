@@ -14,16 +14,82 @@
                         <!-- SECTION 1: Component List (Read-only OneCore components) -->
                         <div class="mb-4">
                             <h5 class="text-uppercase text-muted small fw-bold mb-3">Befintliga komponenter</h5>
-                            <field name="component_ids" nolabel="1" readonly="1">
+                            <field name="component_ids" nolabel="1">
                                 <tree create="false" delete="false">
-                                    <field name="is_from_onecore" column_invisible="1"/>
                                     <field name="room_name" string="Rum"/>
                                     <field name="typ" string="Typ"/>
-                                    <field name="category" string="Kategori" optional="show"/>
                                     <field name="model" string="Modell" optional="show"/>
                                     <field name="manufacturer" string="Tillverkare" optional="show"/>
                                     <field name="installation_date" string="Datum" optional="hide"/>
                                 </tree>
+                                <form string="Komponentdetaljer">
+                                    <sheet>
+                                        <!-- Hidden fields for room change functionality -->
+                                        <field name="room_id" invisible="1"/>
+                                        <field name="installation_id" invisible="1"/>
+                                        <field name="available_rooms_json" invisible="1"/>
+                                        <field name="onecore_component_id" invisible="1"/>
+
+                                        <group col="2">
+                                            <group string="Placering">
+                                                <field name="room_name"
+                                                       widget="json_dropdown"
+                                                       placeholder="Välj rum"
+                                                       options="{'json_field': 'available_rooms_json', 'label_field': 'name', 'value_field': 'id', 'id_field': 'room_id', 'autoOpen': false}"
+                                                       invisible="not installation_id"/>
+                                                <field name="room_name" readonly="1" invisible="installation_id"/>
+                                            </group>
+                                            <group string="Grundläggande information">
+                                                <field name="category" readonly="1"/>
+                                                <field name="typ" readonly="1"/>
+                                                <field name="subtype" readonly="1"/>
+                                                <field name="model" readonly="1"/>
+                                            </group>
+                                            <group string="Detaljer">
+                                                <field name="manufacturer" readonly="1"/>
+                                                <field name="serial_number"/>
+                                                <field name="installation_date" readonly="1"/>
+                                            </group>
+                                            <group string="Skick och garanti">
+                                                <field name="estimated_age" readonly="1"/>
+                                                <field name="condition"/>
+                                                <field name="warranty_months"/>
+                                            </group>
+                                            <group string="Tekniska specifikationer">
+                                                <field name="dimensions" readonly="1"/>
+                                                <field name="ncs_code"/>
+                                            </group>
+                                            <group string="Ekonomi">
+                                                <field name="price_at_purchase"/>
+                                                <field name="depreciation_price_at_purchase" readonly="1"/>
+                                                <field name="economic_lifespan" readonly="1"/>
+                                                <field name="technical_lifespan" readonly="1"/>
+                                                <field name="replacement_interval" readonly="1"/>
+                                                <field name="current_value" readonly="1"/>
+                                            </group>
+                                        </group>
+                                        <separator string="Specifikationer"/>
+                                        <field name="specifications" nolabel="1" widget="text"/>
+                                        <separator string="Ytterligare information"/>
+                                        <field name="additional_information" nolabel="1" widget="text"/>
+                                        <!-- Images if available -->
+                                        <group string="Bilder" col="2" invisible="not image">
+                                            <field name="image" widget="image" readonly="1" nolabel="1" options="{'size': [0, 200]}"/>
+                                            <field name="additional_image" widget="image" readonly="1" nolabel="1" invisible="not additional_image" options="{'size': [0, 200]}"/>
+                                        </group>
+                                    </sheet>
+                                    <footer>
+                                        <button name="action_save_component" type="object"
+                                                string="Spara" class="btn-primary"
+                                                invisible="not onecore_component_id"/>
+                                        <button name="action_uninstall_component" type="object"
+                                                string="Avinstallera" class="btn-danger"
+                                                invisible="not installation_id"
+                                                confirm="Vill du avinstallera komponenten? Den kommer inte längre synas för lägenheten, men finns kvar i historiken."/>
+                                        <button name="action_close_popup" type="object"
+                                                string="Tillbaka" class="btn-secondary"/>
+                                    </footer>
+                                </form>
                             </field>
                         </div>
 
@@ -48,7 +114,7 @@
                                 <div class="col-6 col-md-4">
                                     <field name="temp_additional_image" widget="image_upload_button" secondary="true"/>
                                     <p class="mt-2 mb-0 small text-center">Tryck för att fotografera</p>
-                                    <p class="small text-muted text-center">Extra bild (valfritt)</p>
+                                    <p class="small text-muted text-center">Ytterligare bild (valfritt)</p>
                                 </div>
                             </div>
 
@@ -133,6 +199,7 @@
                                 <field name="form_category_id" invisible="1"/>
                                 <field name="form_type_id" invisible="1"/>
                                 <field name="form_subtype_id" invisible="1"/>
+                                <field name="form_model_data_loaded" invisible="1"/>
                                 <field name="available_rooms_json" invisible="1"/>
                                 <field name="available_categories_json" invisible="1"/>
                                 <field name="available_types_json" invisible="1"/>
@@ -168,28 +235,56 @@
                                     </group>
 
                                     <group string="Detaljer">
-                                        <field name="form_manufacturer" placeholder="T.ex. Electrolux, Cylinda"/>
+                                        <field name="form_manufacturer"
+                                               placeholder="T.ex. Electrolux, Cylinda"
+                                               readonly="form_model_data_loaded"/>
                                         <field name="form_serial_number" placeholder="Serienummer från typskylt"/>
                                         <field name="form_installation_date"/>
                                     </group>
 
                                     <group string="Skick och garanti">
                                         <field name="form_estimated_age" placeholder="T.ex. 3-5 år, Okänd"/>
-                                        <field name="form_condition" placeholder="T.ex. Gott skick, Nyskick"/>
+                                        <field name="form_condition"/>
                                         <field name="form_warranty_months"/>
                                     </group>
 
                                     <group string="Tekniska specifikationer">
-                                        <field name="form_dimensions" placeholder="T.ex. 60x60x85 cm"/>
+                                        <field name="form_dimensions"
+                                               placeholder="T.ex. 60x60x85 cm"
+                                               readonly="form_model_data_loaded"/>
                                         <field name="form_ncs_code" placeholder="T.ex. S 1002-Y"/>
+                                        <field name="form_coclass_code"
+                                               string="Coclass-kod"
+                                               readonly="1"/>
                                     </group>
 
                                     <group string="Ekonomi">
-                                        <field name="form_price_at_purchase" placeholder="0.00"/>
-                                        <field name="form_current_price" placeholder="0.00"/>
-                                        <field name="form_current_install_price" placeholder="0.00"/>
-                                        <field name="form_installation_cost" placeholder="0.00"/>
-                                        <field name="form_economic_lifespan" placeholder="T.ex. 10"/>
+                                        <!-- Editable prices (populated from model if found) -->
+                                        <field name="form_current_price"
+                                               string="Inköpspris"
+                                               placeholder="0.00"/>
+                                        <field name="form_current_install_price"
+                                               string="Installationskostnad"
+                                               placeholder="0.00"/>
+
+                                        <!-- From subtype (read-only) -->
+                                        <field name="form_depreciation_price"
+                                               string="Avskrivningspris"
+                                               readonly="1"/>
+                                        <field name="form_economic_lifespan"
+                                               string="Ekonomisk livslängd (månader)"
+                                               readonly="1"/>
+                                        <field name="form_technical_lifespan"
+                                               string="Teknisk livslängd (månader)"
+                                               readonly="1"/>
+                                        <field name="form_replacement_interval"
+                                               string="Bytesintervall (månader)"
+                                               readonly="1"/>
+
+                                        <!-- Computed current value -->
+                                        <field name="form_current_value"
+                                               string="Nuvarande värde"
+                                               readonly="1"/>
                                     </group>
                                 </group>
 

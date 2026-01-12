@@ -321,6 +321,18 @@ class CoreApi:
         response.raise_for_status()
         return response.json()
 
+    def update_component(self, component_id, payload):
+        """Update a component using PUT /components/{id}."""
+        response = self.request("PUT", f"/components/{component_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def update_component_installation(self, installation_id, payload):
+        """Update component installation via PUT /component-installations/{id}."""
+        response = self.request("PUT", f"/component-installations/{installation_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
