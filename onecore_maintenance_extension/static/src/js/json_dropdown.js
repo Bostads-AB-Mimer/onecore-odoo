@@ -20,6 +20,7 @@ export class JsonDropdown extends Component {
         valueField: { type: String, optional: true },
         idField: { type: String, optional: true },
         placeholder: { type: String, optional: true },
+        autoOpen: { type: Boolean, optional: true },
     };
 
     setup() {
@@ -121,7 +122,10 @@ export class JsonDropdown extends Component {
     }
 
     onInputFocus() {
-        this.state.isOpen = true;
+        // Only auto-open if autoOpen is not explicitly set to false
+        if (this.props.autoOpen !== false) {
+            this.state.isOpen = true;
+        }
         this.state.searchText = "";
         this.loadOptions(); // Reload in case JSON changed
     }
@@ -204,5 +208,6 @@ registry.category("fields").add("json_dropdown", {
         valueField: options.value_field || attrs.value_field,
         idField: options.id_field || attrs.id_field,
         placeholder: attrs.placeholder,
+        autoOpen: options.autoOpen !== undefined ? options.autoOpen : true,
     }),
 });

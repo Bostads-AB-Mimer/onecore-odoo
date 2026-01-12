@@ -641,7 +641,8 @@
                                         string="Uppdatera/lägg till Komponent"
                                         icon="fa-plus"
                                         class="btn btn-secondary mt-2 mb-2"
-                                        help="Uppdatera eller lägg till komponent" />
+                                        help="Uppdatera eller lägg till komponent"
+                                        invisible="space_caption != 'Lägenhet'" />
                                 </div>
                             </div>
                         </div>
