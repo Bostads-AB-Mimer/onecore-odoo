@@ -45,6 +45,9 @@ class MaintenanceComponentWizard(models.TransientModel):
         compute="_compute_has_image",
         store=False,
     )
+    # Extra image fields for adding more images in review state
+    form_extra_image_1 = fields.Binary(string="Extra bild 1", attachment=False)
+    form_extra_image_2 = fields.Binary(string="Extra bild 2", attachment=False)
 
     # ==================== Component Form Fields ====================
     form_type = fields.Char(string="Typ")
@@ -294,17 +297,24 @@ class MaintenanceComponentWizard(models.TransientModel):
 
         try:
             result = service.create_component(form_data, self.form_room_id)
-            onecore_id = None
-            if isinstance(result, dict):
-                onecore_id = result.get('content', {}).get('id') or result.get('id')
 
             _logger.info(
                 f"Successfully created component in OneCore: "
                 f"{self.form_model or self.form_type}"
             )
 
-            self._create_component_line(onecore_id)
-            return self.action_reset_form()
+            # Upload images to the created component instance
+            component_instance_id = self._extract_component_instance_id(result)
+            if component_instance_id:
+                self._upload_images_to_component(service, component_instance_id)
+
+            # Reload all components from OneCore to get correct installation_id
+            self.reload_components()
+
+            # Reset the form for next entry
+            self._reset_form_fields()
+
+            return self._return_wizard_action()
 
         except Exception as e:
             error_msg = str(e)
@@ -316,45 +326,73 @@ class MaintenanceComponentWizard(models.TransientModel):
             _logger.error(f"Failed to create component in OneCore: {error_msg}")
             raise exceptions.UserError(f"Kunde inte skapa komponenten: {error_msg}")
 
+    def _extract_component_instance_id(self, result):
+        """Extract the component instance ID from the create_component result.
+
+        Args:
+            result: Response from create_component API call
+
+        Returns:
+            str: The component instance ID, or None if not found
+        """
+        if not result:
+            return None
+
+        # Try common response structures
+        # The API might return the component directly or wrapped in 'content'
+        component_data = result.get('content', result)
+
+        # Try to get the component ID
+        component_id = component_data.get('id')
+        if component_id:
+            return component_id
+
+        # If it's a nested structure, try to find the component
+        if isinstance(component_data, dict):
+            for key in ['component', 'componentInstance', 'data']:
+                if key in component_data and isinstance(component_data[key], dict):
+                    component_id = component_data[key].get('id')
+                    if component_id:
+                        return component_id
+
+        _logger.warning(f"Could not extract component instance ID from result: {result}")
+        return None
+
+    def _upload_images_to_component(self, service, component_instance_id):
+        """Upload all captured images to a component instance.
+
+        Args:
+            service: ComponentOneCoreService instance
+            component_instance_id: The component instance ID to attach images to
+        """
+        # Collect all images with their captions
+        images = []
+
+        if self.temp_image:
+            images.append((self.temp_image, "Huvudbild"))
+        if self.temp_additional_image:
+            images.append((self.temp_additional_image, "Ytterligare bild"))
+        if self.form_extra_image_1:
+            images.append((self.form_extra_image_1, "Extra bild 1"))
+        if self.form_extra_image_2:
+            images.append((self.form_extra_image_2, "Extra bild 2"))
+
+        if not images:
+            _logger.info("No images to upload for component")
+            return
+
+        _logger.info(f"Uploading {len(images)} image(s) to component {component_instance_id}")
+        result = service.upload_component_images(component_instance_id, images)
+
+        if result['success_count'] > 0:
+            _logger.info(f"Successfully uploaded {result['success_count']} image(s)")
+        if result['errors']:
+            _logger.warning(f"Failed to upload {len(result['errors'])} image(s): {result['errors']}")
+
     def action_reset_form(self):
         """Clear form and return to upload state."""
         self.ensure_one()
-        self.write({
-            'form_state': 'upload',
-            'temp_image': False,
-            'temp_additional_image': False,
-            'form_type': False,
-            'form_subtype': False,
-            'form_model': False,
-            'form_category': False,
-            'form_manufacturer': False,
-            'form_serial_number': False,
-            'form_estimated_age': False,
-            'form_condition': False,
-            'form_specifications': False,
-            'form_dimensions': False,
-            'form_warranty_months': False,
-            'form_ncs_code': False,
-            'form_coclass_code': False,
-            'form_additional_information': False,
-            'form_installation_date': False,
-            'form_confidence': 0.0,
-            'form_ai_suggested': False,
-            'form_model_data_loaded': False,
-            'api_error': False,
-            'error_message': '',
-            'form_room_id': False,
-            'form_room_name': False,
-            'form_category_id': False,
-            'form_type_id': False,
-            'form_subtype_id': False,
-            'form_current_price': 0,
-            'form_current_install_price': 0,
-            'form_economic_lifespan': 0,
-            'form_depreciation_price': 0,
-            'form_technical_lifespan': 0,
-            'form_replacement_interval': 0,
-        })
+        self._reset_form_fields()
         return self._return_wizard_action()
 
     def action_retry_upload(self):
@@ -431,6 +469,47 @@ class MaintenanceComponentWizard(models.TransientModel):
             'target': 'new',
         }
 
+    def _reset_form_fields(self):
+        """Reset form fields to initial state without returning an action."""
+        self.write({
+            'form_state': 'upload',
+            'temp_image': False,
+            'temp_additional_image': False,
+            'form_extra_image_1': False,
+            'form_extra_image_2': False,
+            'form_type': False,
+            'form_subtype': False,
+            'form_model': False,
+            'form_category': False,
+            'form_manufacturer': False,
+            'form_serial_number': False,
+            'form_estimated_age': False,
+            'form_condition': False,
+            'form_specifications': False,
+            'form_dimensions': False,
+            'form_warranty_months': False,
+            'form_ncs_code': False,
+            'form_coclass_code': False,
+            'form_additional_information': False,
+            'form_installation_date': False,
+            'form_confidence': 0.0,
+            'form_ai_suggested': False,
+            'form_model_data_loaded': False,
+            'api_error': False,
+            'error_message': '',
+            'form_room_id': False,
+            'form_room_name': False,
+            'form_category_id': False,
+            'form_type_id': False,
+            'form_subtype_id': False,
+            'form_current_price': 0,
+            'form_current_install_price': 0,
+            'form_economic_lifespan': 0,
+            'form_depreciation_price': 0,
+            'form_technical_lifespan': 0,
+            'form_replacement_interval': 0,
+        })
+
     def _get_form_data(self):
         """Extract form data as a dict for service calls."""
         return {
@@ -450,31 +529,3 @@ class MaintenanceComponentWizard(models.TransientModel):
             'ncs_code': self.form_ncs_code,
             'installation_date': self.form_installation_date,
         }
-
-    def _create_component_line(self, onecore_id):
-        """Create a component line from current form data."""
-        self.env['maintenance.component.line'].create({
-            'wizard_id': self.id,
-            'image': self.temp_image,
-            'additional_image': self.temp_additional_image,
-            'typ': self.form_type,
-            'subtype': self.form_subtype,
-            'model': self.form_model,
-            'category': self.form_category,
-            'manufacturer': self.form_manufacturer,
-            'serial_number': self.form_serial_number,
-            'estimated_age': self.form_estimated_age,
-            'condition': self.form_condition,
-            'specifications': self.form_specifications,
-            'dimensions': self.form_dimensions,
-            'warranty_months': self.form_warranty_months,
-            'ncs_code': self.form_ncs_code,
-            'additional_information': self.form_additional_information,
-            'installation_date': self.form_installation_date,
-            'room_id': self.form_room_id,
-            'room_name': self.form_room_name,
-            'category_id': self.form_category_id,
-            'type_id': self.form_type_id,
-            'subtype_id': self.form_subtype_id,
-            'onecore_component_id': onecore_id,
-        })

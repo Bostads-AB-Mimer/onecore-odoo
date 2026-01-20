@@ -213,6 +213,9 @@ class ComponentOneCoreService:
                 install_date = install_date_str[:10]  # Extract YYYY-MM-DD
             installation_id = installations[0].get('id')
 
+        # Fetch all image URLs for the component (not base64 data)
+        image_urls = self.fetch_all_component_image_urls(comp.get('id'))
+
         return {
             'typ': component_type_data.get('typeName'),
             'subtype': subtype_data.get('subTypeName'),
@@ -237,6 +240,8 @@ class ComponentOneCoreService:
             'economic_lifespan': comp.get('economicLifespan') or 0,
             'technical_lifespan': subtype_data.get('technicalLifespan') or 0,
             'replacement_interval': subtype_data.get('replacementIntervalMonths') or 0,
+            # All image URLs from OneCore as JSON array
+            'image_urls_json': json.dumps(image_urls) if image_urls else '[]',
         }
 
     def search_models(self, search_text, type_id=None, subtype_id=None):
@@ -271,4 +276,75 @@ class ComponentOneCoreService:
             ]
         except Exception as e:
             _logger.warning(f"Failed to search component models: {e}")
+            return []
+
+    def upload_component_images(self, component_instance_id, images):
+        """Upload images to a component instance in OneCore.
+
+        Args:
+            component_instance_id: The component instance ID to attach images to
+            images: List of tuples (image_data, caption) where image_data is base64
+
+        Returns:
+            dict: Result with 'success_count' and 'errors' list
+        """
+        result = {
+            'success_count': 0,
+            'errors': []
+        }
+
+        if not component_instance_id:
+            _logger.warning("Cannot upload images: no component_instance_id provided")
+            return result
+
+        for image_data, caption in images:
+            if not image_data:
+                continue
+
+            try:
+                self.api.upload_document(image_data, component_instance_id, caption)
+                result['success_count'] += 1
+                _logger.info(f"Successfully uploaded image '{caption}' to component {component_instance_id}")
+            except Exception as e:
+                error_msg = str(e)
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_msg = e.response.text
+                    except Exception:
+                        pass
+                _logger.warning(f"Failed to upload image '{caption}': {error_msg}")
+                result['errors'].append({
+                    'caption': caption,
+                    'error': error_msg
+                })
+
+        return result
+
+    def fetch_all_component_image_urls(self, component_instance_id):
+        """Fetch all image URLs for a component instance.
+
+        Args:
+            component_instance_id: The component instance ID
+
+        Returns:
+            list: List of all valid image URLs, or empty list
+        """
+        if not component_instance_id:
+            return []
+
+        try:
+            documents = self.api.fetch_component_documents(component_instance_id)
+            if not documents:
+                return []
+
+            # Filter to only documents with valid URLs (size > 0 and url present)
+            valid_documents = [
+                doc for doc in documents
+                if doc.get('url') and doc.get('size', 0) > 0
+            ]
+
+            # Return all valid URLs
+            return [doc.get('url') for doc in valid_documents]
+        except Exception as e:
+            _logger.warning(f"Failed to fetch component image URLs: {e}")
             return []

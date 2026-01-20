@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+import json
+import logging
+
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 from ...onecore_api import core_api
-import logging
+from .services.component_onecore_service import ComponentOneCoreService
 
 _logger = logging.getLogger(__name__)
 
@@ -18,9 +21,19 @@ class MaintenanceComponentLine(models.TransientModel):
         ondelete="cascade",
     )
 
-    # Image storage (transient)
-    image = fields.Binary(string="Bild", attachment=False)
-    additional_image = fields.Binary(string="Ytterligare bild", attachment=False)
+    # All image URLs from OneCore as JSON array
+    image_urls_json = fields.Text(string="Bild-URLer (JSON)", default='[]')
+
+    # Computed field to check if there are any images
+    has_images = fields.Boolean(
+        string="Has Images",
+        compute="_compute_has_images",
+        store=False,
+    )
+
+    # New image upload fields (for adding images during update)
+    new_image_1 = fields.Binary(string="Ny bild 1", attachment=False)
+    new_image_2 = fields.Binary(string="Ny bild 2", attachment=False)
 
     # AI-extracted component data (maps to API response)
     typ = fields.Char(string="Typ")  
@@ -95,6 +108,16 @@ class MaintenanceComponentLine(models.TransientModel):
             else:
                 record.current_value = record.price_at_purchase or 0
 
+    @api.depends('image_urls_json')
+    def _compute_has_images(self):
+        """Check if the component has any images."""
+        for record in self:
+            try:
+                urls = json.loads(record.image_urls_json or '[]')
+                record.has_images = bool(urls and len(urls) > 0)
+            except (json.JSONDecodeError, TypeError):
+                record.has_images = False
+
     def action_save_component(self):
         """Save component changes to OneCore via PUT /components/{id} and /component-installations/{id}."""
         self.ensure_one()
@@ -155,6 +178,22 @@ class MaintenanceComponentLine(models.TransientModel):
                 api.update_component_installation(self.installation_id, installation_payload)
                 _logger.info(f"Successfully updated installation {self.installation_id} to room {self.room_id}")
 
+            # Upload any new images
+            has_new_images = self._upload_new_images()
+
+            # Reload components to refresh image URLs if new images were uploaded
+            if has_new_images:
+                wizard = self.wizard_id
+                wizard.reload_components()
+                # Return to wizard to show refreshed images
+                return {
+                    'type': 'ir.actions.act_window',
+                    'res_model': 'maintenance.component.wizard',
+                    'res_id': wizard.id,
+                    'view_mode': 'form',
+                    'target': 'new',
+                }
+
         except Exception as e:
             _logger.error(f"Failed to update component: {e}")
             raise UserError(f"Kunde inte spara komponenten: {e}")
@@ -167,6 +206,39 @@ class MaintenanceComponentLine(models.TransientModel):
             'view_mode': 'form',
             'target': 'new',
         }
+
+    def _upload_new_images(self):
+        """Upload new images to the component instance.
+
+        Returns:
+            bool: True if images were uploaded, False otherwise
+        """
+        images = []
+        if self.new_image_1:
+            images.append((self.new_image_1, "Ny bild 1"))
+        if self.new_image_2:
+            images.append((self.new_image_2, "Ny bild 2"))
+
+        if not images:
+            return False
+
+        service = ComponentOneCoreService(self.env)
+        _logger.info(f"Uploading {len(images)} new image(s) to component {self.onecore_component_id}")
+
+        result = service.upload_component_images(self.onecore_component_id, images)
+
+        if result['success_count'] > 0:
+            _logger.info(f"Successfully uploaded {result['success_count']} image(s)")
+        if result['errors']:
+            _logger.warning(f"Failed to upload {len(result['errors'])} image(s): {result['errors']}")
+
+        # Clear the upload fields after successful upload
+        self.write({
+            'new_image_1': False,
+            'new_image_2': False,
+        })
+
+        return result['success_count'] > 0
 
     def action_close_popup(self):
         """Close the inline form and reopen the parent wizard.
