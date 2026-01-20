@@ -244,18 +244,27 @@ class MaintenanceComponentWizard(models.TransientModel):
         if not self.temp_image:
             raise exceptions.UserError("Du måste ladda upp minst en bild")
 
+        # Store images before write operations (they need to be preserved)
+        temp_image = self.temp_image
+        temp_additional_image = self.temp_additional_image
+
         self.write({'form_state': 'analyzing', 'api_error': False, 'error_message': ''})
 
         service = ComponentAIAnalysisService(self.env)
-        result = service.analyze_images(self.temp_image, self.temp_additional_image)
+        result = service.analyze_images(temp_image, temp_additional_image)
 
         if result.get('error'):
             self.write({
                 'form_state': 'review',
                 'api_error': True,
-                'error_message': result['error_message']
+                'error_message': result['error_message'],
+                'temp_image': temp_image,
+                'temp_additional_image': temp_additional_image,
             })
         else:
+            # Preserve images in the result before writing
+            result['temp_image'] = temp_image
+            result['temp_additional_image'] = temp_additional_image
             self.write(result)
 
         return self._return_wizard_action()

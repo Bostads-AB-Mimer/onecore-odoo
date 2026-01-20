@@ -54,7 +54,17 @@ export class ImageViewer extends Component {
     }
 
     get hasImage() {
-        return Boolean(this.props.record.data[this.props.name]);
+        const value = this.props.record.data[this.props.name];
+        // Check if we have actual image data (string with content)
+        // not just a truthy boolean placeholder
+        if (typeof value === 'string' && value.length > 0) {
+            return true;
+        }
+        // For saved records, check if field has data
+        if (value && this.props.record.resId) {
+            return true;
+        }
+        return false;
     }
 
     get imageSrc() {
@@ -65,7 +75,7 @@ export class ImageViewer extends Component {
         const field = this.props.record.fields[this.props.name];
         const fieldType = field ? field.type : 'binary';
 
-        if (typeof value === 'string') {
+        if (typeof value === 'string' && value.length > 0) {
             // For char fields (URLs), use the value directly
             if (fieldType === 'char') {
                 // Value is a URL - use it directly
@@ -79,14 +89,16 @@ export class ImageViewer extends Component {
             if (value.startsWith('http://') || value.startsWith('https://')) {
                 return value;
             }
-            // Raw base64 string
-            return `data:image/png;base64,${value}`;
+            // Raw base64 string - must be valid base64 (reasonable length)
+            if (value.length > 100) {
+                return `data:image/png;base64,${value}`;
+            }
         }
 
         // For saved records with binary fields, use Odoo's web/image endpoint
         const record = this.props.record;
         if (record.resId && fieldType === 'binary') {
-            return `/web/image/${record.resModel}/${record.resId}/${this.props.name}`;
+            return `/web/image/${record.resModel}/${record.resId}/${this.props.name}?t=${Date.now()}`;
         }
 
         return null;
@@ -116,6 +128,18 @@ export class ImageViewer extends Component {
     onImageClick(ev) {
         // Prevent closing when clicking on the image itself
         ev.stopPropagation();
+    }
+
+    onImageError(ev) {
+        // Log error details to help debug image loading issues
+        const value = this.props.record.data[this.props.name];
+        console.error('Image failed to load:', {
+            fieldName: this.props.name,
+            valueType: typeof value,
+            valueLength: typeof value === 'string' ? value.length : 'N/A',
+            valuePreview: typeof value === 'string' ? value.substring(0, 50) + '...' : value,
+            computedSrc: this.imageSrc?.substring(0, 100) + '...',
+        });
     }
 }
 
