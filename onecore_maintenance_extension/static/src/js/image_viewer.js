@@ -53,49 +53,50 @@ export class ImageViewer extends Component {
         );
     }
 
+    /**
+     * Checks if the field contains valid image data.
+     * Handles both binary data and URL strings.
+     * @returns {boolean} True if image data exists
+     */
     get hasImage() {
         const value = this.props.record.data[this.props.name];
-        // Check if we have actual image data (string with content)
-        // not just a truthy boolean placeholder
         if (typeof value === 'string' && value.length > 0) {
             return true;
         }
-        // For saved records, check if field has data
         if (value && this.props.record.resId) {
             return true;
         }
         return false;
     }
 
+    /**
+     * Computes the image source URL based on field type and value.
+     * Supports binary data, data URLs, HTTP URLs, and Odoo image endpoints.
+     * @returns {string|null} Image source URL or null
+     */
     get imageSrc() {
         const value = this.props.record.data[this.props.name];
         if (!value) return null;
 
-        // Get the field type from the model
         const field = this.props.record.fields[this.props.name];
         const fieldType = field ? field.type : 'binary';
 
         if (typeof value === 'string' && value.length > 0) {
-            // For char fields (URLs), use the value directly
             if (fieldType === 'char') {
-                // Value is a URL - use it directly
                 return value;
             }
 
-            // For binary fields, handle data URLs and base64
             if (value.startsWith('data:')) {
                 return value;
             }
             if (value.startsWith('http://') || value.startsWith('https://')) {
                 return value;
             }
-            // Raw base64 string - must be valid base64 (reasonable length)
             if (value.length > 100) {
                 return `data:image/png;base64,${value}`;
             }
         }
 
-        // For saved records with binary fields, use Odoo's web/image endpoint
         const record = this.props.record;
         if (record.resId && fieldType === 'binary') {
             return `/web/image/${record.resModel}/${record.resId}/${this.props.name}?t=${Date.now()}`;
@@ -104,34 +105,55 @@ export class ImageViewer extends Component {
         return null;
     }
 
+    /**
+     * Returns the configured thumbnail height in pixels.
+     * @returns {number} Thumbnail height (default: 80)
+     */
     get thumbnailHeight() {
         return this.props.thumbnailSize || 80;
     }
 
+    /**
+     * Opens the fullscreen image viewer.
+     */
     openFullscreen() {
         if (this.hasImage) {
             this.state.isFullscreen = true;
         }
     }
 
+    /**
+     * Closes the fullscreen image viewer.
+     */
     closeFullscreen() {
         this.state.isFullscreen = false;
     }
 
+    /**
+     * Handles click on the fullscreen overlay background.
+     * Closes fullscreen when clicking outside the image.
+     * @param {MouseEvent} ev - The click event
+     */
     onOverlayClick(ev) {
-        // Close when clicking on the overlay background (not the image)
         if (ev.target.classList.contains("image-fullscreen-overlay")) {
             this.closeFullscreen();
         }
     }
 
+    /**
+     * Handles click on the fullscreen image itself.
+     * Prevents the overlay click handler from closing the view.
+     * @param {MouseEvent} ev - The click event
+     */
     onImageClick(ev) {
-        // Prevent closing when clicking on the image itself
         ev.stopPropagation();
     }
 
+    /**
+     * Handles image load errors by logging debug information.
+     * @param {Event} ev - The error event
+     */
     onImageError(ev) {
-        // Log error details to help debug image loading issues
         const value = this.props.record.data[this.props.name];
         console.error('Image failed to load:', {
             fieldName: this.props.name,

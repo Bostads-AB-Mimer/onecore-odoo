@@ -10,6 +10,9 @@ from ....onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
 
+# Space type caption for apartments
+APARTMENT_SPACE_CAPTION = 'Lägenhet'
+
 
 class ComponentOneCoreService:
     """Service for handling OneCore component CRUD operations."""
@@ -113,7 +116,7 @@ class ComponentOneCoreService:
             tuple: (rooms_json, categories_json, component_data_list)
         """
         # Only fetch for apartment errands
-        if space_caption != 'Lägenhet':
+        if space_caption != APARTMENT_SPACE_CAPTION:
             return '[]', '[]', []
 
         if not rental_property_id:
@@ -302,7 +305,7 @@ class ComponentOneCoreService:
                 continue
 
             try:
-                self.api.upload_document(image_data, component_instance_id, caption)
+                self.api.upload_document(image_data, component_instance_id)
                 result['success_count'] += 1
                 _logger.info(f"Successfully uploaded image '{caption}' to component {component_instance_id}")
             except Exception as e:

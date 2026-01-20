@@ -40,6 +40,9 @@ export class ModelSearch extends Component {
         });
     }
 
+    /**
+     * Cleanup: removes document click listener and clears debounce timeout.
+     */
     willUnmount() {
         document.removeEventListener("click", this.onDocumentClick.bind(this));
         if (this.debounceTimeout) {
@@ -47,66 +50,101 @@ export class ModelSearch extends Component {
         }
     }
 
+    /**
+     * Returns the field name for the component type ID filter.
+     * @returns {string} Type ID field name
+     */
     get typeIdFieldName() {
         return this.props.typeIdField || "form_type_id";
     }
 
+    /**
+     * Returns the field name for the component subtype ID filter.
+     * @returns {string} Subtype ID field name
+     */
     get subtypeIdFieldName() {
         return this.props.subtypeIdField || "form_subtype_id";
     }
 
+    /**
+     * Returns the current model name value.
+     * @returns {string} Current value
+     */
     get currentValue() {
         return this.props.record.data[this.props.name] || "";
     }
 
+    /**
+     * Returns the current type ID for filtering search results.
+     * @returns {string|null} Type ID or null
+     */
     get typeId() {
         return this.props.record.data[this.typeIdFieldName] || null;
     }
 
+    /**
+     * Returns the current subtype ID for filtering search results.
+     * @returns {string|null} Subtype ID or null
+     */
     get subtypeId() {
         return this.props.record.data[this.subtypeIdFieldName] || null;
     }
 
+    /**
+     * Returns the placeholder text for the search input.
+     * @returns {string} Placeholder text
+     */
     get placeholder() {
         return this.props.placeholder || "Sök modell...";
     }
 
+    /**
+     * Closes dropdown when clicking outside the component.
+     * @param {MouseEvent} ev - The click event
+     */
     onDocumentClick(ev) {
         if (this.dropdownRef.el && !this.dropdownRef.el.contains(ev.target)) {
             this.state.isOpen = false;
         }
     }
 
+    /**
+     * Handles input focus event. Opens dropdown if search text exists.
+     */
     onInputFocus() {
-        // Only open dropdown if there's search text
         if (this.state.searchText.length >= 2) {
             this.state.isOpen = true;
         }
     }
 
+    /**
+     * Handles input text changes with debounced API search.
+     * @param {Event} ev - The input event
+     */
     onInputChange(ev) {
         const value = ev.target.value;
         this.state.searchText = value;
         this.state.highlightedIndex = -1;
 
-        // Clear any existing timeout
         if (this.debounceTimeout) {
             clearTimeout(this.debounceTimeout);
         }
 
-        // Only search if at least 2 characters
         if (value.length < 2) {
             this.state.options = [];
             this.state.isOpen = false;
             return;
         }
 
-        // Debounce the search by 300ms
         this.debounceTimeout = setTimeout(() => {
             this.searchModels(value);
         }, 300);
     }
 
+    /**
+     * Searches for component models via the OneCore API.
+     * @param {string} searchText - The search query
+     */
     async searchModels(searchText) {
         this.state.isLoading = true;
         this.state.isOpen = true;
@@ -132,6 +170,10 @@ export class ModelSearch extends Component {
         }
     }
 
+    /**
+     * Handles keyboard navigation (Arrow keys, Enter, Escape, Tab).
+     * @param {KeyboardEvent} ev - The keydown event
+     */
     onInputKeydown(ev) {
         const options = this.state.options;
 
@@ -159,7 +201,6 @@ export class ModelSearch extends Component {
                 if (this.state.highlightedIndex >= 0 && options[this.state.highlightedIndex]) {
                     this.selectOption(options[this.state.highlightedIndex]);
                 } else if (this.state.searchText) {
-                    // Allow manual entry by pressing Enter
                     this.confirmManualEntry();
                 }
                 break;
@@ -167,7 +208,6 @@ export class ModelSearch extends Component {
                 this.state.isOpen = false;
                 break;
             case "Tab":
-                // Allow tab to work normally, but confirm the current search text
                 if (this.state.searchText && !this.state.isOpen) {
                     this.confirmManualEntry();
                 }
@@ -175,24 +215,31 @@ export class ModelSearch extends Component {
         }
     }
 
+    /**
+     * Selects an option and updates the record with the model name.
+     * Triggers the _onchange_form_model handler in the backend.
+     * @param {Object} option - The selected option object
+     */
     async selectOption(option) {
         this.state.isOpen = false;
         this.state.searchText = "";
-
-        // Update the model field with the selected model name
-        // This will trigger the _onchange_form_model handler
         await this.props.record.update({ [this.props.name]: option.modelName });
     }
 
+    /**
+     * Confirms manual entry of a model name not in the autocomplete list.
+     */
     async confirmManualEntry() {
         this.state.isOpen = false;
         const value = this.state.searchText;
         this.state.searchText = "";
-
-        // Update with the manually entered value
         await this.props.record.update({ [this.props.name]: value });
     }
 
+    /**
+     * Clears the search input and selected value.
+     * @param {MouseEvent} ev - The click event
+     */
     async onClearClick(ev) {
         ev.stopPropagation();
         this.state.searchText = "";
@@ -201,8 +248,10 @@ export class ModelSearch extends Component {
         await this.props.record.update({ [this.props.name]: false });
     }
 
+    /**
+     * Handles input blur event. Confirms manual entry after a short delay.
+     */
     onInputBlur() {
-        // Small delay to allow click events on dropdown items to fire first
         setTimeout(() => {
             if (this.state.searchText && !this.state.isOpen) {
                 this.confirmManualEntry();

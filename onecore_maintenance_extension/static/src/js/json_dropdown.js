@@ -44,30 +44,57 @@ export class JsonDropdown extends Component {
         });
     }
 
+    /**
+     * Cleanup: removes document click listener.
+     */
     willUnmount() {
         document.removeEventListener("click", this.onDocumentClick.bind(this));
     }
 
+    /**
+     * Returns the field name containing the JSON options data.
+     * @returns {string} JSON field name
+     */
     get jsonFieldName() {
         return this.props.jsonField || "available_options_json";
     }
 
+    /**
+     * Returns the property name used for option labels.
+     * @returns {string} Label field name
+     */
     get labelFieldName() {
         return this.props.labelField || "name";
     }
 
+    /**
+     * Returns the property name used for option values.
+     * @returns {string} Value field name
+     */
     get valueFieldName() {
         return this.props.valueField || "id";
     }
 
+    /**
+     * Returns the field name for storing the selected ID.
+     * @returns {string|null} ID field name or null
+     */
     get idFieldName() {
         return this.props.idField || null;
     }
 
+    /**
+     * Returns the currently selected display value.
+     * @returns {string} Current value
+     */
     get currentValue() {
         return this.props.record.data[this.props.name] || "";
     }
 
+    /**
+     * Returns the currently selected ID value.
+     * @returns {string} Current ID
+     */
     get currentId() {
         if (this.idFieldName) {
             return this.props.record.data[this.idFieldName] || "";
@@ -75,6 +102,10 @@ export class JsonDropdown extends Component {
         return "";
     }
 
+    /**
+     * Returns options filtered by the current search text.
+     * @returns {Object[]} Filtered options array
+     */
     get filteredOptions() {
         const search = this.state.searchText.toLowerCase();
         if (!search) return this.state.options;
@@ -83,14 +114,25 @@ export class JsonDropdown extends Component {
         );
     }
 
+    /**
+     * Returns the placeholder text for the input.
+     * @returns {string} Placeholder text
+     */
     get placeholder() {
         return this.props.placeholder || "Välj...";
     }
 
+    /**
+     * Loads options from the current props.
+     */
     loadOptions() {
         this.loadOptionsFromProps(this.props);
     }
 
+    /**
+     * Parses JSON data from props and populates the options array.
+     * @param {Object} props - Component props containing record data
+     */
     loadOptionsFromProps(props) {
         const jsonData = props.record.data[this.jsonFieldName];
         if (!jsonData) {
@@ -115,27 +157,41 @@ export class JsonDropdown extends Component {
         }
     }
 
+    /**
+     * Closes dropdown when clicking outside the component.
+     * @param {MouseEvent} ev - The click event
+     */
     onDocumentClick(ev) {
         if (this.dropdownRef.el && !this.dropdownRef.el.contains(ev.target)) {
             this.state.isOpen = false;
         }
     }
 
+    /**
+     * Handles input focus event. Opens dropdown and reloads options.
+     */
     onInputFocus() {
-        // Only auto-open if autoOpen is not explicitly set to false
         if (this.props.autoOpen !== false) {
             this.state.isOpen = true;
         }
         this.state.searchText = "";
-        this.loadOptions(); // Reload in case JSON changed
+        this.loadOptions();
     }
 
+    /**
+     * Handles input text changes for filtering options.
+     * @param {Event} ev - The input event
+     */
     onInputChange(ev) {
         this.state.searchText = ev.target.value;
         this.state.isOpen = true;
         this.state.highlightedIndex = 0;
     }
 
+    /**
+     * Handles keyboard navigation (Arrow keys, Enter, Escape).
+     * @param {KeyboardEvent} ev - The keydown event
+     */
     onInputKeydown(ev) {
         const options = this.filteredOptions;
 
@@ -166,11 +222,14 @@ export class JsonDropdown extends Component {
         }
     }
 
+    /**
+     * Selects an option and updates the record fields.
+     * @param {Object} option - The selected option object
+     */
     async selectOption(option) {
         this.state.isOpen = false;
         this.state.searchText = "";
 
-        // Update both the display field and the ID field
         const updates = { [this.props.name]: option.label };
         if (this.idFieldName) {
             updates[this.idFieldName] = option.value;
@@ -179,6 +238,10 @@ export class JsonDropdown extends Component {
         await this.props.record.update(updates);
     }
 
+    /**
+     * Clears the selected value when the clear button is clicked.
+     * @param {MouseEvent} ev - The click event
+     */
     async onClearClick(ev) {
         ev.stopPropagation();
         const updates = { [this.props.name]: false };
@@ -188,6 +251,9 @@ export class JsonDropdown extends Component {
         await this.props.record.update(updates);
     }
 
+    /**
+     * Toggles the dropdown open/closed state.
+     */
     toggleDropdown() {
         this.state.isOpen = !this.state.isOpen;
         if (this.state.isOpen) {

@@ -333,15 +333,13 @@ class CoreApi:
         response.raise_for_status()
         return response.json()
 
-    def upload_document(self, file_data, component_instance_id, caption="", file_name=None, component_model_id=None):
+    def upload_document(self, file_data, component_instance_id, file_name=None):
         """Upload a document/image to a component instance.
 
         Args:
             file_data: Base64 encoded image string
             component_instance_id: The component instance ID to attach the document to
-            caption: Optional caption/description for the image (not used in new endpoint)
             file_name: Optional filename for the image (auto-generated if not provided)
-            component_model_id: Optional component model ID (not used in new endpoint)
 
         Returns:
             dict: Response from the API
@@ -384,14 +382,13 @@ class CoreApi:
 
         _logger.info(f"upload_document: component_id={component_instance_id}, content_type={content_type}, file_name={file_name}")
 
-        # Build JSON payload - new endpoint structure
+        # Build JSON payload
         payload = {
             "fileData": file_data,
             "fileName": file_name,
             "contentType": content_type
         }
 
-        # Use the new endpoint with component ID in the URL path
         response = self.request("POST", f"/components/{component_instance_id}/upload", json=payload)
         response.raise_for_status()
         return response.json() if response.text else {}
