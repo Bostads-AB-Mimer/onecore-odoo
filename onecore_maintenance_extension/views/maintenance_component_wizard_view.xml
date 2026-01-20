@@ -72,11 +72,30 @@
                                         <field name="specifications" nolabel="1" widget="text"/>
                                         <separator string="Ytterligare information"/>
                                         <field name="additional_information" nolabel="1" widget="text"/>
-                                        <!-- Images if available -->
-                                        <group string="Bilder" col="2" invisible="not image">
-                                            <field name="image" widget="image" readonly="1" nolabel="1" options="{'size': [0, 200]}"/>
-                                            <field name="additional_image" widget="image" readonly="1" nolabel="1" invisible="not additional_image" options="{'size': [0, 200]}"/>
-                                        </group>
+                                        <!-- Images section -->
+                                        <separator string="Bilder"/>
+
+                                        <!-- Existing images from OneCore (read-only gallery with fullscreen) -->
+                                        <field name="has_images" invisible="1"/>
+                                        <div invisible="not has_images" class="mb-3">
+                                            <div class="o_form_label mb-2">Befintliga bilder</div>
+                                            <field name="image_urls_json" widget="image_gallery" readonly="1" nolabel="1"/>
+                                        </div>
+
+                                        <!-- Upload new images section -->
+                                        <separator string="Ladda upp nya bilder"/>
+                                        <div class="row g-3 justify-content-center">
+                                            <div class="col-6 col-md-4">
+                                                <field name="new_image_1" widget="image_upload_button"/>
+                                                <p class="mt-2 mb-0 small text-center">Tryck för att fotografera</p>
+                                                <p class="small text-muted text-center">Ny bild 1</p>
+                                            </div>
+                                            <div class="col-6 col-md-4">
+                                                <field name="new_image_2" widget="image_upload_button" secondary="true"/>
+                                                <p class="mt-2 mb-0 small text-center">Tryck för att fotografera</p>
+                                                <p class="small text-muted text-center">Ny bild 2</p>
+                                            </div>
+                                        </div>
                                     </sheet>
                                     <footer>
                                         <button name="action_save_component" type="object"
@@ -187,12 +206,25 @@
 
                                 <!-- Uploaded images preview (only if images exist) -->
                                 <group string="Uppladdade bilder" col="2" invisible="not temp_image">
-                                    <field name="temp_image" widget="image" readonly="1" nolabel="1"
-                                           options="{'size': [0, 200]}"/>
-                                    <field name="temp_additional_image" widget="image" readonly="1" nolabel="1"
-                                           invisible="not temp_additional_image"
-                                           options="{'size': [0, 200]}"/>
+                                    <field name="temp_image" widget="image_viewer" readonly="1" nolabel="1"/>
+                                    <field name="temp_additional_image" widget="image_viewer" readonly="1" nolabel="1"
+                                           invisible="not temp_additional_image"/>
                                 </group>
+
+                                <!-- Additional image upload section -->
+                                <separator string="Ladda upp fler bilder"/>
+                                <div class="row g-3 justify-content-center">
+                                    <div class="col-6 col-md-4">
+                                        <field name="form_extra_image_1" widget="image_upload_button"/>
+                                        <p class="mt-2 mb-0 small text-center">Tryck för att fotografera</p>
+                                        <p class="small text-muted text-center">Extra bild 1</p>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <field name="form_extra_image_2" widget="image_upload_button" secondary="true"/>
+                                        <p class="mt-2 mb-0 small text-center">Tryck för att fotografera</p>
+                                        <p class="small text-muted text-center">Extra bild 2</p>
+                                    </div>
+                                </div>
 
                                 <!-- Hidden ID fields for API submission -->
                                 <field name="form_room_id" invisible="1"/>

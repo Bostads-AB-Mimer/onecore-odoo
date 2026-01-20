@@ -333,6 +333,83 @@ class CoreApi:
         response.raise_for_status()
         return response.json()
 
+    def upload_document(self, file_data, component_instance_id, caption="", file_name=None, component_model_id=None):
+        """Upload a document/image to a component instance.
+
+        Args:
+            file_data: Base64 encoded image string
+            component_instance_id: The component instance ID to attach the document to
+            caption: Optional caption/description for the image (not used in new endpoint)
+            file_name: Optional filename for the image (auto-generated if not provided)
+            component_model_id: Optional component model ID (not used in new endpoint)
+
+        Returns:
+            dict: Response from the API
+        """
+        import base64 as b64
+
+        # Ensure file_data is a string
+        if isinstance(file_data, bytes):
+            file_data = file_data.decode('utf-8')
+
+        # Detect content type from image magic bytes
+        content_type = 'image/jpeg'  # default
+        try:
+            header_bytes = b64.b64decode(file_data[:32])
+            if header_bytes[:3] == b'\xff\xd8\xff':
+                content_type = 'image/jpeg'
+            elif header_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+                content_type = 'image/png'
+            elif header_bytes[:6] in (b'GIF87a', b'GIF89a'):
+                content_type = 'image/gif'
+            elif header_bytes[:4] == b'RIFF' and len(header_bytes) >= 12 and header_bytes[8:12] == b'WEBP':
+                content_type = 'image/webp'
+        except Exception:
+            pass  # Keep default image/jpeg
+
+        # Generate filename with correct extension based on content type
+        if file_name is None:
+            import uuid
+            from datetime import datetime
+            ext_map = {
+                'image/jpeg': '.jpg',
+                'image/png': '.png',
+                'image/gif': '.gif',
+                'image/webp': '.webp',
+            }
+            extension = ext_map.get(content_type, '.jpg')
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_id = uuid.uuid4().hex[:8]
+            file_name = f"image_{timestamp}_{unique_id}{extension}"
+
+        _logger.info(f"upload_document: component_id={component_instance_id}, content_type={content_type}, file_name={file_name}")
+
+        # Build JSON payload - new endpoint structure
+        payload = {
+            "fileData": file_data,
+            "fileName": file_name,
+            "contentType": content_type
+        }
+
+        # Use the new endpoint with component ID in the URL path
+        response = self.request("POST", f"/components/{component_instance_id}/upload", json=payload)
+        response.raise_for_status()
+        return response.json() if response.text else {}
+
+    def fetch_component_documents(self, component_instance_id):
+        """Fetch documents/images for a component instance.
+
+        Args:
+            component_instance_id: The component instance ID
+
+        Returns:
+            list: List of document objects with fileData, fileName, contentType, etc.
+        """
+        # Using the documents endpoint for fetching component instance documents
+        response = self.request("GET", f"/documents/component-instances/{component_instance_id}")
+        response.raise_for_status()
+        return response.json() if response.text else []
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),

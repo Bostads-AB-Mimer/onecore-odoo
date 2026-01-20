@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.ImageGallery">
+        <div class="image-gallery-container">
+            <!-- 3-column responsive grid for thumbnails -->
+            <t t-if="hasImages">
+                <div class="row g-2">
+                    <t t-foreach="imageUrls" t-as="url" t-key="url_index">
+                        <div class="col-4">
+                            <div class="image-gallery-thumbnail" t-on-click="() => this.openFullscreen(url_index)">
+                                <img
+                                    t-att-src="url"
+                                    t-attf-style="max-height: {{ thumbnailHeight }}px;"
+                                    alt="Klicka för att förstora"
+                                    title="Klicka för att förstora"
+                                />
+                                <div class="image-thumbnail-zoom-icon">
+                                    <i class="fa fa-search-plus"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </div>
+            </t>
+
+            <!-- Placeholder when no images -->
+            <t t-else="">
+                <div class="image-gallery-empty text-muted text-center p-3">
+                    <i class="fa fa-image fa-2x mb-2 d-block"/>
+                    <span>Inga bilder</span>
+                </div>
+            </t>
+
+            <!-- Fullscreen overlay with navigation -->
+            <t t-if="state.isFullscreen">
+                <div class="image-fullscreen-overlay" t-on-click="onOverlayClick">
+                    <!-- Close button -->
+                    <button
+                        type="button"
+                        class="image-close-btn"
+                        t-on-click="closeFullscreen"
+                        title="Stäng (Esc)"
+                    >
+                        <i class="fa fa-times"/>
+                    </button>
+
+                    <!-- Image counter -->
+                    <t t-if="canNavigate">
+                        <div class="image-counter">
+                            <t t-esc="imageCounter"/>
+                        </div>
+                    </t>
+
+                    <!-- Previous button -->
+                    <t t-if="canNavigate">
+                        <button
+                            type="button"
+                            class="image-nav-btn image-nav-prev"
+                            t-on-click="onPrevClick"
+                            title="Föregående"
+                        >
+                            <i class="fa fa-chevron-left"/>
+                        </button>
+                    </t>
+
+                    <!-- Fullscreen image -->
+                    <div class="image-fullscreen-content">
+                        <img
+                            t-att-src="currentFullscreenUrl"
+                            t-on-click="onImageClick"
+                            alt="Fullskärmbild"
+                        />
+                    </div>
+
+                    <!-- Next button -->
+                    <t t-if="canNavigate">
+                        <button
+                            type="button"
+                            class="image-nav-btn image-nav-next"
+                            t-on-click="onNextClick"
+                            title="Nästa"
+                        >
+                            <i class="fa fa-chevron-right"/>
+                        </button>
+                    </t>
+                </div>
+            </t>
+        </div>
+    </t>
+
+</templates>
