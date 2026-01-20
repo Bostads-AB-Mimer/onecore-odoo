@@ -58,6 +58,10 @@ export class ImageGallery extends Component {
         );
     }
 
+    /**
+     * Parses the JSON field value and returns an array of valid image URLs.
+     * @returns {string[]} Array of image URLs
+     */
     get imageUrls() {
         const value = this.props.record.data[this.props.name];
         if (!value) return [];
@@ -70,14 +74,26 @@ export class ImageGallery extends Component {
         }
     }
 
+    /**
+     * Checks if the gallery has any images to display.
+     * @returns {boolean} True if there are images
+     */
     get hasImages() {
         return this.imageUrls.length > 0;
     }
 
+    /**
+     * Returns the configured thumbnail height in pixels.
+     * @returns {number} Thumbnail height (default: 100)
+     */
     get thumbnailHeight() {
         return this.props.thumbnailSize || 100;
     }
 
+    /**
+     * Returns the URL of the currently displayed fullscreen image.
+     * @returns {string|null} Current image URL or null
+     */
     get currentFullscreenUrl() {
         const urls = this.imageUrls;
         if (urls.length > 0 && this.state.fullscreenIndex < urls.length) {
@@ -86,14 +102,26 @@ export class ImageGallery extends Component {
         return null;
     }
 
+    /**
+     * Checks if navigation between images is possible (more than one image).
+     * @returns {boolean} True if navigation is available
+     */
     get canNavigate() {
         return this.imageUrls.length > 1;
     }
 
+    /**
+     * Returns a formatted string showing the current image position.
+     * @returns {string} Image counter (e.g., "1 / 5")
+     */
     get imageCounter() {
         return `${this.state.fullscreenIndex + 1} / ${this.imageUrls.length}`;
     }
 
+    /**
+     * Opens fullscreen view for the image at the given index.
+     * @param {number} index - The index of the image to display
+     */
     openFullscreen(index) {
         if (this.hasImages) {
             this.state.fullscreenIndex = index;
@@ -101,10 +129,16 @@ export class ImageGallery extends Component {
         }
     }
 
+    /**
+     * Closes the fullscreen view.
+     */
     closeFullscreen() {
         this.state.isFullscreen = false;
     }
 
+    /**
+     * Navigates to the previous image in the gallery (wraps around).
+     */
     previousImage() {
         const urls = this.imageUrls;
         if (urls.length > 1) {
@@ -112,6 +146,9 @@ export class ImageGallery extends Component {
         }
     }
 
+    /**
+     * Navigates to the next image in the gallery (wraps around).
+     */
     nextImage() {
         const urls = this.imageUrls;
         if (urls.length > 1) {
@@ -119,23 +156,39 @@ export class ImageGallery extends Component {
         }
     }
 
+    /**
+     * Handles click on the fullscreen overlay background.
+     * Closes fullscreen when clicking outside the image.
+     * @param {MouseEvent} ev - The click event
+     */
     onOverlayClick(ev) {
-        // Close when clicking on the overlay background (not the image or controls)
         if (ev.target.classList.contains("image-fullscreen-overlay")) {
             this.closeFullscreen();
         }
     }
 
+    /**
+     * Handles click on the fullscreen image itself.
+     * Prevents the overlay click handler from closing the view.
+     * @param {MouseEvent} ev - The click event
+     */
     onImageClick(ev) {
-        // Prevent closing when clicking on the image itself
         ev.stopPropagation();
     }
 
+    /**
+     * Handles click on the previous button.
+     * @param {MouseEvent} ev - The click event
+     */
     onPrevClick(ev) {
         ev.stopPropagation();
         this.previousImage();
     }
 
+    /**
+     * Handles click on the next button.
+     * @param {MouseEvent} ev - The click event
+     */
     onNextClick(ev) {
         ev.stopPropagation();
         this.nextImage();

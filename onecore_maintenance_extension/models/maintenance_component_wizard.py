@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """Wizard for creating and managing maintenance components."""
 
+import json
+import logging
+
 from odoo import models, fields, api, exceptions
 
 from .services.component_hierarchy_service import ComponentHierarchyService
 from .services.component_onecore_service import ComponentOneCoreService
 from .services.component_ai_analysis_service import ComponentAIAnalysisService
-
-import json
-import logging
+from .utils.depreciation import compute_linear_depreciation
 
 _logger = logging.getLogger(__name__)
 
@@ -121,26 +122,12 @@ class MaintenanceComponentWizard(models.TransientModel):
     @api.depends('form_current_price', 'form_economic_lifespan', 'form_installation_date')
     def _compute_current_value(self):
         """Compute current value using linear depreciation."""
-        from dateutil.relativedelta import relativedelta
-        today = fields.Date.today()
         for record in self:
-            if (record.form_current_price and
-                record.form_economic_lifespan and
-                record.form_installation_date):
-                delta = relativedelta(today, record.form_installation_date)
-                months_since = delta.years * 12 + delta.months
-                if record.form_economic_lifespan > 0:
-                    depreciation = (
-                        (record.form_current_price / record.form_economic_lifespan)
-                        * months_since
-                    )
-                    record.form_current_value = max(
-                        0, record.form_current_price - depreciation
-                    )
-                else:
-                    record.form_current_value = record.form_current_price
-            else:
-                record.form_current_value = record.form_current_price or 0
+            record.form_current_value = compute_linear_depreciation(
+                purchase_price=record.form_current_price,
+                economic_lifespan_months=record.form_economic_lifespan,
+                installation_date=record.form_installation_date,
+            )
 
     # ==================== Onchange Handlers ====================
 

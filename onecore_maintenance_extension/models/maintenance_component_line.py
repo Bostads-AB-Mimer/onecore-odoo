@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+from datetime import datetime, timezone
 
 from odoo import models, fields, api
 from odoo.exceptions import UserError
+
 from ...onecore_api import core_api
 from .services.component_onecore_service import ComponentOneCoreService
+from .utils.depreciation import compute_linear_depreciation
 
 _logger = logging.getLogger(__name__)
 
@@ -94,19 +97,12 @@ class MaintenanceComponentLine(models.TransientModel):
     @api.depends('price_at_purchase', 'economic_lifespan', 'installation_date')
     def _compute_current_value(self):
         """Compute current value using linear depreciation."""
-        from dateutil.relativedelta import relativedelta
-        today = fields.Date.today()
         for record in self:
-            if record.price_at_purchase and record.economic_lifespan and record.installation_date:
-                delta = relativedelta(today, record.installation_date)
-                months_since = delta.years * 12 + delta.months
-                if record.economic_lifespan > 0:
-                    depreciation = (record.price_at_purchase / record.economic_lifespan) * months_since
-                    record.current_value = max(0, record.price_at_purchase - depreciation)
-                else:
-                    record.current_value = record.price_at_purchase
-            else:
-                record.current_value = record.price_at_purchase or 0
+            record.current_value = compute_linear_depreciation(
+                purchase_price=record.price_at_purchase,
+                economic_lifespan_months=record.economic_lifespan,
+                installation_date=record.installation_date,
+            )
 
     @api.depends('image_urls_json')
     def _compute_has_images(self):
@@ -265,7 +261,6 @@ class MaintenanceComponentLine(models.TransientModel):
         api = core_api.CoreApi(self.env)
 
         # Build payload with deinstallationDate
-        from datetime import datetime, timezone
         installation_payload = {
             "componentId": self.onecore_component_id,
             "spaceId": self.room_id,

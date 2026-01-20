@@ -23,21 +23,35 @@ export class ImageUploadButton extends Component {
         this.updatePreview();
     }
 
+    /**
+     * Checks if an image has been uploaded.
+     * @returns {boolean} True if image data exists
+     */
     get hasImage() {
         return Boolean(this.props.record.data[this.props.name]);
     }
 
+    /**
+     * Constructs a data URL from the base64 image data.
+     * @returns {string|null} Data URL for the image or null
+     */
     get imageUrl() {
         const value = this.props.record.data[this.props.name];
         if (!value) return null;
-        // Binary field value is base64 string
         return `data:image/jpeg;base64,${value}`;
     }
 
+    /**
+     * Returns CSS class for secondary button styling.
+     * @returns {string} CSS class name or empty string
+     */
     get buttonClass() {
         return this.props.secondary ? "upload-btn-secondary" : "";
     }
 
+    /**
+     * Updates the preview URL based on current image state.
+     */
     updatePreview() {
         if (this.hasImage) {
             this.state.previewUrl = this.imageUrl;
@@ -46,31 +60,37 @@ export class ImageUploadButton extends Component {
         }
     }
 
+    /**
+     * Triggers the hidden file input when the button is clicked.
+     */
     onButtonClick() {
         this.fileInputRef.el?.click();
     }
 
+    /**
+     * Handles file selection from the file input.
+     * Reads the file as base64 and updates the record.
+     * @param {Event} ev - The change event from file input
+     */
     async onFileChange(ev) {
         const file = ev.target.files?.[0];
         if (!file) return;
 
-        // Read file as base64
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const base64 = e.target.result.split(",")[1]; // Remove data:image/...;base64, prefix
-
-            // Update the field value
+            const base64 = e.target.result.split(",")[1];
             await this.props.record.update({ [this.props.name]: base64 });
-
-            // Update preview
             this.state.previewUrl = e.target.result;
         };
         reader.readAsDataURL(file);
 
-        // Reset input so same file can be selected again
         ev.target.value = "";
     }
 
+    /**
+     * Clears the uploaded image when the clear button is clicked.
+     * @param {MouseEvent} ev - The click event
+     */
     async onClearClick(ev) {
         ev.stopPropagation();
         await this.props.record.update({ [this.props.name]: false });
