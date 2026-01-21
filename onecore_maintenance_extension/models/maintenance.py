@@ -659,3 +659,22 @@ class OneCoreMaintenanceRequest(
             "url": url,
             "target": "self",
         }
+
+    def open_component_wizard(self):
+        self.ensure_one()
+        # Create wizard explicitly so it has a real ID before loading components
+        wizard = self.env['maintenance.component.wizard'].with_context(
+            default_maintenance_request_id=self.id
+        ).create({
+            'maintenance_request_id': self.id,
+        })
+        return {
+            "name": "Uppdatera/lägg till Komponent",
+            "type": "ir.actions.act_window",
+            "res_model": "maintenance.component.wizard",
+            "res_id": wizard.id,
+            "view_mode": "form",
+            "view_type": "form",
+            "views": [(False, "form")],
+            "target": "new",
+        }
