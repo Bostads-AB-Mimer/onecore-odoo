@@ -189,19 +189,9 @@
 
                             <!-- Success: Show AI results or manual form -->
                             <div invisible="api_error">
-                                <!-- Confidence indicator (only if AI suggested) -->
+                                <!-- AI info message (only if AI suggested) -->
                                 <div class="alert alert-info mb-3" invisible="not form_ai_suggested">
-                                    <strong>AI-säkerhet: </strong>
-                                    <field name="form_confidence" widget="progressbar" nolabel="1" class="d-inline-block" style="width: 200px;"/>
-                                    <span invisible="form_confidence &lt; 0.8" class="text-success ms-2">
-                                        <i class="fa fa-check-circle"/> Hög säkerhet
-                                    </span>
-                                    <span invisible="form_confidence >= 0.8 or form_confidence &lt; 0.5" class="text-warning ms-2">
-                                        <i class="fa fa-warning"/> Medel säkerhet - kontrollera noggrant
-                                    </span>
-                                    <span invisible="form_confidence >= 0.5" class="text-danger ms-2">
-                                        <i class="fa fa-times-circle"/> Låg säkerhet - kontrollera noggrant
-                                    </span>
+                                    <i class="fa fa-info-circle"/> AI har gjort sitt bästa för att fylla i rätt data - kontrollera att uppgifterna stämmer.
                                 </div>
 
                                 <!-- Uploaded images preview (only if images exist) -->
