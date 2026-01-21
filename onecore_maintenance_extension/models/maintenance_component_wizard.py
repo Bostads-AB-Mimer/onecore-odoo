@@ -407,7 +407,14 @@ class MaintenanceComponentWizard(models.TransientModel):
         """Clear form and return to upload state."""
         self.ensure_one()
         self._reset_form_fields()
-        return self._return_wizard_action()
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'maintenance.component.wizard',
+            'res_id': self.id,
+            'view_mode': 'form',
+            'target': 'new',
+            'context': dict(self.env.context),
+        }
 
     def action_retry_upload(self):
         """Return to upload state after error."""
