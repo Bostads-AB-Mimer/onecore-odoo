@@ -12,6 +12,8 @@ _logger = logging.getLogger(__name__)
 
 # Space type caption for apartments
 APARTMENT_SPACE_CAPTION = 'Lägenhet'
+# Space type for property objects (rooms)
+PROPERTY_OBJECT_SPACE_TYPE = 'PropertyObject'
 
 
 class ComponentOneCoreService:
@@ -80,7 +82,7 @@ class ComponentOneCoreService:
             "depreciationPriceAtPurchase": form_data.get('depreciation_price') or 0,
             "economicLifespan": form_data.get('economic_lifespan') or 0,
             "spaceId": room_id,
-            "spaceType": "PropertyObject",
+            "spaceType": PROPERTY_OBJECT_SPACE_TYPE,
             "installationDate": installation_date_iso,
             # Conditionally required for new models
             "manufacturer": form_data.get('manufacturer') or "Unknown",

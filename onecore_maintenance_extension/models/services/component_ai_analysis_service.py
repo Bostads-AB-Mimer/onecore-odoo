@@ -256,19 +256,18 @@ class ComponentAIAnalysisService:
         return values
 
     def _extract_error_detail(self, exception):
-        """Extract detailed error message from exception.
+        """Log detailed error and return user-friendly message.
 
         Args:
             exception: The exception that occurred
 
         Returns:
-            str: Error detail message
+            str: User-friendly error message
         """
-        error_detail = str(exception)
+        _logger.error(f"Exception details: {str(exception)}")
         if hasattr(exception, 'response') and exception.response is not None:
             try:
-                error_detail = f"{str(exception)}\n\nAPI Response: {exception.response.text}"
                 _logger.error(f"API Response body: {exception.response.text}")
             except Exception:
                 pass
-        return error_detail
+        return "Ett tekniskt fel uppstod"

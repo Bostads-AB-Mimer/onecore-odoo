@@ -288,6 +288,14 @@ class MaintenanceComponentWizard(models.TransientModel):
         if not self.form_room_id:
             raise exceptions.UserError("Du måste välja ett rum för komponenten.")
 
+        if not self.form_subtype_id:
+            raise exceptions.UserError(
+                "Undertyp saknas. Undertypen behöver skapas upp i ONEcore."
+            )
+
+        if not self.form_serial_number:
+            raise exceptions.UserError("Serienummer saknas.")
+
         form_data = self._get_form_data()
         service = ComponentOneCoreService(self.env)
 
@@ -320,7 +328,17 @@ class MaintenanceComponentWizard(models.TransientModel):
                 except Exception:
                     pass
             _logger.error(f"Failed to create component in OneCore: {error_msg}")
-            raise exceptions.UserError(f"Kunde inte skapa komponenten: {error_msg}")
+
+            # Check if error is related to missing/invalid subtype
+            if 'componentSubtypeId' in error_msg:
+                raise exceptions.UserError(
+                    "Undertyp saknas. Undertypen behöver skapas upp i ONEcore."
+                )
+
+            raise exceptions.UserError(
+                "Kunde inte skapa komponenten. "
+                "Försök igen eller kontakta support om problemet kvarstår."
+            )
 
     def _extract_component_instance_id(self, result):
         """Extract the component instance ID from the create_component result.

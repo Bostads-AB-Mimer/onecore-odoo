@@ -7,7 +7,10 @@ from odoo import models, fields, api
 from odoo.exceptions import UserError
 
 from ...onecore_api import core_api
-from .services.component_onecore_service import ComponentOneCoreService
+from .services.component_onecore_service import (
+    ComponentOneCoreService,
+    PROPERTY_OBJECT_SPACE_TYPE,
+)
 from .utils.depreciation import compute_linear_depreciation
 
 _logger = logging.getLogger(__name__)
@@ -169,7 +172,7 @@ class MaintenanceComponentLine(models.TransientModel):
                 installation_payload = {
                     "componentId": self.onecore_component_id,
                     "spaceId": self.room_id,
-                    "spaceType": "PropertyObject",  # PascalCase as per API spec
+                    "spaceType": PROPERTY_OBJECT_SPACE_TYPE,
                 }
                 api.update_component_installation(self.installation_id, installation_payload)
                 _logger.info(f"Successfully updated installation {self.installation_id} to room {self.room_id}")
@@ -264,7 +267,7 @@ class MaintenanceComponentLine(models.TransientModel):
         installation_payload = {
             "componentId": self.onecore_component_id,
             "spaceId": self.room_id,
-            "spaceType": "PropertyObject",
+            "spaceType": PROPERTY_OBJECT_SPACE_TYPE,
             "deinstallationDate": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
