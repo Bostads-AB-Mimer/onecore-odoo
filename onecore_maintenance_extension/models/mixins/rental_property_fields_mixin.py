@@ -16,7 +16,7 @@ class RentalPropertyFieldsMixin(models.AbstractModel):
     entrance = fields.Char("Ingång", related="rental_property_id.entrance", depends=["rental_property_id"])
     floor = fields.Char("Våning", related="rental_property_id.floor", depends=["rental_property_id"])
     has_elevator = fields.Char("Hiss", related="rental_property_id.has_elevator", depends=["rental_property_id"])
-    estate_code = fields.Char("Fastigehtsnummer", related="rental_property_id.estate_code", depends=["rental_property_id"])
+    estate_code = fields.Char("Fastighetskod", related="rental_property_id.estate_code", depends=["rental_property_id"])
     estate = fields.Char("Fastighet", related="rental_property_id.estate", depends=["rental_property_id"])
     building_code = fields.Char("Kvarterskod", related="rental_property_id.building_code", depends=["rental_property_id"])
     building = fields.Char("Kvarter", related="rental_property_id.building", depends=["rental_property_id"])

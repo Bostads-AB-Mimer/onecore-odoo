@@ -16,7 +16,7 @@ class PropertyFieldsMixin(models.AbstractModel):
         depends=["property_id"],
     )
     property_code = fields.Char(
-        "Fastighetsnummer",
+        "Fastighetskod",
         related="property_id.code",
         depends=["property_id"],
     )

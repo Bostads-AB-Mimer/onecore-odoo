@@ -12,7 +12,7 @@ class ParkingSpaceFieldsMixin(models.AbstractModel):
     parking_space_type_name = fields.Char("P-platstyp", related="parking_space_id.type_name", depends=["parking_space_id"])
     parking_space_type_code = fields.Char("P-platstypkod", related="parking_space_id.type_code", depends=["parking_space_id"])
     parking_space_number = fields.Char("P-platsnummer", related="parking_space_id.number", depends=["parking_space_id"])
-    parking_space_property_code = fields.Char("P-plats Fastighetsnummer", related="parking_space_id.property_code", depends=["parking_space_id"])
+    parking_space_property_code = fields.Char("P-plats Fastighetskod", related="parking_space_id.property_code", depends=["parking_space_id"])
     parking_space_property_name = fields.Char("P-plats Fastighet", related="parking_space_id.property_name", depends=["parking_space_id"])
     parking_space_address = fields.Char("P-plats Adress", related="parking_space_id.address", depends=["parking_space_id"])
     parking_space_postal_code = fields.Char("P-plats Postnummer", related="parking_space_id.postal_code", depends=["parking_space_id"])

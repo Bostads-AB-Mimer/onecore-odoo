@@ -1428,12 +1428,12 @@ msgstr "Programvara"
 #: model:ir.model.fields,field_description:maintenance.field_maintenance_request__stage_id
 #: model_terms:ir.ui.view,arch_db:maintenance.hr_equipment_request_view_search
 msgid "Stage"
-msgstr "Status"
+msgstr "Läge"
 
 #. module: maintenance
 #: model:ir.actions.act_window,name:maintenance.hr_equipment_stage_action
 msgid "Stages"
-msgstr "Status"
+msgstr "Läge"
 
 #. module: maintenance
 #: model:mail.message.subtype,name:maintenance.mt_req_status
