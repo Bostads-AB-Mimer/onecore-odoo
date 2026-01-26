@@ -261,17 +261,17 @@ class MaintenanceComponentLine(models.TransientModel):
         api = core_api.CoreApi(self.env)
 
         # Build payload with deinstallationDate
-        installation_payload = {
+        uninstallation_payload = {
             "componentId": self.onecore_component_id,
             "spaceId": self.room_id,
             "spaceType": PROPERTY_OBJECT_SPACE_TYPE,
             "deinstallationDate": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
-        _logger.info(f"Uninstalling component {self.onecore_component_id} with payload: {installation_payload}")
+        _logger.info(f"Uninstalling component {self.onecore_component_id} with payload: {uninstallation_payload}")
 
         try:
-            api.update_component_installation(self.installation_id, installation_payload)
+            api.update_component_installation(self.installation_id, uninstallation_payload)
             _logger.info(f"Successfully uninstalled component {self.onecore_component_id}")
         except Exception as e:
             _logger.error(f"Failed to uninstall component: {e}")
