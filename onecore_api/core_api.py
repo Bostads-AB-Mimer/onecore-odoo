@@ -345,23 +345,19 @@ class CoreApi:
             dict: Response from the API
         """
         import base64 as b64
+        import filetype
 
         # Ensure file_data is a string
         if isinstance(file_data, bytes):
             file_data = file_data.decode('utf-8')
 
-        # Detect content type from image magic bytes
+        # Detect content type from image header bytes
         content_type = 'image/jpeg'  # default
         try:
-            header_bytes = b64.b64decode(file_data[:32])
-            if header_bytes[:3] == b'\xff\xd8\xff':
-                content_type = 'image/jpeg'
-            elif header_bytes[:8] == b'\x89PNG\r\n\x1a\n':
-                content_type = 'image/png'
-            elif header_bytes[:6] in (b'GIF87a', b'GIF89a'):
-                content_type = 'image/gif'
-            elif header_bytes[:4] == b'RIFF' and len(header_bytes) >= 12 and header_bytes[8:12] == b'WEBP':
-                content_type = 'image/webp'
+            header_bytes = b64.b64decode(file_data[:352])
+            kind = filetype.guess(header_bytes)
+            if kind is not None:
+                content_type = kind.mime
         except Exception:
             pass  # Keep default image/jpeg
 

@@ -7,6 +7,7 @@
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
     "depends": ["maintenance", "onecore_ui"],
+    "external_dependencies": {"python": ["filetype"]},
     "summary": "Extends the maintenance module with ONECore features.",
     "website": "https://www.odoo.com/app/maintenance",
     "data": [

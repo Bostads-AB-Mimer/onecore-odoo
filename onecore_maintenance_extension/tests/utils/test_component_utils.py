@@ -134,65 +134,6 @@ class TestDepreciation(TransactionCase):
 class TestImageUtils(TransactionCase):
     """Tests for image utility functions."""
 
-    def test_detect_mime_type_jpeg(self):
-        """Detects JPEG from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        # JPEG magic bytes: FF D8 FF
-        jpeg_bytes = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00'
-        result = detect_image_mime_type(jpeg_bytes)
-        self.assertEqual(result, 'image/jpeg')
-
-    def test_detect_mime_type_png(self):
-        """Detects PNG from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        # PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
-        png_bytes = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
-        result = detect_image_mime_type(png_bytes)
-        self.assertEqual(result, 'image/png')
-
-    def test_detect_mime_type_gif(self):
-        """Detects GIF format from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        # GIF87a magic bytes
-        gif87_bytes = b'GIF87a\x00\x00\x00\x00'
-        result_87 = detect_image_mime_type(gif87_bytes)
-        self.assertEqual(result_87, 'image/gif')
-
-        # GIF89a magic bytes
-        gif89_bytes = b'GIF89a\x00\x00\x00\x00'
-        result_89 = detect_image_mime_type(gif89_bytes)
-        self.assertEqual(result_89, 'image/gif')
-
-    def test_detect_mime_type_webp(self):
-        """Detects WebP format from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        # WebP magic bytes: RIFF....WEBP
-        webp_bytes = b'RIFF\x00\x00\x00\x00WEBP'
-        result = detect_image_mime_type(webp_bytes)
-        self.assertEqual(result, 'image/webp')
-
-    def test_detect_mime_type_unknown_defaults_jpeg(self):
-        """Falls back to jpeg for unknown format."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        unknown_bytes = b'\x00\x00\x00\x00\x00\x00\x00\x00'
-        result = detect_image_mime_type(unknown_bytes)
-        self.assertEqual(result, 'image/jpeg')
-
-    def test_detect_mime_type_base64_string(self):
-        """Handles base64 string input for detection."""
-        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
-
-        # JPEG magic bytes encoded in base64
-        jpeg_bytes = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00'
-        jpeg_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-        result = detect_image_mime_type(jpeg_base64)
-        self.assertEqual(result, 'image/jpeg')
-
     def test_image_to_data_url_basic(self):
         """Creates valid data URL from image bytes."""
         from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url

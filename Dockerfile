@@ -1,4 +1,4 @@
 FROM bitnamilegacy/odoo:17.0.20240305-debian-12-r0
 
 # Install testing dependencies
-RUN /opt/bitnami/odoo/venv/bin/pip3 install python-dotenv faker
+RUN /opt/bitnami/odoo/venv/bin/pip3 install python-dotenv faker filetype

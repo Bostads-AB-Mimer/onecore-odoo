@@ -8,6 +8,8 @@ import base64
 import io
 import logging
 
+import filetype
+
 try:
     from PIL import Image
     HAS_PIL = True
@@ -18,12 +20,14 @@ except ImportError:
 MAX_IMAGE_DIMENSION = 1920
 # JPEG quality for compressed images
 JPEG_QUALITY = 85
+# Default MIME type when detection fails
+DEFAULT_MIME_TYPE = 'image/jpeg'
 
 _logger = logging.getLogger(__name__)
 
 
 def detect_image_mime_type(image_data):
-    """Detect MIME type from image magic bytes.
+    """Detect MIME type from image data using the filetype library.
 
     Args:
         image_data: Either base64 string or raw bytes
@@ -31,25 +35,18 @@ def detect_image_mime_type(image_data):
     Returns:
         str: MIME type string (e.g., 'image/jpeg', 'image/png')
     """
-    # If it's a base64 string, decode first few bytes for detection
     if isinstance(image_data, str):
         try:
-            header_bytes = base64.b64decode(image_data[:32])
+            raw_bytes = base64.b64decode(image_data[:352])
         except Exception:
-            return 'image/jpeg'
+            return DEFAULT_MIME_TYPE
     else:
-        header_bytes = image_data[:16] if len(image_data) >= 16 else image_data
+        raw_bytes = image_data[:261] if len(image_data) >= 261 else image_data
 
-    # Check magic bytes for common image formats
-    if header_bytes[:3] == b'\xff\xd8\xff':
-        return 'image/jpeg'
-    elif header_bytes[:8] == b'\x89PNG\r\n\x1a\n':
-        return 'image/png'
-    elif header_bytes[:6] in (b'GIF87a', b'GIF89a'):
-        return 'image/gif'
-    elif header_bytes[:4] == b'RIFF' and len(header_bytes) >= 12 and header_bytes[8:12] == b'WEBP':
-        return 'image/webp'
-    return 'image/jpeg'  # fallback
+    kind = filetype.guess(raw_bytes)
+    if kind is not None:
+        return kind.mime
+    return DEFAULT_MIME_TYPE
 
 
 def compress_image(image_base64, logger=None):
