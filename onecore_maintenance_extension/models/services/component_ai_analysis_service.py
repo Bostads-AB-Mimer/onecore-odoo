@@ -3,7 +3,7 @@
 import logging
 
 from ....onecore_api import core_api
-from ..image_utils import image_to_data_url
+from ..utils.image_utils import image_to_data_url
 from .component_hierarchy_service import ComponentHierarchyService
 
 _logger = logging.getLogger(__name__)

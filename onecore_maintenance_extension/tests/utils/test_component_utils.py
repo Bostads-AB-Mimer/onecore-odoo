@@ -136,7 +136,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_jpeg(self):
         """Detects JPEG from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         # JPEG magic bytes: FF D8 FF
         jpeg_bytes = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00'
@@ -145,7 +145,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_png(self):
         """Detects PNG from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         # PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
         png_bytes = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
@@ -154,7 +154,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_gif(self):
         """Detects GIF format from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         # GIF87a magic bytes
         gif87_bytes = b'GIF87a\x00\x00\x00\x00'
@@ -168,7 +168,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_webp(self):
         """Detects WebP format from magic bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         # WebP magic bytes: RIFF....WEBP
         webp_bytes = b'RIFF\x00\x00\x00\x00WEBP'
@@ -177,7 +177,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_unknown_defaults_jpeg(self):
         """Falls back to jpeg for unknown format."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         unknown_bytes = b'\x00\x00\x00\x00\x00\x00\x00\x00'
         result = detect_image_mime_type(unknown_bytes)
@@ -185,7 +185,7 @@ class TestImageUtils(TransactionCase):
 
     def test_detect_mime_type_base64_string(self):
         """Handles base64 string input for detection."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import detect_image_mime_type
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import detect_image_mime_type
 
         # JPEG magic bytes encoded in base64
         jpeg_bytes = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00'
@@ -195,7 +195,7 @@ class TestImageUtils(TransactionCase):
 
     def test_image_to_data_url_basic(self):
         """Creates valid data URL from image bytes."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         # Simple test with small image-like data
         test_data = b'\xff\xd8\xff\xe0test_image_data'
@@ -210,14 +210,14 @@ class TestImageUtils(TransactionCase):
 
     def test_image_to_data_url_none_returns_none(self):
         """Returns None for None input."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         result = image_to_data_url(None)
         self.assertIsNone(result)
 
     def test_image_to_data_url_empty_returns_none(self):
         """Returns None for empty input."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         result = image_to_data_url(b'')
         self.assertIsNone(result)
@@ -227,7 +227,7 @@ class TestImageUtils(TransactionCase):
 
     def test_image_to_data_url_handles_bytes(self):
         """Accepts raw bytes input."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         # Raw bytes (not base64)
         raw_bytes = b'\xff\xd8\xff\xe0raw_image_bytes'
@@ -239,7 +239,7 @@ class TestImageUtils(TransactionCase):
 
     def test_image_to_data_url_handles_base64_string(self):
         """Accepts base64 string input."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         test_data = b'\xff\xd8\xff\xe0test_data'
         base64_string = base64.b64encode(test_data).decode('utf-8')
@@ -251,7 +251,7 @@ class TestImageUtils(TransactionCase):
 
     def test_image_to_data_url_mime_override(self):
         """Uses provided mime_type when specified."""
-        from odoo.addons.onecore_maintenance_extension.models.image_utils import image_to_data_url
+        from odoo.addons.onecore_maintenance_extension.models.utils.image_utils import image_to_data_url
 
         test_data = b'test_data'
         base64_string = base64.b64encode(test_data).decode('utf-8')
@@ -267,7 +267,7 @@ class TestImageUtils(TransactionCase):
 
     def test_compress_image_no_pil(self):
         """Returns original when PIL is unavailable."""
-        from odoo.addons.onecore_maintenance_extension.models import image_utils
+        from odoo.addons.onecore_maintenance_extension.models.utils import image_utils
 
         # Temporarily disable PIL
         original_has_pil = image_utils.HAS_PIL
