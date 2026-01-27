@@ -1,12 +1,13 @@
 """Utility functions for tests."""
 from faker import Faker
-from .fake_providers import MaintenanceProvider
+from .fake_providers import MaintenanceProvider, ComponentProvider
 
 
 def setup_faker():
     """Setup faker with Swedish locale and maintenance provider."""
     fake = Faker("sv_SE")
     fake.add_provider(MaintenanceProvider)
+    fake.add_provider(ComponentProvider)
     return fake
 
 

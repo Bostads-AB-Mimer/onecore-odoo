@@ -291,3 +291,235 @@ class MaintenanceProvider(BaseProvider):
     def facility_area(self):
         """Generate facility area."""
         return f"{self.random_int(20, 500)} m²"
+
+
+class ComponentProvider(BaseProvider):
+    """Custom Faker provider for component-related mock data."""
+
+    model_names = [
+        "Electrolux EW6F5248G4",
+        "Bosch SMV46CX01E",
+        "Siemens WM14T46SNL",
+        "Miele G 5210 SCi",
+        "Samsung WW90T534DAW",
+        "LG F4WV710P1E",
+        "Whirlpool TDLR 7220SS",
+        "AEG L6FBG841CA",
+    ]
+
+    manufacturers = [
+        "Electrolux",
+        "Bosch",
+        "Siemens",
+        "Miele",
+        "Samsung",
+        "LG",
+        "Whirlpool",
+        "AEG",
+    ]
+
+    category_names = [
+        "Kök",
+        "Badrum",
+        "Tvättstuga",
+        "Vardagsrum",
+        "Sovrum",
+        "Hall",
+    ]
+
+    type_names = [
+        "Vitvaror",
+        "Sanitet",
+        "Belysning",
+        "Golv",
+        "Innerdörrar",
+        "Garderober",
+    ]
+
+    subtype_names = [
+        "Tvättmaskin",
+        "Diskmaskin",
+        "Kyl/Frys",
+        "Spis",
+        "Toalett",
+        "Handfat",
+        "Duschblandare",
+        "Badkar",
+    ]
+
+    conditions = ["NEW", "USED"]
+
+    ncs_codes = [
+        "S 1000-N",
+        "S 0500-N",
+        "S 2000-N",
+        "S 1500-Y20R",
+        "S 0300-N",
+    ]
+
+    def component_model_name(self):
+        """Generate component model name."""
+        return self.random_element(self.model_names)
+
+    def component_manufacturer(self):
+        """Generate component manufacturer."""
+        return self.random_element(self.manufacturers)
+
+    def component_serial_number(self):
+        """Generate component serial number."""
+        return self.bothify(text="SN#####")
+
+    def component_category_name(self):
+        """Generate component category name."""
+        return self.random_element(self.category_names)
+
+    def component_type_name(self):
+        """Generate component type name."""
+        return self.random_element(self.type_names)
+
+    def component_subtype_name(self):
+        """Generate component subtype name."""
+        return self.random_element(self.subtype_names)
+
+    def component_category_id(self):
+        """Generate component category ID."""
+        return f"cat-{self.random_int(100, 999)}"
+
+    def component_type_id(self):
+        """Generate component type ID."""
+        return f"type-{self.random_int(100, 999)}"
+
+    def component_subtype_id(self):
+        """Generate component subtype ID."""
+        return f"sub-{self.random_int(100, 999)}"
+
+    def component_instance_id(self):
+        """Generate component instance ID."""
+        return f"comp-{self.random_int(100, 999)}"
+
+    def component_installation_id(self):
+        """Generate component installation ID."""
+        return f"inst-{self.random_int(100, 999)}"
+
+    def component_room_id(self):
+        """Generate room ID."""
+        return f"room-{self.random_int(100, 999)}"
+
+    def component_confidence(self):
+        """Generate AI confidence score."""
+        return round(self.random_int(70, 99) / 100, 2)
+
+    def component_price(self):
+        """Generate component price."""
+        return self.random_int(1000, 20000)
+
+    def component_install_price(self):
+        """Generate component installation price."""
+        return self.random_int(200, 2000)
+
+    def component_depreciation_price(self):
+        """Generate depreciation price."""
+        return self.random_int(50, 500)
+
+    def component_warranty_months(self):
+        """Generate warranty period in months."""
+        return self.random_element([12, 24, 36, 48, 60])
+
+    def component_lifespan_months(self):
+        """Generate lifespan in months."""
+        return self.random_element([60, 120, 180, 240])
+
+    def component_replacement_interval(self):
+        """Generate replacement interval in months."""
+        return self.random_element([36, 60, 120, 180])
+
+    def component_condition(self):
+        """Generate component condition."""
+        return self.random_element(self.conditions)
+
+    def component_dimensions(self):
+        """Generate component dimensions."""
+        w = self.random_int(30, 90)
+        d = self.random_int(30, 70)
+        h = self.random_int(50, 100)
+        return f"{w}x{d}x{h} cm"
+
+    def component_ncs_code(self):
+        """Generate NCS color code."""
+        return self.random_element(self.ncs_codes)
+
+    def component_specifications(self):
+        """Generate technical specifications."""
+        return self.random_element([
+            "Energy class A++",
+            "Energy class A+++",
+            "1400 rpm",
+            "Built-in",
+            "Freestanding",
+        ])
+
+    def ai_analysis_response(self, **overrides):
+        """Generate a complete AI analysis response content dict."""
+        data = {
+            'model': self.component_model_name(),
+            'manufacturer': self.component_manufacturer(),
+            'serialNumber': self.component_serial_number(),
+            'componentCategory': self.component_category_name(),
+            'componentType': self.component_type_name(),
+            'componentSubtype': self.component_subtype_name(),
+            'confidence': self.component_confidence(),
+        }
+        data.update(overrides)
+        return data
+
+    def onecore_model_response(self, **overrides):
+        """Generate a complete OneCore model response dict with hierarchy."""
+        cat_id = overrides.pop('category_id', self.component_category_id())
+        cat_name = overrides.pop('category_name', self.component_category_name())
+        type_id = overrides.pop('type_id', self.component_type_id())
+        type_name = overrides.pop('type_name', self.component_type_name())
+        sub_id = overrides.pop('subtype_id', self.component_subtype_id())
+        sub_name = overrides.pop('subtype_name', self.component_subtype_name())
+
+        data = {
+            'modelName': self.component_model_name(),
+            'manufacturer': self.component_manufacturer(),
+            'currentPrice': self.component_price(),
+            'currentInstallPrice': self.component_install_price(),
+            'warrantyMonths': self.component_warranty_months(),
+            'subtype': {
+                'id': sub_id,
+                'subTypeName': sub_name,
+                'componentType': {
+                    'id': type_id,
+                    'typeName': type_name,
+                    'category': {
+                        'id': cat_id,
+                        'categoryName': cat_name,
+                    }
+                }
+            }
+        }
+        data.update(overrides)
+        return data
+
+    def component_form_data(self, **overrides):
+        """Generate form data dict for component creation."""
+        data = {
+            'model': self.component_model_name(),
+            'subtype_id': self.component_subtype_id(),
+            'serial_number': self.component_serial_number(),
+            'warranty_months': self.component_warranty_months(),
+            'current_price': self.component_price(),
+            'current_install_price': self.component_install_price(),
+            'depreciation_price': self.component_depreciation_price(),
+            'economic_lifespan': self.component_lifespan_months(),
+            'manufacturer': self.component_manufacturer(),
+            'condition': self.component_condition(),
+            'specifications': self.component_specifications(),
+            'dimensions': self.component_dimensions(),
+            'additional_information': '',
+            'ncs_code': self.component_ncs_code(),
+        }
+        data.update(overrides)
+        return data
