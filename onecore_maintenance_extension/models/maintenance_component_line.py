@@ -119,45 +119,45 @@ class MaintenanceComponentLine(models.TransientModel):
 
     def action_save_component(self):
         """Save component changes to OneCore via PUT /components/{id} and /component-installations/{id}."""
-    self.ensure_one()
+        self.ensure_one()
 
-    # Validate required fields
-    if not self.onecore_component_id:
-        raise UserError("Kan inte spara: Komponenten saknar OneCore-ID.")
-    if not self.model_id:
-        raise UserError("Kan inte spara: Komponenten saknar modell-ID.")
-    if not self.room_id:
-        raise UserError("Du måste välja ett rum för komponenten.")
+        # Validate required fields
+        if not self.onecore_component_id:
+            raise UserError("Kan inte spara: Komponenten saknar OneCore-ID.")
+        if not self.model_id:
+            raise UserError("Kan inte spara: Komponenten saknar modell-ID.")
+        if not self.room_id:
+            raise UserError("Du måste välja ett rum för komponenten.")
 
-    # Map optional fields to payload keys
-    optional_fields = {
-        "serial_number": "serialNumber",
-        "specifications": "specifications",
-        "additional_information": "additionalInformation",
-        "warranty_months": "warrantyMonths",
-        "ncs_code": "ncsCode",
-        "price_at_purchase": "priceAtPurchase",
-        "depreciation_price_at_purchase": "depreciationPriceAtPurchase",
-        "economic_lifespan": "economicLifespan",
-    }
-
-    # Build payload
-    component_payload = {
-        "modelId": self.model_id,
-        "condition": self.condition if self.condition else "NEW",
-    }
-
-    # Add optional fields if they have values
-    component_payload.update(
-        {
-            payload_key: getattr(self, attr_name)
-            for attr_name, payload_key in optional_fields.items()
-            if getattr(self, attr_name) is not None
+        # Map optional fields to payload keys
+        optional_fields = {
+            "serial_number": "serialNumber",
+            "specifications": "specifications",
+            "additional_information": "additionalInformation",
+            "warranty_months": "warrantyMonths",
+            "ncs_code": "ncsCode",
+            "price_at_purchase": "priceAtPurchase",
+            "depreciation_price_at_purchase": "depreciationPriceAtPurchase",
+            "economic_lifespan": "economicLifespan",
         }
-    )
 
-    # Send payload to OneCore API
-    api = core_api.CoreApi(self.env)
+        # Build payload
+        component_payload = {
+            "modelId": self.model_id,
+            "condition": self.condition if self.condition else "NEW",
+        }
+
+        # Add optional fields if they have values
+        component_payload.update(
+            {
+                payload_key: getattr(self, attr_name)
+                for attr_name, payload_key in optional_fields.items()
+                if getattr(self, attr_name) is not None
+            }
+        )
+
+        # Send payload to OneCore API
+        api = core_api.CoreApi(self.env)
 
         try:
             # Update component fields

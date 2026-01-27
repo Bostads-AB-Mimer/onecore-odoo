@@ -134,33 +134,33 @@ class MaintenanceComponentWizard(models.TransientModel):
     @api.onchange('form_category_id', 'form_category')
     def _onchange_form_category_id(self):
         """Load types when category changes."""
-    self.form_type_id = False
-    self.form_type = False
-    self.form_subtype_id = False
-    self.form_subtype = False
-    self.available_types_json = '[]'
-    self.available_subtypes_json = '[]'
+        self.form_type_id = False
+        self.form_type = False
+        self.form_subtype_id = False
+        self.form_subtype = False
+        self.available_types_json = '[]'
+        self.available_subtypes_json = '[]'
 
-    if not self.form_category_id:
-        return
+        if not self.form_category_id:
+            return
 
-    service = ComponentHierarchyService(self.env)
-    types = service.load_types_for_category(self.form_category_id)
-    self.available_types_json = json.dumps(types)
+        service = ComponentHierarchyService(self.env)
+        types = service.load_types_for_category(self.form_category_id)
+        self.available_types_json = json.dumps(types)
 
     @api.onchange('form_type_id', 'form_type')
     def _onchange_form_type_id(self):
         """Load subtypes when type changes."""
-self.available_subtypes_json = '[]'
-self.form_subtype_id = False
-self.form_subtype = False
+        self.available_subtypes_json = '[]'
+        self.form_subtype_id = False
+        self.form_subtype = False
 
-if not self.form_type_id:
-    return
+        if not self.form_type_id:
+            return
 
-service = ComponentHierarchyService(self.env)
-subtypes = service.load_subtypes_for_type(self.form_type_id)
-self.available_subtypes_json = json.dumps(subtypes)
+        service = ComponentHierarchyService(self.env)
+        subtypes = service.load_subtypes_for_type(self.form_type_id)
+        self.available_subtypes_json = json.dumps(subtypes)
 
 
     @api.onchange('form_subtype_id')
