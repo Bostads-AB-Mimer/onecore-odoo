@@ -642,7 +642,7 @@
                                         icon="fa-plus"
                                         class="btn btn-secondary mt-2 mb-2"
                                         help="Uppdatera eller lägg till komponent"
-                                        invisible="space_caption != 'Lägenhet'" />
+                                        invisible="space_caption != 'Lägenhet' or user_is_external_contractor" />
                                 </div>
                             </div>
                         </div>
