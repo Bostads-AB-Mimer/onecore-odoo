@@ -11,7 +11,7 @@ from odoo.tests.common import TransactionCase
 from odoo.addons.onecore_maintenance_extension.models.services.component_onecore_service import (
     ComponentOneCoreService,
 )
-from odoo.addons.onecore_maintenance_extension.tests.test_utils import setup_faker
+from odoo.addons.onecore_maintenance_extension.tests.utils.test_utils import setup_faker
 
 
 @tagged("onecore")

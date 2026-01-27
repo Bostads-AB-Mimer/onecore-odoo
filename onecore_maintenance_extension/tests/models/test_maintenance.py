@@ -3,7 +3,7 @@ from odoo.tests import tagged
 from odoo.exceptions import UserError
 from datetime import date, timedelta
 
-from ..test_utils import (
+from ..utils.test_utils import (
     setup_faker,
     create_internal_user,
     create_maintenance_request,

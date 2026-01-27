@@ -3,7 +3,7 @@ from odoo.tests import tagged
 from odoo.exceptions import AccessError
 from datetime import date, timedelta
 
-from ..test_utils import create_maintenance_request
+from ..utils.test_utils import create_maintenance_request
 
 
 @tagged("onecore")

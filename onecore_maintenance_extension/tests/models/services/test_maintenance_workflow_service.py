@@ -3,7 +3,7 @@ from odoo.tests import tagged
 from odoo.exceptions import UserError
 from datetime import date
 
-from ...test_utils import create_internal_user, create_maintenance_request
+from ...utils.test_utils import create_internal_user, create_maintenance_request
 
 
 class StageTestMixin:

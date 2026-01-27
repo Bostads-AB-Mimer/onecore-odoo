@@ -12,7 +12,7 @@ from odoo.addons.onecore_maintenance_extension.models.services.component_ai_anal
 from odoo.addons.onecore_maintenance_extension.models.services import (
     component_ai_analysis_service as ai_service_module,
 )
-from odoo.addons.onecore_maintenance_extension.tests.test_utils import setup_faker
+from odoo.addons.onecore_maintenance_extension.tests.utils.test_utils import setup_faker
 
 
 @tagged("onecore")

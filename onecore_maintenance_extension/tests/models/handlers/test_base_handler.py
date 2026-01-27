@@ -4,7 +4,7 @@ from odoo.tests import tagged
 from odoo import exceptions
 from unittest.mock import Mock
 
-from ...test_utils import (
+from ...utils.test_utils import (
     setup_faker,
     create_test_user,
     create_maintenance_request,
