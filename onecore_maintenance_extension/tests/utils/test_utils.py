@@ -1,4 +1,6 @@
 """Utility functions for tests."""
+from unittest.mock import patch
+
 from faker import Faker
 from .fake_providers import MaintenanceProvider, ComponentProvider
 
@@ -548,3 +550,62 @@ def create_staircase(env, maintenance_request_id=None, **kwargs):
         defaults["maintenance_request_id"] = maintenance_request_id
     defaults.update(kwargs)
     return env["maintenance.staircase"].create(defaults)
+
+
+def create_component_wizard(env, maintenance_request_id=None, **kwargs):
+    """Create a component wizard with _load_onecore_components patched out.
+
+    The wizard's create() calls _load_onecore_components which hits the API,
+    so we must patch it for every wizard creation in tests.
+
+    Args:
+        env: Odoo environment
+        maintenance_request_id: Optional maintenance request ID to link to
+        **kwargs: Additional fields to override defaults
+
+    Returns:
+        maintenance.component.wizard record
+    """
+    defaults = {}
+    if maintenance_request_id:
+        defaults['maintenance_request_id'] = maintenance_request_id
+    defaults.update(kwargs)
+
+    with patch.object(
+        type(env['maintenance.component.wizard']),
+        '_load_onecore_components',
+        return_value=None,
+    ):
+        return env['maintenance.component.wizard'].create(defaults)
+
+
+def create_component_line(env, wizard_id, **kwargs):
+    """Create a component line attached to a wizard.
+
+    Args:
+        env: Odoo environment
+        wizard_id: ID of the parent wizard record
+        **kwargs: Additional fields to override defaults
+
+    Returns:
+        maintenance.component.line record
+    """
+    fake = setup_faker()
+
+    defaults = {
+        'wizard_id': wizard_id,
+        'typ': fake.component_type_name(),
+        'subtype': fake.component_subtype_name(),
+        'category': fake.component_category_name(),
+        'model': fake.component_model_name(),
+        'manufacturer': fake.component_manufacturer(),
+        'serial_number': fake.component_serial_number(),
+        'room_name': fake.component_room_name(),
+        'room_id': fake.component_room_id(),
+        'onecore_component_id': fake.component_instance_id(),
+        'model_id': fake.component_model_id(),
+        'installation_id': fake.component_installation_id(),
+        'condition': fake.component_condition(),
+    }
+    defaults.update(kwargs)
+    return env['maintenance.component.line'].create(defaults)

@@ -347,7 +347,7 @@ class ComponentProvider(BaseProvider):
         "Badkar",
     ]
 
-    conditions = ["NEW", "USED"]
+    conditions = ["NEW", "GOOD", "FAIR", "POOR", "DAMAGED"]
 
     ncs_codes = [
         "S 1000-N",
@@ -499,6 +499,44 @@ class ComponentProvider(BaseProvider):
                     }
                 }
             }
+        }
+        data.update(overrides)
+        return data
+
+    def component_room_name(self):
+        """Generate component room name."""
+        return self.random_element(["Kök", "Badrum", "Vardagsrum", "Sovrum", "Hall"])
+
+    def component_model_id(self):
+        """Generate component model ID."""
+        return f"model-{self.random_int(100, 999)}"
+
+    def component_line_data(self, **overrides):
+        """Generate a complete component line data dict."""
+        data = {
+            'typ': self.component_type_name(),
+            'subtype': self.component_subtype_name(),
+            'category': self.component_category_name(),
+            'model': self.component_model_name(),
+            'manufacturer': self.component_manufacturer(),
+            'serial_number': self.component_serial_number(),
+            'warranty_months': self.component_warranty_months(),
+            'specifications': self.component_specifications(),
+            'ncs_code': self.component_ncs_code(),
+            'additional_information': '',
+            'condition': self.component_condition(),
+            'installation_date': '2024-06-15',
+            'room_name': self.component_room_name(),
+            'room_id': self.component_room_id(),
+            'onecore_component_id': self.component_instance_id(),
+            'model_id': self.component_model_id(),
+            'installation_id': self.component_installation_id(),
+            'price_at_purchase': self.component_price(),
+            'depreciation_price_at_purchase': self.component_depreciation_price(),
+            'economic_lifespan': self.component_lifespan_months(),
+            'technical_lifespan': self.component_lifespan_months(),
+            'replacement_interval': self.component_replacement_interval(),
+            'image_urls_json': '[]',
         }
         data.update(overrides)
         return data

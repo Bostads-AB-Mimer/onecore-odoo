@@ -161,7 +161,7 @@
 
                         <!-- STATE: Analyzing -->
                         <div invisible="form_state != 'analyzing'" class="text-center mt-5 mb-5">
-                            <div class="fa fa-spinner fa-spin fa-3x text-primary mb-3"/>
+                            <div class="fa fa-spinner fa-spin fa-3x text-primary mb-3" title="Laddar..."/>
                             <h3>Analyserar bilder...</h3>
                             <p class="text-muted">Detta kan ta 5-15 sekunder</p>
                             <p class="text-muted small mt-3">AI:n identifierar komponenttyp, tillverkare, modell och andra detaljer</p>
@@ -190,7 +190,7 @@
                             <!-- Success: Show AI results or manual form -->
                             <div invisible="api_error">
                                 <!-- AI info message (only if AI suggested) -->
-                                <div class="alert alert-info mb-3" invisible="not form_ai_suggested">
+                                <div class="alert alert-info mb-3" role="status" invisible="not form_ai_suggested">
                                     <i class="fa fa-info-circle"/> AI har gjort sitt bästa för att fylla i rätt data - kontrollera att uppgifterna stämmer.
                                 </div>
 

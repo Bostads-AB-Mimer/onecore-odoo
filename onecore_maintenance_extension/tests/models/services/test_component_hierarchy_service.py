@@ -247,7 +247,7 @@ class TestComponentHierarchyService(TransactionCase):
         self.mock_api.fetch_component_categories.return_value = categories
         self.mock_api.fetch_component_types.return_value = types
 
-        result = service.match_ai_values_to_hierarchy(cat_name, 'Sanitet', 'Toalett')
+        result = service.match_ai_values_to_hierarchy(cat_name, 'NonExistentType', 'NonExistentSubtype')
 
         self.assertEqual(result['category_id'], cat_id)
         self.assertIsNone(result['type_id'])
