@@ -342,6 +342,16 @@ class OneCoreMaintenanceRequest(
 
     @api.onchange("search_value", "search_type", "space_caption")
     def _compute_search(self):
+        # Prevent recursive onchange execution
+        if self.env.context.get("skip_compute_search"):
+            _logger.debug(f"_compute_search: Skipped due to context flag")
+            return
+
+        _logger.info(
+            f"_compute_search START - space_caption: {self.space_caption}, "
+            f"search_value: {self.search_value}, search_type: {self.search_type}"
+        )
+
         if not self.space_caption:
             return
 
@@ -364,15 +374,46 @@ class OneCoreMaintenanceRequest(
         saved_search_value = self.search_value
         saved_search_type = self.search_type
         saved_space_caption = self.space_caption
+        saved_name = self.name
+        saved_description = self.description
+
+        _logger.info(
+            f"_compute_search: Saved values before deletion - "
+            f"space_caption: {saved_space_caption}, search_value: {saved_search_value}, "
+            f"search_type: {saved_search_type}"
+        )
 
         # Only delete old options when we're about to perform a valid search.
         base_handler = BaseMaintenanceHandler(self, self.get_core_api())
         base_handler._delete_options()
 
-        # Restore search values after deletion.
-        self.search_value = saved_search_value
-        self.search_type = saved_search_type
-        self.space_caption = saved_space_caption
+        # Restore search values after deletion using context to prevent re-triggering onchange.
+        # For new records (not yet saved), use direct assignment with context to avoid triggering write() chain.
+        # For existing records, use write() with context to properly handle the update.
+        if self.id:
+            self.with_context(skip_compute_search=True).write(
+                {
+                    "search_value": saved_search_value,
+                    "search_type": saved_search_type,
+                    "space_caption": saved_space_caption,
+                    "name": saved_name,
+                    "description": saved_description,
+                }
+            )
+        else:
+            # Direct assignment for new records with context to prevent re-triggering
+            self_with_context = self.with_context(skip_compute_search=True)
+            self_with_context.search_value = saved_search_value
+            self_with_context.search_type = saved_search_type
+            self_with_context.space_caption = saved_space_caption
+            self_with_context.name = saved_name
+            self_with_context.description = saved_description
+
+        _logger.info(
+            f"_compute_search: Restored values - "
+            f"space_caption: {self.space_caption}, search_value: {self.search_value}, "
+            f"search_type: {self.search_type}"
+        )
 
         handler = HandlerFactory.get_handler(
             self, self.get_core_api(), self.search_type, self.space_caption
