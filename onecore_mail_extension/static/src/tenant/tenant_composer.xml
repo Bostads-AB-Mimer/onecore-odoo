@@ -5,12 +5,7 @@
 
         <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
         <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
-            <attribute name="t-if">props.type != 'message'</attribute>    
-        </xpath>
-
-        <!-- Hide the send button if isHiddenFromMyPages is true-->
-        <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[2]" position="attributes">
-            <attribute name="t-if">!state.isHiddenFromMyPages</attribute>  
+            <attribute name="t-if">props.type != 'message'</attribute>
         </xpath>
 
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
