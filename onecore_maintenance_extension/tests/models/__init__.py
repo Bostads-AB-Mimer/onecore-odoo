@@ -1,4 +1,5 @@
 from . import test_maintenance
+from . import test_maintenance_activity_suppression
 from . import test_maintenance_building
 from . import test_maintenance_facility
 from . import test_maintenance_lease

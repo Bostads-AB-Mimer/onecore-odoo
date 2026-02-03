@@ -84,12 +84,12 @@ class OneCoreMaintenanceRequest(
         "Låneprodukt utlämnad",
         store=True,
         default=False,
-        help="Indikerar om en låneprodukt har lämnats ut till kunden"
+        help="Indikerar om en låneprodukt har lämnats ut till kunden",
     )
     loan_product_details = fields.Char(
         "Detaljer låneprodukt",
         store=True,
-        help="Beskrivning av vilken produkt som lämnats ut"
+        help="Beskrivning av vilken produkt som lämnats ut",
     )
 
     space_caption = fields.Selection(
@@ -505,6 +505,8 @@ class OneCoreMaintenanceRequest(
             # if not vals.get("space_caption"):
             #     vals["space_caption"] = "Tvättstuga"
 
+        # Create maintenance requests
+        # Note: activity_update() is overridden to suppress automatic activities
         maintenance_requests = super(
             OneCoreMaintenanceRequest, self.with_context(creating_records=True)
         ).create(vals_list)
@@ -531,13 +533,15 @@ class OneCoreMaintenanceRequest(
             request._send_creation_sms()
 
             # Post loan product message if loan product was issued during creation
-            if vals.get('has_loan_product') and vals.get('loan_product_details'):
-                request._post_loan_product_messages({
-                    request.id: f"Låneprodukt utlämnad: {vals['loan_product_details']}"
-                })
+            if vals.get("has_loan_product") and vals.get("loan_product_details"):
+                request._post_loan_product_messages(
+                    {
+                        request.id: f"Låneprodukt utlämnad: {vals['loan_product_details']}"
+                    }
+                )
 
-        maintenance_requests.activity_update()
-
+        # Note: The parent's create() method calls activity_update(), which we've
+        # overridden to suppress all automatic maintenance activity creation
         return maintenance_requests
 
     def write(self, vals):
@@ -572,6 +576,7 @@ class OneCoreMaintenanceRequest(
             {} if skip_tracking else change_tracker.track_field_changes(self, vals)
         )
 
+        # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
 
         # Post loan product messages first, then other change notifications
@@ -601,7 +606,11 @@ class OneCoreMaintenanceRequest(
 
             # Loan product being returned (toggle OFF)
             if not new_has_loan and old_has_loan:
-                message = f"Låneprodukt återlämnad: {old_details}" if old_details else "Låneprodukt återlämnad"
+                message = (
+                    f"Låneprodukt återlämnad: {old_details}"
+                    if old_details
+                    else "Låneprodukt återlämnad"
+                )
 
             # Loan product being issued (toggle ON with details)
             elif new_has_loan and not old_has_loan and new_details:
@@ -612,7 +621,12 @@ class OneCoreMaintenanceRequest(
                 message = f"Låneprodukt utlämnad: {new_details}"
 
             # Details updated while loan product is active
-            elif new_has_loan and old_has_loan and old_details and new_details != old_details:
+            elif (
+                new_has_loan
+                and old_has_loan
+                and old_details
+                and new_details != old_details
+            ):
                 message = f"Låneprodukt uppdaterad: {new_details}"
 
             if message:
@@ -624,7 +638,9 @@ class OneCoreMaintenanceRequest(
         """Post loan product change messages to records."""
         for record in self:
             if record.id in loan_product_messages:
-                html_content = f"<div><strong>{loan_product_messages[record.id]}</strong></div>"
+                html_content = (
+                    f"<div><strong>{loan_product_messages[record.id]}</strong></div>"
+                )
                 record.message_post(
                     body=Markup(html_content),
                     message_type="notification",
@@ -659,3 +675,19 @@ class OneCoreMaintenanceRequest(
             "url": url,
             "target": "self",
         }
+
+    def activity_update(self):
+        """Override to completely suppress automatic maintenance activity creation.
+
+        This prevents the creation of the specific 'Maintenance Request' activity
+        that would normally be created when schedule_date is set. This activity
+        is of type 'maintenance.mail_act_maintenance_request'.
+
+        The suppression happens regardless of what triggers the activity_update()
+        call (schedule_date, user_id, stage_id, etc.).
+
+        Manual activities can still be created normally through the UI or API.
+        """
+        # Complete suppression of automatic maintenance activities
+        # Simply return without calling super() to skip all activity operations
+        return
