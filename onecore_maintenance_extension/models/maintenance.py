@@ -654,10 +654,16 @@ class OneCoreMaintenanceRequest(
     def open_time_report(self):
         self.ensure_one()
         estate_code = False
+
+        # Try different sources for estate/property code based on space type
         if self.rental_property_id and self.rental_property_id.estate_code:
             estate_code = self.rental_property_id.estate_code
-        elif self.maintenance_unit_id and self.maintenance_unit_id.estate_code:
-            estate_code = self.maintenance_unit_id.estate_code
+        elif self.parking_space_property_code:
+            estate_code = self.parking_space_property_code
+        elif self.facility_property_code:
+            estate_code = self.facility_property_code
+        elif self.property_code:
+            estate_code = self.property_code
 
         base_url = self.env["ir.config_parameter"].get_param(
             "time_report_base_url",
