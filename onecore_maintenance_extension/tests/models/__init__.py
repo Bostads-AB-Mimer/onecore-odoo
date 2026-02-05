@@ -10,6 +10,8 @@ from . import test_maintenance_rental_property
 from . import test_maintenance_request_category
 from . import test_maintenance_team
 from . import test_maintenance_tenant
+from . import test_maintenance_component_wizard
+from . import test_maintenance_component_line
 from .handlers import test_base_handler
 from .handlers import test_handler_factory
 from .services import test_record_management_service

@@ -1,7 +1,7 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
-from ..test_utils import setup_faker, create_maintenance_request, create_rental_property
+from ..utils.test_utils import setup_faker, create_maintenance_request, create_rental_property
 
 
 @tagged("onecore")

@@ -1,7 +1,7 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
-from ..test_utils import create_maintenance_request, create_facility
+from ..utils.test_utils import create_maintenance_request, create_facility
 
 
 @tagged("onecore")

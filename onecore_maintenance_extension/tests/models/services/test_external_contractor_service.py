@@ -2,7 +2,7 @@ from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import UserError
 
-from ...test_utils import (
+from ...utils.test_utils import (
     create_internal_user,
     create_external_contractor_user,
     create_maintenance_request,

@@ -3,7 +3,7 @@ from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from unittest.mock import Mock
 
-from ...test_utils import setup_faker, create_maintenance_request
+from ...utils.test_utils import setup_faker, create_maintenance_request
 from ....models.handlers.handler_factory import HandlerFactory
 from ....models.handlers.rental_property_handler import RentalPropertyHandler
 from ....models.handlers.parking_space_handler import ParkingSpaceHandler

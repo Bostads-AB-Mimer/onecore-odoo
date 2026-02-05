@@ -249,7 +249,7 @@
                                             invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
                                         <field name="estate_code" invisible="1"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                         <field name="building_code" invisible="1"
@@ -281,7 +281,7 @@
                                         <field name="building_name" invisible="not building_name"
                                             string="Tillhör byggnad" />
                                         <field name="property_code" invisible="not property_code"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
@@ -357,7 +357,7 @@
                                             string="Renoveringsår"
                                             invisible="not building_renovation_year" />
                                         <field name="estate_code" invisible="1"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                     </group>
@@ -420,7 +420,7 @@
                                         <field name="facility_property_name" string="Fastighet"
                                             invisible="not facility_property_name" />
                                         <field
-                                            name="facility_property_code" string="Fastighetskod"
+                                            name="facility_property_code" string="Fastighetsnummer"
                                             invisible="not facility_property_code" />
                                     </group>
                                 </div>
@@ -633,9 +633,16 @@
                                         type="object"
                                         string="Öppna tidrapport"
                                         icon="fa-clock-o"
-                                        class="btn btn-secondary mt-2 mb-2"
+                                        class="btn btn-secondary mt-2 mb-2 me-2"
                                         help="Öppna tidrapporteringssystem"
                                         invisible="user_is_external_contractor" />
+                                    <button name="open_component_wizard"
+                                        type="object"
+                                        string="Uppdatera/lägg till Komponent"
+                                        icon="fa-plus"
+                                        class="btn btn-secondary mt-2 mb-2"
+                                        help="Uppdatera eller lägg till komponent"
+                                        invisible="space_caption != 'Lägenhet' or user_is_external_contractor" />
                                 </div>
                             </div>
                         </div>
