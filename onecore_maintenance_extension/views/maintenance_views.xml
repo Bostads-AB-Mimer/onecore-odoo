@@ -249,7 +249,7 @@
                                             invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
                                         <field name="estate_code" invisible="1"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                         <field name="building_code" invisible="1"
@@ -281,7 +281,7 @@
                                         <field name="building_name" invisible="not building_name"
                                             string="Tillhör byggnad" />
                                         <field name="property_code" invisible="not property_code"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
@@ -357,7 +357,7 @@
                                             string="Renoveringsår"
                                             invisible="not building_renovation_year" />
                                         <field name="estate_code" invisible="1"
-                                            string="Fastighetskod" />
+                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
                                     </group>
@@ -420,7 +420,7 @@
                                         <field name="facility_property_name" string="Fastighet"
                                             invisible="not facility_property_name" />
                                         <field
-                                            name="facility_property_code" string="Fastighetskod"
+                                            name="facility_property_code" string="Fastighetsnummer"
                                             invisible="not facility_property_code" />
                                     </group>
                                 </div>
@@ -599,6 +599,21 @@
                                             string="Dold från Mimer.nu"
                                             widget="boolean_toggle"
                                             readonly="user_is_external_contractor" />
+
+                                        <field
+                                            name="has_loan_product"
+                                            string="Låneprodukt"
+                                            widget="boolean_toggle"
+                                            readonly="user_is_external_contractor" />
+
+                                        <field
+                                            name="loan_product_details"
+                                            string="Detaljer låneprodukt"
+                                            placeholder="Beskriv vilken produkt som lämnats ut"
+                                            readonly="user_is_external_contractor"
+                                            invisible="not has_loan_product"
+                                            required="has_loan_product" />
+
                                         <field
                                             name="call_between" invisible="not call_between"
                                             string="Kund nås dessa tider"
@@ -618,9 +633,16 @@
                                         type="object"
                                         string="Öppna tidrapport"
                                         icon="fa-clock-o"
-                                        class="btn btn-secondary mt-2 mb-2"
+                                        class="btn btn-secondary mt-2 mb-2 me-2"
                                         help="Öppna tidrapporteringssystem"
                                         invisible="user_is_external_contractor" />
+                                    <button name="open_component_wizard"
+                                        type="object"
+                                        string="Uppdatera/lägg till Komponent"
+                                        icon="fa-plus"
+                                        class="btn btn-secondary mt-2 mb-2"
+                                        help="Uppdatera eller lägg till komponent"
+                                        invisible="space_caption != 'Lägenhet' or user_is_external_contractor or not id" />
                                 </div>
                             </div>
                         </div>
@@ -703,6 +725,8 @@
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                     <field name="special_attention" />
+                    <field name="has_loan_product" />
+                    <field name="loan_product_details" />
                 </xpath>
 
                 <xpath expr="//div[@class='oe_kanban_content']" position="replace">
@@ -719,17 +743,32 @@
                 <xpath expr="//tree" position="replace">
                     <tree string="maintenance Request" multi_edit="1" sample="1">
                         <field name="message_needaction" column_invisible="True" />
-                        <field name="id" />
+                        <field name="id" optional="show" />
                         <field name="name" />
                         <field name="request_date" groups="base.group_no_one" />
-                        <field name="address" />
-                        <field name="user_id" />
-                        <field name="maintenance_team_id" />
-                        <field name="due_date" />
-                        <field name="stage_id" />
-                        <field name="master_key" />
-                        <field name="hidden_from_my_pages" />
-                        <field name="rental_property_id" />
+                        <field name="address" optional="show" />
+                        <field name="user_id" optional="show" />
+                        <field name="maintenance_team_id" optional="show" />
+                        <field name="start_date" optional="hide" />
+                        <field name="schedule_date" optional="hide" />
+                        <field name="due_date" optional="show" />
+                        <field name="maintenance_request_category_id" optional="hide" />
+                        <field name="priority_expanded" optional="hide" />
+                        <field name="creation_origin" optional="hide" />
+                        <field name="space_caption" optional="hide" />
+                        <field name="tenant_name" optional="hide" />
+                        <field name="contact_code" optional="hide" />
+                        <field name="phone_number" optional="hide" />
+                        <field name="email_address" optional="hide" />
+                        <field name="special_attention" optional="hide" />
+                        <field name="pet" optional="hide" />
+                        <field name="call_between" optional="hide" />
+                        <field name="hearing_impaired" optional="hide" />
+                        <field name="estate" optional="hide" />
+                        <field name="stage_id" optional="show" />
+                        <field name="master_key" optional="show" />
+                        <field name="hidden_from_my_pages" optional="show" />
+                        <field name="rental_property_id" optional="show" />
                         <field name="company_id" readonly="1" groups="base.group_multi_company" />
                         <field name="activity_exception_decoration" widget="activity_exception" />
                     </tree>

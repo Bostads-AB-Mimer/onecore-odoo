@@ -83,12 +83,12 @@ class BaseMaintenanceHandler:
 
     def _create_tenant_options(self, tenants):
         """Create tenant option records for a list of tenants."""
-        for tenant in tenants:
-            # Clear existing lease and tenant options when no lease data is available
-            self.env["maintenance.tenant.option"].search(
-                [("user_id", "=", self.env.user.id)]
-            ).unlink()
+        # Clear existing tenant options before creating new ones
+        self.env["maintenance.tenant.option"].search(
+            [("user_id", "=", self.env.user.id)]
+        ).unlink()
 
+        for tenant in tenants:
             name = get_tenant_name(tenant)
             phone_number = get_main_phone_number(tenant)
 

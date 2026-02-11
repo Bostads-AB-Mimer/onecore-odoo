@@ -1,15 +1,14 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
-from faker import Faker
-from ..fake_providers import MaintenanceProvider
+
+from ..utils.test_utils import setup_faker
 
 
 @tagged("onecore")
 class TestMaintenanceRequestCategory(TransactionCase):
     def setUp(self):
         super().setUp()
-        self.fake = Faker("sv_SE")
-        self.fake.add_provider(MaintenanceProvider)
+        self.fake = setup_faker()
 
     def test_maintenance_request_category_default_values(self):
         """Test category default values."""

@@ -5,6 +5,7 @@ import requests
 import logging
 import json
 
+from markupsafe import Markup
 from odoo import api, fields, models, _
 
 from ...onecore_api import core_api
@@ -77,6 +78,18 @@ class OneCoreMaintenanceRequest(
     start_date = fields.Date("Startdatum", store=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
+    )
+
+    has_loan_product = fields.Boolean(
+        "Låneprodukt utlämnad",
+        store=True,
+        default=False,
+        help="Indikerar om en låneprodukt har lämnats ut till kunden",
+    )
+    loan_product_details = fields.Char(
+        "Detaljer låneprodukt",
+        store=True,
+        help="Beskrivning av vilken produkt som lämnats ut",
     )
 
     space_caption = fields.Selection(
@@ -492,6 +505,8 @@ class OneCoreMaintenanceRequest(
             # if not vals.get("space_caption"):
             #     vals["space_caption"] = "Tvättstuga"
 
+        # Create maintenance requests
+        # Note: activity_update() is overridden to suppress automatic activities
         maintenance_requests = super(
             OneCoreMaintenanceRequest, self.with_context(creating_records=True)
         ).create(vals_list)
@@ -517,8 +532,16 @@ class OneCoreMaintenanceRequest(
 
             request._send_creation_sms()
 
-        maintenance_requests.activity_update()
+            # Post loan product message if loan product was issued during creation
+            if vals.get("has_loan_product") and vals.get("loan_product_details"):
+                request._post_loan_product_messages(
+                    {
+                        request.id: f"Låneprodukt utlämnad: {vals['loan_product_details']}"
+                    }
+                )
 
+        # Note: The parent's create() method calls activity_update(), which we've
+        # overridden to suppress all automatic maintenance activity creation
         return maintenance_requests
 
     def write(self, vals):
@@ -542,19 +565,87 @@ class OneCoreMaintenanceRequest(
             )
             vals.update(workflow_updates)
 
+        # Custom loan product tracking
+        loan_product_messages = (
+            {} if skip_tracking else self._track_loan_product_changes(vals)
+        )
+
         # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
         changes_by_record = (
             {} if skip_tracking else change_tracker.track_field_changes(self, vals)
         )
 
+        # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
 
-        # Only post notifications if not in creation phase
+        # Post loan product messages first, then other change notifications
         if not skip_tracking:
+            self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
 
         return result
+
+    def _track_loan_product_changes(self, vals):
+        """Track loan product changes for existing records."""
+        loan_product_messages = {}
+
+        if "has_loan_product" not in vals and "loan_product_details" not in vals:
+            return loan_product_messages
+
+        for record in self:
+            # Current state (before this write)
+            old_has_loan = record.has_loan_product
+            old_details = record.loan_product_details or ""
+
+            # New state (after this write)
+            new_has_loan = vals.get("has_loan_product", old_has_loan)
+            new_details = vals.get("loan_product_details", old_details) or ""
+
+            message = None
+
+            # Loan product being returned (toggle OFF)
+            if not new_has_loan and old_has_loan:
+                message = (
+                    f"Låneprodukt återlämnad: {old_details}"
+                    if old_details
+                    else "Låneprodukt återlämnad"
+                )
+
+            # Loan product being issued (toggle ON with details)
+            elif new_has_loan and not old_has_loan and new_details:
+                message = f"Låneprodukt utlämnad: {new_details}"
+
+            # Details added to already-active loan product
+            elif new_has_loan and old_has_loan and not old_details and new_details:
+                message = f"Låneprodukt utlämnad: {new_details}"
+
+            # Details updated while loan product is active
+            elif (
+                new_has_loan
+                and old_has_loan
+                and old_details
+                and new_details != old_details
+            ):
+                message = f"Låneprodukt uppdaterad: {new_details}"
+
+            if message:
+                loan_product_messages[record.id] = message
+
+        return loan_product_messages
+
+    def _post_loan_product_messages(self, loan_product_messages):
+        """Post loan product change messages to records."""
+        for record in self:
+            if record.id in loan_product_messages:
+                html_content = (
+                    f"<div><strong>{loan_product_messages[record.id]}</strong></div>"
+                )
+                record.message_post(
+                    body=Markup(html_content),
+                    message_type="notification",
+                    subtype_xmlid="mail.mt_note",
+                )
 
     # ============================================================================
     # INTEGRATION METHODS
@@ -589,4 +680,39 @@ class OneCoreMaintenanceRequest(
             "type": "ir.actions.act_url",
             "url": url,
             "target": "self",
+        }
+
+    def activity_update(self):
+        """Override to completely suppress automatic maintenance activity creation.
+
+        This prevents the creation of the specific 'Maintenance Request' activity
+        that would normally be created when schedule_date is set. This activity
+        is of type 'maintenance.mail_act_maintenance_request'.
+
+        The suppression happens regardless of what triggers the activity_update()
+        call (schedule_date, user_id, stage_id, etc.).
+
+        Manual activities can still be created normally through the UI or API.
+        """
+        # Complete suppression of automatic maintenance activities
+        # Simply return without calling super() to skip all activity operations
+        return
+
+    def open_component_wizard(self):
+        self.ensure_one()
+        # Create wizard explicitly so it has a real ID before loading components
+        wizard = self.env['maintenance.component.wizard'].with_context(
+            default_maintenance_request_id=self.id
+        ).create({
+            'maintenance_request_id': self.id,
+        })
+        return {
+            "name": "Uppdatera/lägg till Komponent",
+            "type": "ir.actions.act_window",
+            "res_model": "maintenance.component.wizard",
+            "res_id": wizard.id,
+            "view_mode": "form",
+            "view_type": "form",
+            "views": [(False, "form")],
+            "target": "new",
         }

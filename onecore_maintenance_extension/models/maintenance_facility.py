@@ -16,7 +16,7 @@ class OnecoreMaintenanceFacilityOption(models.Model):
     area = fields.Char("Yta")
     building_code = fields.Char("Byggnadskod")
     building_name = fields.Char("Byggnad")
-    property_code = fields.Char("Fastighetskod")
+    property_code = fields.Char("Fastighetsnummer")
     property_name = fields.Char("Fastighet")
 
 
@@ -33,7 +33,7 @@ class OnecoreMaintenanceFacility(models.Model):
     area = fields.Char("Yta")
     building_code = fields.Char("Byggnadskod")
     building_name = fields.Char("Byggnad")
-    property_code = fields.Char("Fastighetskod")
+    property_code = fields.Char("Fastighetsnummer")
     property_name = fields.Char("Fastighet")
     maintenance_request_id = fields.Many2one(
         "maintenance.request", string="Maintenance Request", ondelete="cascade"

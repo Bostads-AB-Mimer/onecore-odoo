@@ -1,4 +1,5 @@
 from . import test_maintenance
+from . import test_maintenance_activity_suppression
 from . import test_maintenance_building
 from . import test_maintenance_facility
 from . import test_maintenance_lease
@@ -9,3 +10,10 @@ from . import test_maintenance_rental_property
 from . import test_maintenance_request_category
 from . import test_maintenance_team
 from . import test_maintenance_tenant
+from . import test_maintenance_component_wizard
+from . import test_maintenance_component_line
+from .handlers import test_base_handler
+from .handlers import test_handler_factory
+from .services import test_record_management_service
+from .services import test_maintenance_workflow_service
+from .services import test_external_contractor_service

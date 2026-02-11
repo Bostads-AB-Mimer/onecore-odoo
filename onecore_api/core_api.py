@@ -264,6 +264,145 @@ class CoreApi:
             f"/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    def fetch_rooms(self, residence_id):
+        """Fetch rooms for a residence."""
+        return self._get_json(
+            f"/rooms?residenceId={urllib.parse.quote(str(residence_id), safe='')}"
+        )
+
+    def fetch_components_by_room(self, room_id):
+        """Fetch components for a specific room."""
+        return self._get_json(
+            f"/components/by-room/{urllib.parse.quote(str(room_id), safe='')}"
+        )
+
+    def fetch_component_models(self, model_name, page=1, limit=20, type_id=None, subtype_id=None):
+        """Fetch component models matching the given model name.
+
+        Args:
+            model_name: The model name to search for
+            page: Page number for pagination
+            limit: Number of results per page
+            type_id: Optional component type ID to filter by
+            subtype_id: Optional component subtype ID to filter by
+        """
+        params = {
+            "modelName": model_name,
+            "page": page,
+            "limit": limit,
+        }
+        if type_id:
+            params["typeId"] = type_id
+        if subtype_id:
+            params["subtypeId"] = subtype_id
+        return self._get_json("/component-models", params=params)
+
+    def fetch_component_categories(self):
+        """Fetch all component categories."""
+        return self._get_json("/component-categories")
+
+    def fetch_component_types(self, category_id, page=1, limit=100):
+        """Fetch component types for a category."""
+        return self._get_json(
+            "/component-types",
+            params={"categoryId": category_id, "page": page, "limit": limit}
+        )
+
+    def fetch_component_subtypes(self, type_id, page=1, limit=100):
+        """Fetch component subtypes for a type."""
+        return self._get_json(
+            "/component-subtypes",
+            params={"typeId": type_id, "page": page, "limit": limit}
+        )
+
+    def create_component(self, payload):
+        """Create a component using the unified add-component process."""
+        response = self.request("POST", "/processes/add-component", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def update_component(self, component_id, payload):
+        """Update a component using PUT /components/{id}."""
+        response = self.request("PUT", f"/components/{component_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def update_component_installation(self, installation_id, payload):
+        """Update component installation via PUT /component-installations/{id}."""
+        response = self.request("PUT", f"/component-installations/{installation_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def upload_document(self, file_data, component_instance_id, file_name=None):
+        """Upload a document/image to a component instance.
+
+        Args:
+            file_data: Base64 encoded image string
+            component_instance_id: The component instance ID to attach the document to
+            file_name: Optional filename for the image (auto-generated if not provided)
+
+        Returns:
+            dict: Response from the API
+        """
+        import base64 as b64
+        import filetype
+
+        # Ensure file_data is a string
+        if isinstance(file_data, bytes):
+            file_data = file_data.decode('utf-8')
+
+        # Detect content type from image header bytes
+        content_type = 'image/jpeg'  # default
+        try:
+            header_bytes = b64.b64decode(file_data[:352])
+            kind = filetype.guess(header_bytes)
+            if kind is not None:
+                content_type = kind.mime
+        except Exception:
+            pass  # Keep default image/jpeg
+
+        # Generate filename with correct extension based on content type
+        if file_name is None:
+            import uuid
+            from datetime import datetime
+            ext_map = {
+                'image/jpeg': '.jpg',
+                'image/png': '.png',
+                'image/gif': '.gif',
+                'image/webp': '.webp',
+            }
+            extension = ext_map.get(content_type, '.jpg')
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_id = uuid.uuid4().hex[:8]
+            file_name = f"image_{timestamp}_{unique_id}{extension}"
+
+        _logger.info(f"upload_document: component_id={component_instance_id}, content_type={content_type}, file_name={file_name}")
+
+        # Build JSON payload
+        payload = {
+            "fileData": file_data,
+            "fileName": file_name,
+            "contentType": content_type
+        }
+
+        response = self.request("POST", f"/components/{component_instance_id}/upload", json=payload)
+        response.raise_for_status()
+        return response.json() if response.text else {}
+
+    def fetch_component_documents(self, component_instance_id):
+        """Fetch documents/images for a component instance.
+
+        Args:
+            component_instance_id: The component instance ID
+
+        Returns:
+            list: List of document objects with fileData, fileName, contentType, etc.
+        """
+        # Using the documents endpoint for fetching component instance documents
+        response = self.request("GET", f"/documents/component-instances/{component_instance_id}")
+        response.raise_for_status()
+        return response.json() if response.text else []
+
     def fetch_form_data(self, identifier, value, location_type):
         fetch_fns = {
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
@@ -291,16 +430,17 @@ class CoreApi:
 
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
-                        rental_property = fetch_fns[lease_type](
+                        fetched_data = fetch_fns[lease_type](
                             lease["rentalPropertyId"]
                         )
 
-                        parking_space = fetch_fns[lease_type](lease["rentalPropertyId"])
-                        facility = fetch_fns[lease_type](lease["rentalPropertyId"])
+                        rental_property = fetched_data if lease_type == "Bostadskontrakt" or lease_type == "Kooperativ hyresrätt" else None
+                        parking_space = fetched_data if lease_type == "P-Platskontrakt" else None
+                        facility = fetched_data if lease_type == "Lokalkontrakt" else None
 
                         maintenance_units = (
                             self.fetch_maintenance_units(
-                                rental_property["property"]["code"], location_type
+                                fetched_data["property"]["code"], location_type
                             )
                             if lease_type in lease_types_with_maintenance_units
                             and location_type in maintenance_unit_types

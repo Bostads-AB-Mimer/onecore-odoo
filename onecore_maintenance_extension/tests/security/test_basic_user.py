@@ -1,120 +1,108 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
-from faker import Faker
-from ..fake_providers import MaintenanceProvider
+from odoo.exceptions import AccessError
+
+from ..utils.test_utils import create_maintenance_request
 
 
 @tagged("onecore")
 class TestMaintenanceBasicUserSecurity(TransactionCase):
     def setUp(self):
         super().setUp()
-        self.fake = Faker("sv_SE")
-        self.fake.add_provider(MaintenanceProvider)
 
-        self.basic_user = self.env["res.users"].create(
+        self.basic_user_with_maintenance_permissions = self.env["res.users"].create(
             {
-                "name": "Basic User",
-                "login": "basic@test.com",
-                "groups_id": [(6, 0, [self.env.ref("base.group_user").id])],
+                "name": "Basic User With Permissions",
+                "login": "basic_with_perms@test.com",
+                "email": "basic_with_perms@test.com",
+                "groups_id": [(6, 0, [
+                    self.env.ref("base.group_user").id,
+                    self.env.ref("maintenance.group_equipment_manager").id,
+                ])],
             }
         )
 
-
-    def test_basic_user_has_full_crud_access_to_all_maintenance_models(self):
-        """Basic users should have full CRUD access to all maintenance models."""
-        # Test maintenance request (main model)
-        request = self.env["maintenance.request"].with_user(self.basic_user).create(
+        self.basic_user_without_maintenance_permissions = self.env["res.users"].create(
             {
-                "name": self.fake.maintenance_request_name(),
-                "maintenance_request_category_id": self.env.ref(
-                    "onecore_maintenance_extension.category_1"
-                ).id,
-                "space_caption": self.fake.space_caption(),
+                "name": "Basic User Without Permissions",
+                "login": "basic_no_perms@test.com",
+                "email": "basic_no_perms@test.com",
+                "groups_id": [(6, 0, [
+                    self.env.ref("base.group_user").id,
+                ])],
             }
         )
-        
-        # Test maintenance request category
-        category = self.env["maintenance.request.category"].with_user(self.basic_user).create(
-            {"name": self.fake.category_name()}
-        )
 
-        # Test all models (option + cascade + category)
-        all_models_data = [
-            # Option models
-            ("maintenance.rental.property.option", {"name": f"Test Option"}),
-            ("maintenance.property.option", {"name": f"Test Option"}),
-            ("maintenance.building.option", {"name": f"Test Option"}),
-            ("maintenance.maintenance.unit.option", {"name": f"Test Option"}),
-            ("maintenance.tenant.option", {"name": f"Test Option"}),
-            ("maintenance.lease.option", {"name": f"Test Option"}),
-            
-            # Cascade models
-            (
-                "maintenance.rental.property",
-                {
-                    "name": self.fake.rental_property_name(),
-                    "property_type": self.fake.building_type(),
-                    "maintenance_request_id": request.id,
-                },
-            ),
-            (
-                "maintenance.property", 
-                {
-                    "name": self.fake.property_designation(),
-                    "maintenance_request_id": request.id,
-                }
-            ),
-            (
-                "maintenance.building",
-                {
-                    "name": self.fake.building_name(),
-                    "building_type": self.fake.building_type(),
-                    "maintenance_request_id": request.id,
-                },
-            ),
-            (
-                "maintenance.maintenance.unit",
-                {
-                    "name": self.fake.maintenance_unit_name(),
-                    "maintenance_request_id": request.id,
-                }
-            ),
-            (
-                "maintenance.tenant",
-                {
-                    "name": self.fake.tenant_full_name(),
-                    "contact_code": self.fake.tenant_contact_code(),
-                    "contact_key": self.fake.tenant_contact_key(),
-                    "maintenance_request_id": request.id,
-                },
-            ),
-            (
-                "maintenance.lease", 
-                {
-                    "name": self.fake.lease_model_name(),
-                    "maintenance_request_id": request.id,
-                }
-            ),
-        ]
+    def test_basic_user_with_permissions_can_create_maintenance_records(self):
+        """Basic users with maintenance permissions should be able to create maintenance records"""
+        basic_user_env = self.env(user=self.basic_user_with_maintenance_permissions)
 
-        for model_name, data in all_models_data:
-            with self.subTest(model=model_name):
-                # Create
-                record = self.env[model_name].with_user(self.basic_user).create(data)
+        request = create_maintenance_request(basic_user_env)
+        self.assertTrue(request.exists())
 
-                # Read
-                self.assertTrue(record.name)
+    def test_basic_user_without_permissions_cannot_create_maintenance_records(self):
+        """Basic users without maintenance permissions should not be able to create maintenance records"""
+        unprivileged_env = self.env(user=self.basic_user_without_maintenance_permissions)
 
-                # Write
-                record.write({"name": f"Updated {record.name}"})
-                self.assertTrue(record.name.startswith("Updated"))
+        with self.assertRaises(AccessError):
+            create_maintenance_request(unprivileged_env)
 
-                # Delete
-                record.unlink()
-                self.assertFalse(record.exists())
+    def test_basic_user_with_permissions_can_read_maintenance_records(self):
+        """Basic users with maintenance permissions should be able to read maintenance records"""
+        request = create_maintenance_request(self.env)
 
-        # Clean up main records
-        request.unlink()
-        category.unlink()
-        self.assertFalse(request.exists())
-        self.assertFalse(category.exists())
+        basic_user_env = self.env(user=self.basic_user_with_maintenance_permissions)
+        request_as_user = basic_user_env["maintenance.request"].browse(request.id)
+        self.assertEqual(request_as_user.id, request.id)
+
+    def test_basic_user_without_permissions_cannot_read_maintenance_records(self):
+        """Basic users without maintenance permissions should not be able to read maintenance records"""
+        request = create_maintenance_request(self.env)
+
+        unprivileged_env = self.env(user=self.basic_user_without_maintenance_permissions)
+        with self.assertRaises(AccessError):
+            unprivileged_env["maintenance.request"].browse(request.id).name
+
+    def test_basic_user_with_permissions_can_update_maintenance_records(self):
+        """Basic users with maintenance permissions should be able to update maintenance records"""
+        request = create_maintenance_request(self.env)
+
+        basic_user_env = self.env(user=self.basic_user_with_maintenance_permissions)
+        request_as_user = basic_user_env["maintenance.request"].browse(request.id)
+        request_as_user.write({"name": "Updated by basic user with permissions"})
+        self.assertEqual(request_as_user.name, "Updated by basic user with permissions")
+
+    def test_basic_user_without_permissions_cannot_update_maintenance_records(self):
+        """Basic users without maintenance permissions should not be able to update maintenance records"""
+        request = create_maintenance_request(self.env)
+
+        unprivileged_env = self.env(user=self.basic_user_without_maintenance_permissions)
+        request_as_unprivileged = unprivileged_env["maintenance.request"].browse(request.id)
+        with self.assertRaises(AccessError):
+            request_as_unprivileged.write({"name": "Unauthorized update"})
+
+    def test_basic_user_with_permissions_can_delete_maintenance_records(self):
+        """Basic users with maintenance permissions should be able to delete maintenance records"""
+        request = create_maintenance_request(self.env)
+
+        basic_user_env = self.env(user=self.basic_user_with_maintenance_permissions)
+        request_as_user = basic_user_env["maintenance.request"].browse(request.id)
+        request_as_user.unlink()
+        self.assertFalse(request_as_user.exists())
+
+    def test_basic_user_without_permissions_cannot_delete_maintenance_records(self):
+        """Basic users without equipment manager group should not be able to delete maintenance records"""
+        request = create_maintenance_request(self.env)
+
+        unprivileged_env = self.env(user=self.basic_user_without_maintenance_permissions)
+        request_as_unprivileged = unprivileged_env["maintenance.request"].browse(request.id)
+        with self.assertRaises(AccessError):
+            request_as_unprivileged.unlink()
+
+    def test_basic_user_ui_visibility_flags(self):
+        """Basic users with maintenance permissions should have correct UI visibility flags set"""
+        request = create_maintenance_request(self.env)
+
+        basic_user_env = self.env(user=self.basic_user_with_maintenance_permissions)
+        request_as_basic_user = basic_user_env["maintenance.request"].search([('id', '=', request.id)])
+        self.assertFalse(request_as_basic_user.user_is_external_contractor)

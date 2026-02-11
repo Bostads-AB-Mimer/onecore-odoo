@@ -35,7 +35,7 @@ class FacilityFieldsMixin(models.AbstractModel):
         "Byggnad", related="facility_id.building_name", depends=["facility_id"]
     )
     facility_property_code = fields.Char(
-        "Fastighetskod", related="facility_id.property_code", depends=["facility_id"]
+        "Fastighetsnummer", related="facility_id.property_code", depends=["facility_id"]
     )
     facility_property_name = fields.Char(
         "Fastighet", related="facility_id.property_name", depends=["facility_id"]

@@ -1,0 +1,42 @@
+name: ONECore API Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r onecore_api/requirements-test.txt
+
+      - name: 🧪 Run pytest
+        run: |
+          cd onecore_api
+          pytest
+
+      - name: 📊 Upload coverage reports
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./onecore_api/coverage.xml
+          flags: unittests
+          name: codecov-pytest
