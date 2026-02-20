@@ -229,7 +229,17 @@
 
                                         <field name="property_type" invisible="not property_type"
                                             string="Fastighetstyp" />
-                                        <field name="address" string="Adress" />
+                                        <div class="d-flex align-items-center">
+                                            <label for="address" string="Adress" />
+                                            <button name="open_google_maps" type="object"
+                                                class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
+                                                style="line-height: 1;"
+                                                title="Öppna i Google Maps"
+                                                invisible="not address">
+                                                <i class="fa fa-map-marker" />
+                                            </button>
+                                        </div>
+                                        <field name="address" nolabel="1" string="Adress" />
                                         <field name="code"
                                             invisible="not code or space_caption != 'Lägenhet'"
                                             string="Kod" />
@@ -514,12 +524,33 @@
                                         <field name="national_registration_number"
                                             invisible="not national_registration_number"
                                             string="Person/Org. nr" />
-                                        <field name="contact_code" invisible="not contact_code"
-                                            string="Kundnummer" />
+                                        <div class="d-flex align-items-center" invisible="not contact_code">
+                                            <label for="contact_code" string="Kundnummer" />
+                                            <button name="open_customer_card" type="object"
+                                                class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
+                                                style="line-height: 1;"
+                                                title="Öppna kundkort i OneCore"
+                                                invisible="user_is_external_contractor">
+                                                <img src="/onecore_maintenance_extension/static/src/img/onecore_simple_black.svg"
+                                                    style="width: 12px; height: 12px;" alt="Kundkort" />
+                                            </button>
+                                        </div>
+                                        <field name="contact_code" nolabel="1" invisible="not contact_code" />
 
                                         <!-- Phone number and email address should only be editable
                                         for equipment managers -->
-                                        <field name="phone_number" string="Telefon"
+                                        <div class="d-flex align-items-center"
+                                            invisible="create_date and not lease_name">
+                                            <label for="phone_number" string="Telefon" />
+                                            <button name="call_phone_number" type="object"
+                                                class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
+                                                style="line-height: 1;"
+                                                title="Ring telefonnummer"
+                                                invisible="not phone_number">
+                                                <i class="fa fa-phone" />
+                                            </button>
+                                        </div>
+                                        <field name="phone_number" nolabel="1"
                                             help="Här ändrar du telefonnummer i ärendet"
                                             readonly="user_is_external_contractor"
                                             invisible="create_date and not lease_name" />

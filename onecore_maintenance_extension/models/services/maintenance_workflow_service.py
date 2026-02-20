@@ -24,7 +24,7 @@ class MaintenanceStageManager:
             if resource_allocated_stage:
                 return {"stage_id": resource_allocated_stage.id}
 
-        elif new_user_id is False and record.stage_id.name == "Resurs tilldelad":
+        elif new_user_id is False and record.stage_id.name != "Avslutad":
             # Auto-transition back to "Väntar på handläggning" when user is unassigned
             initial_stage = self._get_stage_by_name("Väntar på handläggning")
             if initial_stage:
