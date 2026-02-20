@@ -698,6 +698,57 @@ class OneCoreMaintenanceRequest(
         # Simply return without calling super() to skip all activity operations
         return
 
+    def open_customer_card(self):
+        self.ensure_one()
+        if not self.contact_code:
+            return
+
+        base_url = self.env["ir.config_parameter"].get_param(
+            "onecore_frontend_url",
+            "https://onecore.mimer.nu",
+        )
+
+        url = f"{base_url}/tenants/{self.contact_code}"
+
+        return {
+            "type": "ir.actions.act_url",
+            "url": url,
+            "target": "new",
+        }
+
+    def call_phone_number(self):
+        self.ensure_one()
+        if not self.phone_number:
+            return
+
+        phone = self.phone_number.replace(" ", "").replace("-", "")
+
+        self.message_post(
+            body=f"Ringde hyresgästen på {self.phone_number}",
+            message_type="notification",
+            subtype_xmlid="mail.mt_note",
+        )
+
+        return {
+            "type": "ir.actions.act_url",
+            "url": f"tel:{phone}",
+            "target": "self",
+        }
+
+    def open_google_maps(self):
+        self.ensure_one()
+        if not self.address:
+            return
+
+        formatted_address = urllib.parse.quote(self.address)
+        url = f"https://maps.google.com/?q={formatted_address}"
+
+        return {
+            "type": "ir.actions.act_url",
+            "url": url,
+            "target": "new",
+        }
+
     def open_component_wizard(self):
         self.ensure_one()
         # Create wizard explicitly so it has a real ID before loading components
