@@ -530,7 +530,7 @@
                                                 class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
                                                 style="line-height: 1;"
                                                 title="Öppna kundkort i OneCore"
-                                                invisible="user_is_external_contractor">
+                                                invisible="user_is_external_contractor or not id">
                                                 <img src="/onecore_maintenance_extension/static/src/img/onecore_simple_black.svg"
                                                     style="width: 12px; height: 12px;" alt="Kundkort" />
                                             </button>
@@ -546,7 +546,7 @@
                                                 class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
                                                 style="line-height: 1;"
                                                 title="Ring telefonnummer"
-                                                invisible="not phone_number">
+                                                invisible="not phone_number or not id">
                                                 <i class="fa fa-phone" />
                                             </button>
                                         </div>
