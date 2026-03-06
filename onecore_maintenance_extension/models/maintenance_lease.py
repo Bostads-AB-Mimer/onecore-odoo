@@ -9,6 +9,7 @@ class OnecoreMaintenanceLeaseOption(models.Model):
     name = fields.Char("name", required=True)
     lease_number = fields.Char("Kontraktnummer", required=True)
     lease_type = fields.Char("Kontraktstyp", required=True)
+    lease_status = fields.Integer("Status", default=3)
     lease_start_date = fields.Date("Startdatum")
     lease_end_date = fields.Date("Slutdatum")
     notice_given_by = fields.Char("Uppsägning gjord av")

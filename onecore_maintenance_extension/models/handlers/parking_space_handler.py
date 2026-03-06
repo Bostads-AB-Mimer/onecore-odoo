@@ -62,11 +62,10 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
 
             # Only create lease and tenant options if lease data exists
             if lease:
-                self._create_lease_option(
+                lease_option = self._create_lease_option(
                     lease, parking_space_option_id=parking_space_option.id
                 )
-
-                self._create_tenant_options(lease["tenants"])
+                self._create_tenant_options(lease["tenants"], lease_option_id=lease_option.id)
             else:
                 # Clear existing lease and tenant options when no lease data is available
                 self.env["maintenance.lease.option"].search(
@@ -88,7 +87,7 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_records:
-            self.record.lease_option_id = lease_records[0].id
+            self.record.lease_option_id = self._select_active_lease_option(lease_records).id
 
         tenant_records = self.env["maintenance.tenant.option"].search(
             [("user_id", "=", self.env.user.id)]

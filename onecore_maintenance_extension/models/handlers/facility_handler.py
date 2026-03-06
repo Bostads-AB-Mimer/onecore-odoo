@@ -58,9 +58,8 @@ class FacilityHandler(BaseMaintenanceHandler):
 
             # Only create lease and tenant options if lease data exists
             if lease:
-                self._create_lease_option(lease, facility_option_id=facility_option.id)
-
-                self._create_tenant_options(lease["tenants"])
+                lease_option = self._create_lease_option(lease, facility_option_id=facility_option.id)
+                self._create_tenant_options(lease["tenants"], lease_option_id=lease_option.id)
             else:
                 # Clear existing lease and tenant options when no lease data is available
                 self.env["maintenance.lease.option"].search(
@@ -82,7 +81,7 @@ class FacilityHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_options:
-            self.record.lease_option_id = lease_options[0].id
+            self.record.lease_option_id = self._select_active_lease_option(lease_options).id
 
         tenant_options = self.env["maintenance.tenant.option"].search(
             [("user_id", "=", self.env.user.id)]

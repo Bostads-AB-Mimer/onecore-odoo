@@ -53,6 +53,15 @@ class BaseMaintenanceHandler:
             [("user_id", "=", self.env.user.id)]
         ).unlink()
 
+    _LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
+
+    def _normalize_lease_status(self, raw_status):
+        if isinstance(raw_status, int):
+            return raw_status
+        if isinstance(raw_status, str):
+            return self._LEASE_STATUS_MAP.get(raw_status, 3)
+        return 3
+
     def _create_lease_option(
         self,
         lease,
@@ -66,6 +75,7 @@ class BaseMaintenanceHandler:
             "name": lease["leaseId"],
             "lease_number": lease["leaseNumber"],
             "lease_type": lease["type"],
+            "lease_status": self._normalize_lease_status(lease.get("status")),
             "lease_start_date": lease["leaseStartDate"],
             "lease_end_date": lease["lastDebitDate"],
             "contract_date": lease["contractDate"],
@@ -81,7 +91,7 @@ class BaseMaintenanceHandler:
 
         return self.env["maintenance.lease.option"].create(lease_data)
 
-    def _create_tenant_options(self, tenants):
+    def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants."""
         # Clear existing tenant options before creating new ones
         self.env["maintenance.tenant.option"].search(
@@ -92,21 +102,32 @@ class BaseMaintenanceHandler:
             name = get_tenant_name(tenant)
             phone_number = get_main_phone_number(tenant)
 
-            self.env["maintenance.tenant.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": name,
-                    "contact_code": tenant["contactCode"],
-                    "contact_key": tenant["contactKey"],
-                    "national_registration_number": tenant.get(
-                        "nationalRegistrationNumber"
-                    ),
-                    "email_address": tenant.get("emailAddress"),
-                    "phone_number": phone_number,
-                    "is_tenant": tenant["isTenant"],
-                    "special_attention": tenant.get("specialAttention"),
-                }
-            )
+            tenant_data = {
+                "user_id": self.env.user.id,
+                "name": name,
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": phone_number,
+                "is_tenant": tenant["isTenant"],
+                "special_attention": tenant.get("specialAttention"),
+            }
+            if lease_option_id:
+                tenant_data["lease_option_id"] = lease_option_id
+
+            self.env["maintenance.tenant.option"].create(tenant_data)
+
+    def _select_active_lease_option(self, lease_records):
+        """Select the preferred lease option by status priority: Current (0), AboutToEnd (2),
+        Upcoming (1). Falls back to the record with the highest lease number."""
+        for priority_status in [0, 2, 1]:
+            for record in lease_records:
+                if record.lease_status == priority_status:
+                    return record
+        return sorted(lease_records, key=lambda r: r.lease_number or "", reverse=True)[0]
 
     def _raise_no_results_error(self, search_value):
         """Raise a user error when no results are found."""
