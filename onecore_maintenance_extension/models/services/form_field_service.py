@@ -88,11 +88,13 @@ class FormFieldService:
         record.lease_start_date = record.lease_option_id.lease_start_date
         record.lease_end_date = record.lease_option_id.lease_end_date
 
-        tenant_records = record.env["maintenance.tenant.option"].search(
-            [("id", "=", record.tenant_option_id.id)]
+        lease_tenants = record.env["maintenance.tenant.option"].search(
+            [("lease_option_id", "=", record.lease_option_id.id),
+             ("user_id", "=", record.env.user.id)]
         )
-        if tenant_records:
-            record.tenant_option_id = tenant_records[0].id
+        if lease_tenants:
+            if record.tenant_option_id not in lease_tenants:
+                record.tenant_option_id = lease_tenants[0].id
 
         # Handle parking space vs residence based on space caption
         if (
@@ -125,6 +127,10 @@ class FormFieldService:
         record.email_address = record.tenant_option_id.email_address
         record.is_tenant = record.tenant_option_id.is_tenant
         record.special_attention = record.tenant_option_id.special_attention
+
+        tenant_lease = record.tenant_option_id.lease_option_id
+        if tenant_lease and tenant_lease != record.lease_option_id:
+            record.lease_option_id = tenant_lease.id
 
     def update_parking_space_fields(self, record):
         """Update parking space-related fields."""

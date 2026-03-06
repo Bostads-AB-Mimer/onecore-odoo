@@ -91,27 +91,29 @@ class BaseMaintenanceHandler:
 
         return self.env["maintenance.lease.option"].create(lease_data)
 
-    def _create_tenant_options(self, tenants):
+    def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants."""
         for tenant in tenants:
             name = get_tenant_name(tenant)
             phone_number = get_main_phone_number(tenant)
 
-            self.env["maintenance.tenant.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": name,
-                    "contact_code": tenant["contactCode"],
-                    "contact_key": tenant["contactKey"],
-                    "national_registration_number": tenant.get(
-                        "nationalRegistrationNumber"
-                    ),
-                    "email_address": tenant.get("emailAddress"),
-                    "phone_number": phone_number,
-                    "is_tenant": tenant["isTenant"],
-                    "special_attention": tenant.get("specialAttention"),
-                }
-            )
+            tenant_data = {
+                "user_id": self.env.user.id,
+                "name": name,
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": phone_number,
+                "is_tenant": tenant["isTenant"],
+                "special_attention": tenant.get("specialAttention"),
+            }
+            if lease_option_id:
+                tenant_data["lease_option_id"] = lease_option_id
+
+            self.env["maintenance.tenant.option"].create(tenant_data)
 
     def _select_active_lease_option(self, lease_records):
         """Select the preferred lease option by status priority: Current (0), AboutToEnd (2),
