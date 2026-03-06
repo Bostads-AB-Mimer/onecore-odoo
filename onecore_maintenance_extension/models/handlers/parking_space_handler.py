@@ -88,7 +88,7 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_records:
-            self.record.lease_option_id = lease_records[0].id
+            self.record.lease_option_id = self._select_active_lease_option(lease_records).id
 
         tenant_records = self.env["maintenance.tenant.option"].search(
             [("user_id", "=", self.env.user.id)]

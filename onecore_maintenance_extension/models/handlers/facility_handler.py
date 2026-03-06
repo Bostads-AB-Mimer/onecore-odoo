@@ -82,7 +82,7 @@ class FacilityHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_options:
-            self.record.lease_option_id = lease_options[0].id
+            self.record.lease_option_id = self._select_active_lease_option(lease_options).id
 
         tenant_options = self.env["maintenance.tenant.option"].search(
             [("user_id", "=", self.env.user.id)]
