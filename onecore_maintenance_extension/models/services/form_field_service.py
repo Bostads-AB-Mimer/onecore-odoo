@@ -101,16 +101,13 @@ class FormFieldService:
             record.space_caption == "Bilplats"
             and record.lease_option_id.parking_space_option_id
         ):
-            record.parking_space_option_id = (
-                record.lease_option_id.parking_space_option_id.id
-            )
+            new_parking = record.lease_option_id.parking_space_option_id
+            if new_parking != record.parking_space_option_id:
+                record.parking_space_option_id = new_parking.id
         else:
-            # Handle rental property updates for other space types
-            rental_property_records = record.env[
-                "maintenance.rental.property.option"
-            ].search([("id", "=", record.lease_option_id.rental_property_option_id.id)])
-            if rental_property_records:
-                record.rental_property_option_id = rental_property_records[0].id
+            new_rental = record.lease_option_id.rental_property_option_id
+            if new_rental and new_rental != record.rental_property_option_id:
+                record.rental_property_option_id = new_rental.id
 
     def update_tenant_fields(self, record):
         """Update tenant-related fields."""
