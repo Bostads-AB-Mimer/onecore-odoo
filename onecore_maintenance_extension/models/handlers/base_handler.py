@@ -121,13 +121,24 @@ class BaseMaintenanceHandler:
             self.env["maintenance.tenant.option"].create(tenant_data)
 
     def _select_active_lease_option(self, lease_records):
-        """Select the preferred lease option by status priority: Current (0), AboutToEnd (2),
-        Upcoming (1). Falls back to the record with the highest lease number."""
+        """Priority: status 0 (Current) > 2 (AboutToEnd) > 1 (Upcoming) > highest lease_number."""
         for priority_status in [0, 2, 1]:
             for record in lease_records:
                 if record.lease_status == priority_status:
                     return record
         return sorted(lease_records, key=lambda r: r.lease_number or "", reverse=True)[0]
+
+    def _select_tenant_for_search(self, tenant_records, search_type, search_value):
+        """Select the tenant matching the searched person, fallback to first record."""
+        if search_type == "pnr" and search_value:
+            for record in tenant_records:
+                if record.national_registration_number == search_value:
+                    return record
+        elif search_type == "contactCode" and search_value:
+            for record in tenant_records:
+                if record.contact_code == search_value:
+                    return record
+        return tenant_records[0]
 
     def _raise_no_results_error(self, search_value):
         """Raise a user error when no results are found."""
