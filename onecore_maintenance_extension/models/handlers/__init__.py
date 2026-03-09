@@ -1,4 +1,5 @@
 from .base_handler import BaseMaintenanceHandler
+from .rental_object_base_handler import RentalObjectBaseHandler
 from .rental_property_handler import RentalPropertyHandler
 from .parking_space_handler import ParkingSpaceHandler
 from .property_handler import PropertyHandler
