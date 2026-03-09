@@ -23,7 +23,7 @@ class FacilityHandler(BaseMaintenanceHandler):
                 return self._return_no_results_warning(search_value)
 
             self.update_form_options(work_order_data)
-            self._set_form_selections()
+            self._set_form_selections(search_type, search_value)
         else:
             raise ValueError(
                 f"FacilityHandler does not support search type: {search_type}"
@@ -69,7 +69,7 @@ class FacilityHandler(BaseMaintenanceHandler):
                     [("user_id", "=", self.env.user.id)]
                 ).unlink()
 
-    def _set_form_selections(self):
+    def _set_form_selections(self, search_type=None, search_value=None):
         """Set form selections for facility options."""
         facility_options = self.env["maintenance.facility.option"].search(
             [("user_id", "=", self.env.user.id)]
@@ -81,10 +81,14 @@ class FacilityHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_options:
-            self.record.lease_option_id = self._select_active_lease_option(lease_options).id
+            active_lease = self._select_active_lease_option(lease_options)
+            self.record.lease_option_id = active_lease.id
 
-        tenant_options = self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if tenant_options:
-            self.record.tenant_option_id = tenant_options[0].id
+            tenant_options = self.env["maintenance.tenant.option"].search(
+                [("user_id", "=", self.env.user.id),
+                 ("lease_option_id", "=", active_lease.id)]
+            )
+            if tenant_options:
+                self.record.tenant_option_id = self._select_tenant_for_search(
+                    tenant_options, search_type, search_value
+                ).id

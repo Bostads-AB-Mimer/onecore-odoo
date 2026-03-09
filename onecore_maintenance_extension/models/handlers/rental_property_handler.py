@@ -24,7 +24,7 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
                 return self._return_no_results_warning(search_value)
 
             self.update_form_options(work_order_data)
-            self._set_form_selections()
+            self._set_form_selections(search_type, search_value)
         else:
             raise ValueError(
                 f"RentalPropertyHandler does not support search type: {search_type}"
@@ -88,7 +88,7 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
                     }
                 )
 
-    def _set_form_selections(self):
+    def _set_form_selections(self, search_type=None, search_value=None):
         """Set the form field selections after creating options."""
         property_records = self.env["maintenance.rental.property.option"].search(
             [("user_id", "=", self.env.user.id)]
@@ -106,10 +106,14 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
             [("user_id", "=", self.env.user.id)]
         )
         if lease_records:
-            self.record.lease_option_id = self._select_active_lease_option(lease_records).id
+            active_lease = self._select_active_lease_option(lease_records)
+            self.record.lease_option_id = active_lease.id
 
-        tenant_records = self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if tenant_records:
-            self.record.tenant_option_id = tenant_records[0].id
+            tenant_records = self.env["maintenance.tenant.option"].search(
+                [("user_id", "=", self.env.user.id),
+                 ("lease_option_id", "=", active_lease.id)]
+            )
+            if tenant_records:
+                self.record.tenant_option_id = self._select_tenant_for_search(
+                    tenant_records, search_type, search_value
+                ).id
