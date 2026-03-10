@@ -16,12 +16,17 @@ class MaintenanceStageManager:
         if not record.user_id:
             self._validate_unassigned_resource(new_stage_id)
 
-        # Set performed_date/closed_date when stage is "Utförd"/"Avslutad"
+        # Set/clear performed_date/closed_date based on stage transitions
         new_stage = self.env["maintenance.stage"].browse(new_stage_id)
         if new_stage.name == "Utförd":
             record.performed_date = fields.Datetime.now()
-        elif new_stage.name == "Avslutad":
+        elif new_stage.name not in ("Utförd", "Avslutad"):
+            record.performed_date = False
+
+        if new_stage.name == "Avslutad":
             record.closed_date = fields.Datetime.now()
+        else:
+            record.closed_date = False
 
     def handle_resource_assignment(self, record, new_user_id):
         """Handle workflow when user is assigned/unassigned."""
