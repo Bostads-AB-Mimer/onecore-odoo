@@ -37,28 +37,38 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
             lease = item["lease"]
             maintenance_units = item.get("maintenance_units", [])
 
+            # Reuse existing rental property option if one already exists for this property
+            property_code = property_data["code"]
             rental_property_option = self.env[
                 "maintenance.rental.property.option"
-            ].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": property_data["rentalInformation"].get("rentalId"),
-                    "address": property_data["name"],
-                    "code": property_data["code"],
-                    "property_type": property_data["type"].get("name"),
-                    "area": property_data["areaSize"],
-                    "entrance": property_data["entrance"],
-                    "has_elevator": (
-                        "Ja"
-                        if property_data["accessibility"].get("elevator")
-                        else "Nej"
-                    ),
-                    "estate_code": property_data["property"].get("code"),
-                    "estate": property_data["property"].get("name"),
-                    "building_code": property_data["building"].get("code"),
-                    "building": property_data["building"].get("name"),
-                }
+            ].search(
+                [("user_id", "=", self.env.user.id), ("code", "=", property_code)],
+                limit=1,
             )
+
+            if not rental_property_option:
+                rental_property_option = self.env[
+                    "maintenance.rental.property.option"
+                ].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": property_data["rentalInformation"].get("rentalId"),
+                        "address": property_data["name"],
+                        "code": property_code,
+                        "property_type": property_data["type"].get("name"),
+                        "area": property_data["areaSize"],
+                        "entrance": property_data["entrance"],
+                        "has_elevator": (
+                            "Ja"
+                            if property_data["accessibility"].get("elevator")
+                            else "Nej"
+                        ),
+                        "estate_code": property_data["property"].get("code"),
+                        "estate": property_data["property"].get("name"),
+                        "building_code": property_data["building"].get("code"),
+                        "building": property_data["building"].get("name"),
+                    }
+                )
 
             # Only create lease and tenant options if lease data exists
             if lease:

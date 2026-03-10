@@ -62,12 +62,13 @@ class FormFieldService:
         record.building_code = record.rental_property_option_id.building_code
         record.building = record.rental_property_option_id.building
 
-        # Update related lease
-        lease_records = record.env["maintenance.lease.option"].search(
-            [("rental_property_option_id", "=", record.rental_property_option_id.id)]
-        )
-        if lease_records:
-            record.lease_option_id = select_active_lease(lease_records).id
+        # Update related lease only if current lease doesn't belong to this rental property
+        if not record.lease_option_id or record.lease_option_id.rental_property_option_id != record.rental_property_option_id:
+            lease_records = record.env["maintenance.lease.option"].search(
+                [("rental_property_option_id", "=", record.rental_property_option_id.id)]
+            )
+            if lease_records:
+                record.lease_option_id = select_active_lease(lease_records).id
 
     def update_maintenance_unit_fields(self, record):
         """Update maintenance unit-related fields."""
