@@ -1,6 +1,7 @@
 import logging
 from odoo import _, exceptions
 from ..utils.helpers import get_tenant_name, get_main_phone_number, select_active_lease
+from ..constants import LEASE_STATUS_LABELS
 
 _logger = logging.getLogger(__name__)
 
@@ -70,12 +71,15 @@ class BaseMaintenanceHandler:
         facility_option_id=None,
     ):
         """Create a lease option record with common lease data."""
+        status = self._normalize_lease_status(lease.get("status"))
+        status_label = LEASE_STATUS_LABELS.get(status, "")
+        lease_name = f"{lease['leaseId']} ({status_label})" if status_label else lease["leaseId"]
         lease_data = {
             "user_id": self.env.user.id,
-            "name": lease["leaseId"],
+            "name": lease_name,
             "lease_number": lease["leaseNumber"],
             "lease_type": lease["type"],
-            "lease_status": self._normalize_lease_status(lease.get("status")),
+            "lease_status": status,
             "lease_start_date": lease["leaseStartDate"],
             "lease_end_date": lease["lastDebitDate"],
             "contract_date": lease["contractDate"],
@@ -93,13 +97,20 @@ class BaseMaintenanceHandler:
 
     def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants."""
+        status_label = ""
+        if lease_option_id:
+            lease_record = self.env["maintenance.lease.option"].browse(lease_option_id)
+            if lease_record.exists():
+                status_label = LEASE_STATUS_LABELS.get(lease_record.lease_status, "")
+
         for tenant in tenants:
             name = get_tenant_name(tenant)
+            tenant_name = f"{name} ({status_label})" if status_label else name
             phone_number = get_main_phone_number(tenant)
 
             tenant_data = {
                 "user_id": self.env.user.id,
-                "name": name,
+                "name": tenant_name,
                 "contact_code": tenant["contactCode"],
                 "contact_key": tenant["contactKey"],
                 "national_registration_number": tenant.get(
