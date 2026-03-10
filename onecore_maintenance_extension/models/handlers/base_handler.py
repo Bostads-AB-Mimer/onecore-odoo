@@ -1,6 +1,6 @@
 import logging
 from odoo import _, exceptions
-from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ..utils.helpers import get_tenant_name, get_main_phone_number, select_active_lease
 
 _logger = logging.getLogger(__name__)
 
@@ -93,11 +93,6 @@ class BaseMaintenanceHandler:
 
     def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants."""
-        # Clear existing tenant options before creating new ones
-        self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        ).unlink()
-
         for tenant in tenants:
             name = get_tenant_name(tenant)
             phone_number = get_main_phone_number(tenant)
@@ -121,12 +116,7 @@ class BaseMaintenanceHandler:
             self.env["maintenance.tenant.option"].create(tenant_data)
 
     def _select_active_lease_option(self, lease_records):
-        """Priority: status 0 (Current) > 2 (AboutToEnd) > 1 (Upcoming) > highest lease_number."""
-        for priority_status in [0, 2, 1]:
-            for record in lease_records:
-                if record.lease_status == priority_status:
-                    return record
-        return sorted(lease_records, key=lambda r: r.lease_number or "", reverse=True)[0]
+        return select_active_lease(lease_records)
 
     def _select_tenant_for_search(self, tenant_records, search_type, search_value):
         """Select the tenant matching the searched person, fallback to first record."""

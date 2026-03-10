@@ -1,5 +1,7 @@
 """Form field service for maintenance requests."""
 
+from ..utils.helpers import select_active_lease
+
 
 class FormFieldService:
     """Service for handling form field assignments and onchange logic."""
@@ -65,7 +67,7 @@ class FormFieldService:
             [("rental_property_option_id", "=", record.rental_property_option_id.id)]
         )
         if lease_records:
-            record.lease_option_id = lease_records[0].id
+            record.lease_option_id = select_active_lease(lease_records).id
 
     def update_maintenance_unit_fields(self, record):
         """Update maintenance unit-related fields."""
