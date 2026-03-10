@@ -98,7 +98,7 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         )
         self.assertFalse(request.performed_date)
 
-        request.write({"stage_id": self.stage_utford.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
         self.assertTrue(request.performed_date)
 
     def test_closed_date_set_when_moving_to_avslutad(self):
@@ -108,7 +108,7 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         )
         self.assertFalse(request.closed_date)
 
-        request.write({"stage_id": self.stage_avslutad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
         self.assertTrue(request.closed_date)
 
     def test_performed_date_cleared_when_moving_back_from_utford(self):
@@ -116,10 +116,10 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request = create_maintenance_request(
             self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
         )
-        request.write({"stage_id": self.stage_utford.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
         self.assertTrue(request.performed_date)
 
-        request.write({"stage_id": self.stage_paborjad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
         self.assertFalse(request.performed_date)
 
     def test_performed_date_preserved_when_moving_to_avslutad(self):
@@ -127,11 +127,11 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request = create_maintenance_request(
             self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
         )
-        request.write({"stage_id": self.stage_utford.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
         performed_date = request.performed_date
         self.assertTrue(performed_date)
 
-        request.write({"stage_id": self.stage_avslutad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
         self.assertEqual(request.performed_date, performed_date)
 
     def test_closed_date_cleared_when_moving_back_from_avslutad(self):
@@ -139,10 +139,10 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request = create_maintenance_request(
             self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
         )
-        request.write({"stage_id": self.stage_avslutad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
         self.assertTrue(request.closed_date)
 
-        request.write({"stage_id": self.stage_paborjad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
         self.assertFalse(request.closed_date)
 
     def test_performed_date_updates_on_re_entry_to_utford(self):
@@ -150,13 +150,13 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request = create_maintenance_request(
             self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
         )
-        request.write({"stage_id": self.stage_utford.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
         first_performed_date = request.performed_date
 
-        request.write({"stage_id": self.stage_paborjad.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
         self.assertFalse(request.performed_date)
 
-        request.write({"stage_id": self.stage_utford.id})
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
         self.assertTrue(request.performed_date)
         self.assertGreaterEqual(request.performed_date, first_performed_date)
 
