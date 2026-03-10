@@ -106,6 +106,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
             "leaseId": self.fake.lease_id(),
             "leaseNumber": self.fake.lease_number(),
             "type": self.fake.lease_type(),
+            "status": 0,
             "leaseStartDate": self.fake.date(),
             "lastDebitDate": self.fake.date(),
             "contractDate": self.fake.date(),
@@ -116,7 +117,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
             lease_data, rental_property_option_id=rental_property_option.id
         )
 
-        self.assertEqual(lease_option.name, lease_data["leaseId"])
+        self.assertEqual(lease_option.name, f"{lease_data['leaseId']} (Gällande)")
         self.assertEqual(lease_option.lease_number, lease_data["leaseNumber"])
         self.assertEqual(lease_option.lease_type, lease_data["type"])
         self.assertEqual(
@@ -133,6 +134,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
             "leaseId": self.fake.lease_id(),
             "leaseNumber": self.fake.lease_number(),
             "type": self.fake.lease_type(),
+            "status": 0,
             "leaseStartDate": self.fake.date(),
             "lastDebitDate": self.fake.date(),
             "contractDate": self.fake.date(),
@@ -158,6 +160,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
             "leaseId": self.fake.lease_id(),
             "leaseNumber": self.fake.lease_number(),
             "type": self.fake.lease_type(),
+            "status": 0,
             "leaseStartDate": self.fake.date(),
             "lastDebitDate": self.fake.date(),
             "contractDate": self.fake.date(),
