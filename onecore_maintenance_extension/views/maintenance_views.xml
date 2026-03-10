@@ -604,6 +604,12 @@
                                         <field name="due_date"
                                             help="Det datum ärendet ska vara utfört"
                                             readonly="user_is_external_contractor" />
+                                        <field name="performed_date"
+                                            help="Datum och tid då ärendet markerades som utfört"
+                                            readonly="1" />
+                                        <field name="closed_date"
+                                            help="Datum och tid då ärendet markerades som avslutat"
+                                            readonly="1" />
                                         <field
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
@@ -783,6 +789,8 @@
                         <field name="start_date" optional="hide" />
                         <field name="schedule_date" optional="hide" />
                         <field name="due_date" optional="show" />
+                        <field name="performed_date" optional="hide" />
+                        <field name="closed_date" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
                         <field name="priority_expanded" optional="hide" />
                         <field name="creation_origin" optional="hide" />
