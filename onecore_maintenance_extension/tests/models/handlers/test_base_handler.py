@@ -14,6 +14,8 @@ from ...utils.test_utils import (
     create_rental_property_option,
     create_parking_space_option,
     create_facility_option,
+    create_lease_option,
+    create_tenant_option,
 )
 from ....models.handlers.base_handler import BaseMaintenanceHandler
 
@@ -335,3 +337,137 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertIn("title", result["warning"])
         self.assertIn("message", result["warning"])
         self.assertIn(search_value, result["warning"]["message"])
+
+    # --- _normalize_lease_status tests ---
+
+    def test_normalize_lease_status_with_integer(self):
+        """Test that integer status values pass through unchanged."""
+        self.assertEqual(self.handler._normalize_lease_status(0), 0)
+        self.assertEqual(self.handler._normalize_lease_status(1), 1)
+        self.assertEqual(self.handler._normalize_lease_status(2), 2)
+        self.assertEqual(self.handler._normalize_lease_status(3), 3)
+
+    def test_normalize_lease_status_with_string(self):
+        """Test that string status values are mapped to integers."""
+        self.assertEqual(self.handler._normalize_lease_status("Current"), 0)
+        self.assertEqual(self.handler._normalize_lease_status("Upcoming"), 1)
+        self.assertEqual(self.handler._normalize_lease_status("AboutToEnd"), 2)
+        self.assertEqual(self.handler._normalize_lease_status("Ended"), 3)
+
+    def test_normalize_lease_status_unknown_string_defaults_to_3(self):
+        """Test that unknown string status defaults to 3."""
+        self.assertEqual(self.handler._normalize_lease_status("Unknown"), 3)
+
+    def test_normalize_lease_status_none_defaults_to_3(self):
+        """Test that None defaults to 3."""
+        self.assertEqual(self.handler._normalize_lease_status(None), 3)
+
+    # --- _select_tenant_for_search tests ---
+
+    def test_select_tenant_by_pnr(self):
+        """Test selecting tenant by national registration number."""
+        target_pnr = "199001011234"
+        tenant_other = create_tenant_option(
+            self.env, national_registration_number="199002021234"
+        )
+        tenant_match = create_tenant_option(
+            self.env, national_registration_number=target_pnr
+        )
+
+        records = tenant_other | tenant_match
+        result = self.handler._select_tenant_for_search(records, "pnr", target_pnr)
+        self.assertEqual(result, tenant_match)
+
+    def test_select_tenant_by_contact_code(self):
+        """Test selecting tenant by contact code."""
+        target_code = "P12345"
+        tenant_other = create_tenant_option(self.env, contact_code="P99999")
+        tenant_match = create_tenant_option(self.env, contact_code=target_code)
+
+        records = tenant_other | tenant_match
+        result = self.handler._select_tenant_for_search(
+            records, "contactCode", target_code
+        )
+        self.assertEqual(result, tenant_match)
+
+    def test_select_tenant_fallback_to_first(self):
+        """Test that unmatched search falls back to first record."""
+        tenant_first = create_tenant_option(self.env)
+        tenant_second = create_tenant_option(self.env)
+
+        records = tenant_first | tenant_second
+        result = self.handler._select_tenant_for_search(records, "leaseId", "L-123")
+        self.assertEqual(result, records[0])
+
+    # --- _create_tenant_options with lease_option_id ---
+
+    def test_create_tenant_options_links_lease_option(self):
+        """Test that tenant options are linked to the lease option."""
+        rental_property_option = create_rental_property_option(self.env)
+        lease_option = create_lease_option(
+            self.env, rental_property_option_id=rental_property_option.id
+        )
+
+        tenants = [
+            {
+                "contactCode": self.fake.contact_code(),
+                "contactKey": self.fake.contact_key(),
+                "firstName": self.fake.first_name(),
+                "lastName": self.fake.last_name(),
+                "phoneNumbers": [],
+                "isTenant": True,
+            }
+        ]
+
+        self.handler._create_tenant_options(tenants, lease_option_id=lease_option.id)
+
+        tenant_option = self.env["maintenance.tenant.option"].search(
+            [("contact_code", "=", tenants[0]["contactCode"])]
+        )
+        self.assertEqual(tenant_option.lease_option_id.id, lease_option.id)
+
+    def test_create_tenant_options_without_lease_option(self):
+        """Test that tenant options have no lease link when none is provided."""
+        tenants = [
+            {
+                "contactCode": self.fake.contact_code(),
+                "contactKey": self.fake.contact_key(),
+                "firstName": self.fake.first_name(),
+                "lastName": self.fake.last_name(),
+                "phoneNumbers": [],
+                "isTenant": True,
+            }
+        ]
+
+        self.handler._create_tenant_options(tenants)
+
+        tenant_option = self.env["maintenance.tenant.option"].search(
+            [("contact_code", "=", tenants[0]["contactCode"])]
+        )
+        self.assertFalse(tenant_option.lease_option_id)
+
+    # --- _create_lease_option status label in name ---
+
+    def test_create_lease_option_name_includes_status_label(self):
+        """Test that lease option name includes status label for each status."""
+        rental_property_option = create_rental_property_option(self.env)
+        expected_labels = {0: "Gällande", 1: "Kommande", 2: "Uppsagt", 3: "Upphört"}
+
+        for status, label in expected_labels.items():
+            lease_id = self.fake.lease_id()
+            lease_data = {
+                "leaseId": lease_id,
+                "leaseNumber": self.fake.lease_number(),
+                "type": self.fake.lease_type(),
+                "status": status,
+                "leaseStartDate": self.fake.date(),
+                "lastDebitDate": self.fake.date(),
+                "contractDate": self.fake.date(),
+                "approvalDate": self.fake.date(),
+            }
+
+            lease_option = self.handler._create_lease_option(
+                lease_data, rental_property_option_id=rental_property_option.id
+            )
+
+            self.assertEqual(lease_option.name, f"{lease_id} ({label})")
