@@ -76,6 +76,8 @@ class OneCoreMaintenanceRequest(
         store=True,
     )
     start_date = fields.Date("Startdatum", store=True)
+    performed_date = fields.Datetime("Utförd datum", store=True, readonly=True)
+    closed_date = fields.Datetime("Avslutad datum", store=True, readonly=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
     )

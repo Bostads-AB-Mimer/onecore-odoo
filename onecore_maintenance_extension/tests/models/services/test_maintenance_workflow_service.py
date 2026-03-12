@@ -91,6 +91,75 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request.write({"stage_id": self.stage_utford.id})
         self.assertEqual(request.stage_id, self.stage_utford)
 
+    def test_performed_date_set_when_moving_to_utford(self):
+        """Moving to 'Utförd' should set performed_date"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        self.assertFalse(request.performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        self.assertTrue(request.performed_date)
+
+    def test_closed_date_set_when_moving_to_avslutad(self):
+        """Moving to 'Avslutad' should set closed_date"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        self.assertFalse(request.closed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertTrue(request.closed_date)
+
+    def test_performed_date_cleared_when_moving_back_from_utford(self):
+        """Moving from 'Utförd' to a non-Utförd/non-Avslutad stage should clear performed_date"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        self.assertTrue(request.performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+        self.assertFalse(request.performed_date)
+
+    def test_performed_date_preserved_when_moving_to_avslutad(self):
+        """Moving from 'Utförd' to 'Avslutad' should preserve performed_date"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        performed_date = request.performed_date
+        self.assertTrue(performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertEqual(request.performed_date, performed_date)
+
+    def test_closed_date_cleared_when_moving_back_from_avslutad(self):
+        """Moving from 'Avslutad' to any other stage should clear closed_date"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertTrue(request.closed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+        self.assertFalse(request.closed_date)
+
+    def test_performed_date_updates_on_re_entry_to_utford(self):
+        """Moving to 'Utförd' again should update performed_date to the new timestamp"""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        first_performed_date = request.performed_date
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+        self.assertFalse(request.performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        self.assertTrue(request.performed_date)
+        self.assertGreaterEqual(request.performed_date, first_performed_date)
+
 
 @tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
