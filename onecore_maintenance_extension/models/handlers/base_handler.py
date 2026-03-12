@@ -1,6 +1,7 @@
 import logging
 from odoo import _, exceptions
-from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ..utils.helpers import get_tenant_name, get_main_phone_number, select_active_lease
+from ..constants import LEASE_STATUS_LABELS
 
 _logger = logging.getLogger(__name__)
 
@@ -53,6 +54,15 @@ class BaseMaintenanceHandler:
             [("user_id", "=", self.env.user.id)]
         ).unlink()
 
+    _LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
+
+    def _normalize_lease_status(self, raw_status):
+        if isinstance(raw_status, int):
+            return raw_status
+        if isinstance(raw_status, str):
+            return self._LEASE_STATUS_MAP.get(raw_status, 3)
+        return 3
+
     def _create_lease_option(
         self,
         lease,
@@ -61,11 +71,15 @@ class BaseMaintenanceHandler:
         facility_option_id=None,
     ):
         """Create a lease option record with common lease data."""
+        status = self._normalize_lease_status(lease.get("status"))
+        status_label = LEASE_STATUS_LABELS.get(status, "")
+        lease_name = f"{lease['leaseId']} ({status_label})" if status_label else lease["leaseId"]
         lease_data = {
             "user_id": self.env.user.id,
-            "name": lease["leaseId"],
+            "name": lease_name,
             "lease_number": lease["leaseNumber"],
             "lease_type": lease["type"],
+            "lease_status": status,
             "lease_start_date": lease["leaseStartDate"],
             "lease_end_date": lease["lastDebitDate"],
             "contract_date": lease["contractDate"],
@@ -81,32 +95,51 @@ class BaseMaintenanceHandler:
 
         return self.env["maintenance.lease.option"].create(lease_data)
 
-    def _create_tenant_options(self, tenants):
+    def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants."""
-        # Clear existing tenant options before creating new ones
-        self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        ).unlink()
+        status_label = ""
+        if lease_option_id:
+            lease_record = self.env["maintenance.lease.option"].browse(lease_option_id)
+            if lease_record.exists():
+                status_label = LEASE_STATUS_LABELS.get(lease_record.lease_status, "")
 
         for tenant in tenants:
             name = get_tenant_name(tenant)
+            tenant_name = f"{name} ({status_label})" if status_label else name
             phone_number = get_main_phone_number(tenant)
 
-            self.env["maintenance.tenant.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": name,
-                    "contact_code": tenant["contactCode"],
-                    "contact_key": tenant["contactKey"],
-                    "national_registration_number": tenant.get(
-                        "nationalRegistrationNumber"
-                    ),
-                    "email_address": tenant.get("emailAddress"),
-                    "phone_number": phone_number,
-                    "is_tenant": tenant["isTenant"],
-                    "special_attention": tenant.get("specialAttention"),
-                }
-            )
+            tenant_data = {
+                "user_id": self.env.user.id,
+                "name": tenant_name,
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": phone_number,
+                "is_tenant": tenant["isTenant"],
+                "special_attention": tenant.get("specialAttention"),
+            }
+            if lease_option_id:
+                tenant_data["lease_option_id"] = lease_option_id
+
+            self.env["maintenance.tenant.option"].create(tenant_data)
+
+    def _select_active_lease_option(self, lease_records):
+        return select_active_lease(lease_records)
+
+    def _select_tenant_for_search(self, tenant_records, search_type, search_value):
+        """Select the tenant matching the searched person, fallback to first record."""
+        if search_type == "pnr" and search_value:
+            for record in tenant_records:
+                if record.national_registration_number == search_value:
+                    return record
+        elif search_type == "contactCode" and search_value:
+            for record in tenant_records:
+                if record.contact_code == search_value:
+                    return record
+        return tenant_records[0]
 
     def _raise_no_results_error(self, search_value):
         """Raise a user error when no results are found."""
