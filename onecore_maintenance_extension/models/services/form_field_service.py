@@ -102,7 +102,7 @@ class FormFieldService:
         record.special_attention = record.tenant_option_id.special_attention
 
     def update_lease_fields(self, record):
-        """Update lease-related fields and sync tenant."""
+        """Update lease-related fields and sync tenant and associated object."""
         if not record.lease_option_id:
             return
 
@@ -116,6 +116,15 @@ class FormFieldService:
             record.tenant_option_id = lease_tenants[0].id
         if record.tenant_option_id:
             self._copy_tenant_fields(record)
+
+        # Sync the associated object to match the selected lease
+        lease = record.lease_option_id
+        if lease.parking_space_option_id and lease.parking_space_option_id != record.parking_space_option_id:
+            record.parking_space_option_id = lease.parking_space_option_id.id
+        if lease.rental_property_option_id and lease.rental_property_option_id != record.rental_property_option_id:
+            record.rental_property_option_id = lease.rental_property_option_id.id
+        if lease.facility_option_id and lease.facility_option_id != record.facility_option_id:
+            record.facility_option_id = lease.facility_option_id.id
 
     def update_tenant_fields(self, record):
         """Update tenant-related fields and sync lease."""
