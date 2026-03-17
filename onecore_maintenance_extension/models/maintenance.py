@@ -558,7 +558,8 @@ class OneCoreMaintenanceRequest(
             external_contractor_service.validate_stage_transition(
                 self, vals["stage_id"]
             )
-            stage_manager.handle_stage_change(self, vals["stage_id"])
+            stage_updates = stage_manager.handle_stage_change(self, vals["stage_id"])
+            vals.update(stage_updates)
 
         # Handle resource assignment workflow (always run, even during creation)
         if "user_id" in vals:
@@ -754,11 +755,15 @@ class OneCoreMaintenanceRequest(
     def open_component_wizard(self):
         self.ensure_one()
         # Create wizard explicitly so it has a real ID before loading components
-        wizard = self.env['maintenance.component.wizard'].with_context(
-            default_maintenance_request_id=self.id
-        ).create({
-            'maintenance_request_id': self.id,
-        })
+        wizard = (
+            self.env["maintenance.component.wizard"]
+            .with_context(default_maintenance_request_id=self.id)
+            .create(
+                {
+                    "maintenance_request_id": self.id,
+                }
+            )
+        )
         return {
             "name": "Uppdatera/lägg till Komponent",
             "type": "ir.actions.act_window",
