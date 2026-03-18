@@ -5,9 +5,9 @@
         <field name="model">res.users</field>
         <field name="inherit_id" ref="base.view_users_form_simple_modif" />
 
-        <!-- Hide the third group in account security (api keys) for non-admin users -->
+        <!-- Hide the api keys group in account security for non-admin users -->
         <field name="arch" type="xml">
-            <xpath expr="//page[@name='page_account_security']/group[3]" position="attributes">
+            <xpath expr="//page[@name='page_account_security']/group[@name='api_keys']" position="attributes">
                 <attribute name="groups">base.group_system</attribute>
             </xpath>
         </field>
