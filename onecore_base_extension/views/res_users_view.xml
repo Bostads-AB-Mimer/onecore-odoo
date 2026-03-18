@@ -7,7 +7,7 @@
 
         <!-- Hide the api keys group in account security for non-admin users -->
         <field name="arch" type="xml">
-            <xpath expr="//page[@name='page_account_security']/group[@name='api_keys']" position="attributes">
+            <xpath expr="//div[@name='api_keys']" position="attributes">
                 <attribute name="groups">base.group_system</attribute>
             </xpath>
         </field>
