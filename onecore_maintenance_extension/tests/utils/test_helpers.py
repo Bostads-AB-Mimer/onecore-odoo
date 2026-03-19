@@ -44,10 +44,10 @@ class TestSelectActiveLease(TransactionCase):
         self.assertEqual(result, lease_upcoming)
 
     def test_falls_back_to_highest_lease_number(self):
-        """When all leases are Ended, falls back to highest lease_number."""
-        lease_low = create_lease_option(self.env, lease_status=3, lease_number="100")
-        lease_high = create_lease_option(self.env, lease_status=3, lease_number="900")
-        lease_mid = create_lease_option(self.env, lease_status=3, lease_number="500")
+        """When all leases have an unrecognized status, falls back to highest lease_number."""
+        lease_low = create_lease_option(self.env, lease_status=99, lease_number="100")
+        lease_high = create_lease_option(self.env, lease_status=99, lease_number="900")
+        lease_mid = create_lease_option(self.env, lease_status=99, lease_number="500")
 
         records = lease_low | lease_high | lease_mid
         result = self.select_active_lease(records)

@@ -341,7 +341,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
     # --- _normalize_lease_status tests ---
 
     def test_normalize_lease_status_with_integer(self):
-        """Test that integer status values pass through unchanged."""
+        """Test that known integer status values pass through unchanged."""
         self.assertEqual(self.handler._normalize_lease_status(0), 0)
         self.assertEqual(self.handler._normalize_lease_status(1), 1)
         self.assertEqual(self.handler._normalize_lease_status(2), 2)
@@ -354,13 +354,17 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertEqual(self.handler._normalize_lease_status("AboutToEnd"), 2)
         self.assertEqual(self.handler._normalize_lease_status("Ended"), 3)
 
-    def test_normalize_lease_status_unknown_string_defaults_to_3(self):
-        """Test that unknown string status defaults to 3."""
-        self.assertEqual(self.handler._normalize_lease_status("Unknown"), 3)
+    def test_normalize_lease_status_unknown_string_defaults_to_unknown(self):
+        """Test that unknown string status defaults to 4 (Okänd status)."""
+        self.assertEqual(self.handler._normalize_lease_status("Unknown"), 4)
 
-    def test_normalize_lease_status_none_defaults_to_3(self):
-        """Test that None defaults to 3."""
-        self.assertEqual(self.handler._normalize_lease_status(None), 3)
+    def test_normalize_lease_status_unknown_integer_defaults_to_unknown(self):
+        """Test that unknown integer status defaults to 4 (Okänd status)."""
+        self.assertEqual(self.handler._normalize_lease_status(99), 4)
+
+    def test_normalize_lease_status_none_defaults_to_unknown(self):
+        """Test that None defaults to 4 (Okänd status)."""
+        self.assertEqual(self.handler._normalize_lease_status(None), 4)
 
     # --- _select_tenant_for_search tests ---
 
