@@ -1,6 +1,6 @@
 /** @odoo-module **/
 import { visitXML } from "@web/core/utils/xml";
-import { _lt } from "@web/core/l10n/translation";
+import { _t } from "@web/core/l10n/translation";
 import { Field } from "@web/views/fields/field";
 import {
   addFieldDependencies,
