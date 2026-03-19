@@ -4,7 +4,7 @@
     "sequence": 100,
     "category": "ONECore",
     "description": "Provides ONECore UI",
-    "depends": [],
+    "depends": ["web"],
     "summary": "Provides ONECore UI",
     "assets": {
         "web.assets_backend": [

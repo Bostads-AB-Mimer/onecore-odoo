@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <template xml:space="preserve">
-  <t t-name="onecore_ui.MobileView" owl="1">
+  <t t-name="onecore_ui.MobileView">
     <!-- The root element of the view component -->
     <div t-ref="root" t-att-class="props.className">
       <!-- Layout component for organizing the view -->
