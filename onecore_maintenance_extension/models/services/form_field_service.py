@@ -1,5 +1,7 @@
 """Form field service for maintenance requests."""
 
+from ..utils.helpers import select_active_lease
+
 
 class FormFieldService:
     """Service for handling form field assignments and onchange logic."""
@@ -60,12 +62,13 @@ class FormFieldService:
         record.building_code = record.rental_property_option_id.building_code
         record.building = record.rental_property_option_id.building
 
-        # Update related lease
-        lease_records = record.env["maintenance.lease.option"].search(
-            [("rental_property_option_id", "=", record.rental_property_option_id.id)]
-        )
-        if lease_records:
-            record.lease_option_id = lease_records[0].id
+        # Update related lease only if current lease doesn't belong to this rental property
+        if not record.lease_option_id or record.lease_option_id.rental_property_option_id != record.rental_property_option_id:
+            lease_records = record.env["maintenance.lease.option"].search(
+                [("rental_property_option_id", "=", record.rental_property_option_id.id)]
+            )
+            if lease_records:
+                record.lease_option_id = select_active_lease(lease_records).id
 
     def update_maintenance_unit_fields(self, record):
         """Update maintenance unit-related fields."""
@@ -77,44 +80,16 @@ class FormFieldService:
         record.maintenance_unit_code = record.maintenance_unit_option_id.code
         record.maintenance_unit_caption = record.maintenance_unit_option_id.caption
 
-    def update_lease_fields(self, record):
-        """Update lease-related fields."""
-        if not record.lease_option_id:
-            return
-
+    def _copy_lease_fields(self, record):
+        """Copy lease data fields from lease_option_id to the record."""
         record.lease_id = record.lease_option_id.name
         record.lease_type = record.lease_option_id.lease_type
         record.contract_date = record.lease_option_id.contract_date
         record.lease_start_date = record.lease_option_id.lease_start_date
         record.lease_end_date = record.lease_option_id.lease_end_date
 
-        tenant_records = record.env["maintenance.tenant.option"].search(
-            [("id", "=", record.tenant_option_id.id)]
-        )
-        if tenant_records:
-            record.tenant_option_id = tenant_records[0].id
-
-        # Handle parking space vs residence based on space caption
-        if (
-            record.space_caption == "Bilplats"
-            and record.lease_option_id.parking_space_option_id
-        ):
-            record.parking_space_option_id = (
-                record.lease_option_id.parking_space_option_id.id
-            )
-        else:
-            # Handle rental property updates for other space types
-            rental_property_records = record.env[
-                "maintenance.rental.property.option"
-            ].search([("id", "=", record.lease_option_id.rental_property_option_id.id)])
-            if rental_property_records:
-                record.rental_property_option_id = rental_property_records[0].id
-
-    def update_tenant_fields(self, record):
-        """Update tenant-related fields."""
-        if not record.tenant_option_id:
-            return
-
+    def _copy_tenant_fields(self, record):
+        """Copy tenant data fields from tenant_option_id to the record."""
         record.tenant_id = record.tenant_option_id.name
         record.tenant_name = record.tenant_option_id.name
         record.contact_code = record.tenant_option_id.contact_code
@@ -125,6 +100,43 @@ class FormFieldService:
         record.email_address = record.tenant_option_id.email_address
         record.is_tenant = record.tenant_option_id.is_tenant
         record.special_attention = record.tenant_option_id.special_attention
+
+    def update_lease_fields(self, record):
+        """Update lease-related fields and sync tenant and associated object."""
+        if not record.lease_option_id:
+            return
+
+        self._copy_lease_fields(record)
+
+        lease_tenants = record.env["maintenance.tenant.option"].search(
+            [("lease_option_id", "=", record.lease_option_id.id),
+             ("user_id", "=", record.env.user.id)]
+        )
+        if lease_tenants and record.tenant_option_id not in lease_tenants:
+            record.tenant_option_id = lease_tenants[0].id
+        if record.tenant_option_id:
+            self._copy_tenant_fields(record)
+
+        # Sync the associated object to match the selected lease
+        lease = record.lease_option_id
+        if lease.parking_space_option_id and lease.parking_space_option_id != record.parking_space_option_id:
+            record.parking_space_option_id = lease.parking_space_option_id.id
+        if lease.rental_property_option_id and lease.rental_property_option_id != record.rental_property_option_id:
+            record.rental_property_option_id = lease.rental_property_option_id.id
+        if lease.facility_option_id and lease.facility_option_id != record.facility_option_id:
+            record.facility_option_id = lease.facility_option_id.id
+
+    def update_tenant_fields(self, record):
+        """Update tenant-related fields and sync lease."""
+        if not record.tenant_option_id:
+            return
+
+        self._copy_tenant_fields(record)
+
+        tenant_lease = record.tenant_option_id.lease_option_id
+        if tenant_lease and tenant_lease != record.lease_option_id:
+            record.lease_option_id = tenant_lease.id
+            self._copy_lease_fields(record)
 
     def update_parking_space_fields(self, record):
         """Update parking space-related fields."""

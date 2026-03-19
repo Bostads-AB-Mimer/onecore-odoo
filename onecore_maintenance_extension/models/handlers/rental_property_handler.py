@@ -1,34 +1,9 @@
-import logging
-from .base_handler import BaseMaintenanceHandler
+from .rental_object_base_handler import RentalObjectBaseHandler
 from ..constants import BUILDING_SPACE_TYPES
 
-_logger = logging.getLogger(__name__)
 
-
-class RentalPropertyHandler(BaseMaintenanceHandler):
+class RentalPropertyHandler(RentalObjectBaseHandler):
     """Handler for rental property maintenance requests (apartments, etc.)."""
-
-    def handle_search(self, search_type, search_value, space_caption):
-        """Handle search for rental property related requests.
-
-        RentalPropertyHandler can handle:
-        - lease-based searches (pnr, contactCode, leaseId, rentalObjectId): Find rental properties via tenant/lease data
-        """
-        if search_type in ["pnr", "contactCode", "leaseId", "rentalObjectId"]:
-            work_order_data = self.core_api.fetch_form_data(
-                search_type, search_value, space_caption
-            )
-
-            if not work_order_data:
-                _logger.info("No data found in response.")
-                return self._return_no_results_warning(search_value)
-
-            self.update_form_options(work_order_data)
-            self._set_form_selections()
-        else:
-            raise ValueError(
-                f"RentalPropertyHandler does not support search type: {search_type}"
-            )
 
     def update_form_options(self, work_order_data):
         """Update form options with rental property data."""
@@ -37,43 +12,47 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
             lease = item["lease"]
             maintenance_units = item.get("maintenance_units", [])
 
+            # Reuse existing rental property option if one already exists for this property
+            property_code = property_data["code"]
             rental_property_option = self.env[
                 "maintenance.rental.property.option"
-            ].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": property_data["rentalInformation"].get("rentalId"),
-                    "address": property_data["name"],
-                    "code": property_data["code"],
-                    "property_type": property_data["type"].get("name"),
-                    "area": property_data["areaSize"],
-                    "entrance": property_data["entrance"],
-                    "has_elevator": (
-                        "Ja"
-                        if property_data["accessibility"].get("elevator")
-                        else "Nej"
-                    ),
-                    "estate_code": property_data["property"].get("code"),
-                    "estate": property_data["property"].get("name"),
-                    "building_code": property_data["building"].get("code"),
-                    "building": property_data["building"].get("name"),
-                }
+            ].search(
+                [("user_id", "=", self.env.user.id), ("code", "=", property_code)],
+                limit=1,
             )
+
+            if not rental_property_option:
+                rental_property_option = self.env[
+                    "maintenance.rental.property.option"
+                ].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": property_data["rentalInformation"].get("rentalId"),
+                        "address": property_data["name"],
+                        "code": property_code,
+                        "property_type": property_data["type"].get("name"),
+                        "area": property_data["areaSize"],
+                        "entrance": property_data["entrance"],
+                        "has_elevator": (
+                            "Ja"
+                            if property_data["accessibility"].get("elevator")
+                            else "Nej"
+                        ),
+                        "estate_code": property_data["property"].get("code"),
+                        "estate": property_data["property"].get("name"),
+                        "building_code": property_data["building"].get("code"),
+                        "building": property_data["building"].get("name"),
+                    }
+                )
 
             # Only create lease and tenant options if lease data exists
             if lease:
-                self._create_lease_option(
+                lease_option = self._create_lease_option(
                     lease, rental_property_option_id=rental_property_option.id
                 )
-                self._create_tenant_options(lease["tenants"])
+                self._create_tenant_options(lease["tenants"], lease_option_id=lease_option.id)
             else:
-                # Clear existing lease and tenant options when no lease data is available
-                self.env["maintenance.lease.option"].search(
-                    [("user_id", "=", self.env.user.id)]
-                ).unlink()
-                self.env["maintenance.tenant.option"].search(
-                    [("user_id", "=", self.env.user.id)]
-                ).unlink()
+                self._clear_lease_and_tenant_options()
 
             for maintenance_unit in maintenance_units:
                 self.env["maintenance.maintenance.unit.option"].create(
@@ -88,7 +67,7 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
                     }
                 )
 
-    def _set_form_selections(self):
+    def _set_form_selections(self, search_type=None, search_value=None):
         """Set the form field selections after creating options."""
         property_records = self.env["maintenance.rental.property.option"].search(
             [("user_id", "=", self.env.user.id)]
@@ -102,14 +81,4 @@ class RentalPropertyHandler(BaseMaintenanceHandler):
         if maintenance_unit_records:
             self.record.maintenance_unit_option_id = maintenance_unit_records[0].id
 
-        lease_records = self.env["maintenance.lease.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if lease_records:
-            self.record.lease_option_id = lease_records[0].id
-
-        tenant_records = self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if tenant_records:
-            self.record.tenant_option_id = tenant_records[0].id
+        self._set_lease_and_tenant_selections(search_type, search_value)

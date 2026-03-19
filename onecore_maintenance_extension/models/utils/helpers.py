@@ -25,3 +25,12 @@ def get_main_phone_number(tenant):
         ),
         None,
     )
+
+
+def select_active_lease(lease_records):
+    """Select lease by priority: Current (0) > AboutToEnd (2) > Upcoming (1) > Ended (3) > Okänd (4) > highest lease_number."""
+    for priority_status in [0, 2, 1, 3, 4]:
+        matches = [r for r in lease_records if r.lease_status == priority_status]
+        if matches:
+            return max(matches, key=lambda r: r.lease_number or "")
+    return max(lease_records, key=lambda r: r.lease_number or "")
