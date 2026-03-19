@@ -11,10 +11,25 @@ class MaintenanceStageManager:
         self.env = env
 
     def handle_stage_change(self, record, new_stage_id):
-        """Handle all logic when stage changes."""
+        """Handle all logic when stage changes. Returns dict of field updates."""
         # Handle resource assignment workflow
         if not record.user_id:
             self._validate_unassigned_resource(new_stage_id)
+
+        # Set/clear performed_date/closed_date based on stage transitions
+        updates = {}
+        new_stage = self.env["maintenance.stage"].browse(new_stage_id)
+        if new_stage.name == "Utförd":
+            updates["performed_date"] = fields.Datetime.now()
+        elif new_stage.name not in ("Utförd", "Avslutad"):
+            updates["performed_date"] = False
+
+        if new_stage.name == "Avslutad":
+            updates["closed_date"] = fields.Datetime.now()
+        else:
+            updates["closed_date"] = False
+
+        return updates
 
     def handle_resource_assignment(self, record, new_user_id):
         """Handle workflow when user is assigned/unassigned."""
@@ -67,7 +82,7 @@ class FieldChangeTracker:
         "__last_update",
         "display_name",
         "stage_id",
-        "has_loan_product",      # Custom logging in write()
+        "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
     }
 
@@ -119,7 +134,11 @@ class FieldChangeTracker:
         """Check if field change should be skipped."""
         if isinstance(field_obj, fields.Many2one):
             old_id = old_value.id if old_value else False
-            new_id = new_value if isinstance(new_value, (int, bool)) else (new_value.id if new_value else False)
+            new_id = (
+                new_value
+                if isinstance(new_value, (int, bool))
+                else (new_value.id if new_value else False)
+            )
             return old_id == new_id
         else:
             return old_value == new_value
@@ -130,9 +149,13 @@ class FieldChangeTracker:
             return f"<strong>{field_label}:</strong> Uppdaterad"
 
         if isinstance(field_obj, fields.Many2one):
-            return self._format_many2one_change(field_obj, old_value, new_value, field_label)
+            return self._format_many2one_change(
+                field_obj, old_value, new_value, field_label
+            )
         elif isinstance(field_obj, fields.Selection):
-            return self._format_selection_change(field_obj, old_value, new_value, field_label)
+            return self._format_selection_change(
+                field_obj, old_value, new_value, field_label
+            )
         elif isinstance(field_obj, fields.Boolean):
             return self._format_boolean_change(old_value, new_value, field_label)
         elif isinstance(field_obj, (fields.Date, fields.Datetime)):
@@ -187,19 +210,13 @@ class FieldChangeTracker:
         if isinstance(new_value, str):
             try:
                 new_date = (
-                    fields.Date.from_string(new_value)
-                    if new_value != "False"
-                    else None
+                    fields.Date.from_string(new_value) if new_value != "False" else None
                 )
-                new_display = (
-                    new_date.strftime("%Y-%m-%d") if new_date else "Inte satt"
-                )
+                new_display = new_date.strftime("%Y-%m-%d") if new_date else "Inte satt"
             except:
                 new_display = str(new_value) if new_value else "Inte satt"
         else:
-            new_display = (
-                new_value.strftime("%Y-%m-%d") if new_value else "Inte satt"
-            )
+            new_display = new_value.strftime("%Y-%m-%d") if new_value else "Inte satt"
 
         return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
