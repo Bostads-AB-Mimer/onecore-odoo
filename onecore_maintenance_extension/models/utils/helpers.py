@@ -28,8 +28,8 @@ def get_main_phone_number(tenant):
 
 
 def select_active_lease(lease_records):
-    """Select lease by priority: Current (0) > AboutToEnd (2) > Upcoming (1) > highest lease_number."""
-    for priority_status in [0, 2, 1]:
+    """Select lease by priority: Current (0) > AboutToEnd (2) > Upcoming (1) > Ended (3) > Okänd (4) > highest lease_number."""
+    for priority_status in [0, 2, 1, 3, 4]:
         for record in lease_records:
             if record.lease_status == priority_status:
                 return record

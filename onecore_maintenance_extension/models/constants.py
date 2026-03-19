@@ -1,7 +1,13 @@
 """Constants and configurations for maintenance requests."""
 
 # Lease status labels
-LEASE_STATUS_LABELS = {0: "Gällande", 1: "Kommande", 2: "Uppsagt", 3: "Upphört"}
+LEASE_STATUS_LABELS = {
+    0: "Gällande",
+    1: "Kommande",
+    2: "Uppsagt",
+    3: "Upphört",
+    4: "Okänd status",
+}
 
 # Space types available for maintenance requests
 SPACES = [

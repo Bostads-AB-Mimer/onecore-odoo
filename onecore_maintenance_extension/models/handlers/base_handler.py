@@ -56,12 +56,15 @@ class BaseMaintenanceHandler:
 
     _LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
 
+    _UNKNOWN_STATUS = 4
+
     def _normalize_lease_status(self, raw_status):
-        if isinstance(raw_status, int):
+        if raw_status in self._LEASE_STATUS_MAP:
+            return self._LEASE_STATUS_MAP[raw_status]
+        if raw_status in self._LEASE_STATUS_MAP.values():
             return raw_status
-        if isinstance(raw_status, str):
-            return self._LEASE_STATUS_MAP.get(raw_status, 3)
-        return 3
+        _logger.warning("Unexpected lease status value: %s", raw_status)
+        return self._UNKNOWN_STATUS
 
     def _create_lease_option(
         self,
@@ -73,7 +76,9 @@ class BaseMaintenanceHandler:
         """Create a lease option record with common lease data."""
         status = self._normalize_lease_status(lease.get("status"))
         status_label = LEASE_STATUS_LABELS.get(status, "")
-        lease_name = f"{lease['leaseId']} ({status_label})" if status_label else lease["leaseId"]
+        lease_name = (
+            f"{lease['leaseId']} ({status_label})" if status_label else lease["leaseId"]
+        )
         lease_data = {
             "user_id": self.env.user.id,
             "name": lease_name,
