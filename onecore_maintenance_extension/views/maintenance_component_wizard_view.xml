@@ -15,13 +15,13 @@
                         <div class="mb-4">
                             <h5 class="text-uppercase text-muted small fw-bold mb-3">Befintliga komponenter</h5>
                             <field name="component_ids" nolabel="1">
-                                <tree create="false" delete="false">
+                                <list create="false" delete="false">
                                     <field name="room_name" string="Rum"/>
                                     <field name="typ" string="Typ"/>
                                     <field name="model" string="Modell" optional="show"/>
                                     <field name="manufacturer" string="Tillverkare" optional="show"/>
                                     <field name="installation_date" string="Datum" optional="hide"/>
-                                </tree>
+                                </list>
                                 <form string="Komponentdetaljer">
                                     <sheet>
                                         <!-- Hidden fields for room change functionality -->
