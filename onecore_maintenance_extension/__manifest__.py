@@ -2,7 +2,7 @@
 
 {
     "name": "ONECore Maintenance Extension",
-    "version": "1.0",
+    "version": "19.0.1.0.0",
     "sequence": 100,
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
@@ -26,7 +26,6 @@
             "onecore_maintenance_extension/static/src/js/*.js",
             "onecore_maintenance_extension/static/src/views/*.xml",
             "onecore_maintenance_extension/static/src/scss/*.scss",
-            "onecore_maintenance_extension/static/src/js/loan_product_validation.js",
         ],
     },
     "post_init_hook": "_post_init_hook",
