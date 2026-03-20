@@ -2,7 +2,8 @@
 
 {
     "name": "ONECore Web Extension",
-    "version": "1.0",
+    "version": "19.0.1.0.0",
+    "author": "Bostads-AB-Mimer",
     "sequence": 100,
     "category": "Hidden",
     "description": "Extends the web module with ONECore features.",
