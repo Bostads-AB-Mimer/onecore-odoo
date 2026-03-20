@@ -766,8 +766,10 @@
                     <field name="loan_product_details" />
                 </xpath>
 
-                <xpath expr="//div[@class='oe_kanban_content']" position="replace">
-                    <t t-call="onecore_maintenance_extension.maintenance_request_item" />
+                <xpath expr="//t[@t-name='card']" position="replace">
+                    <t t-name="card">
+                        <t t-call="onecore_maintenance_extension.maintenance_request_item" />
+                    </t>
                 </xpath>
             </field>
         </record>
