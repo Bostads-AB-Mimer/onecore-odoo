@@ -2,7 +2,7 @@
 
 ## Local development
 
-- Get Odoo 17 up and running locally by following this [guide](https://www.odoo.com/documentation/17.0/administration/on_premise/source.html)
+- Get Odoo 19 up and running locally by following this [guide](https://www.odoo.com/documentation/19.0/administration/on_premise/source.html)
 - Clone this repo (duh)
 - Run Odoo with `ENV=local python3 odoo-bin --addons-path="addons, {PATH TO onecore-odoo}" -d odoo --db_user={DB_USER} --db_host={DB_HOST} --db_port={DB_PORT} -i base -u onecore_maintenance_extension -u onecore_mail_extension -u onecore_ui -u onecore_web_extension --dev xml`
 
@@ -24,11 +24,11 @@ A kubeconfig for connecting to the cluster can be found in [Bitwarden](https://v
 
 ## Enabling SSO with Azure
 
-https://www.odoo.com/documentation/17.0/applications/general/users/azure.html
+https://www.odoo.com/documentation/19.0/applications/general/users/azure.html
 
 ## Restore backup db
 
-IMPORTANT! When restoring a backup db the owner of the db needs to be `bn_odoo` for Odoo to recognize it.
+IMPORTANT! When restoring a backup db the owner of the db needs to be `odoo` for Odoo to recognize it.
 
 ## Migrations
 
@@ -36,7 +36,7 @@ Whenever you need to make a change to an existing model you need to create a mig
 
 - Create a `migrations` folder unless one exists already.
 
-- Increase the version in the manifest file of your module and create a folder inside the migrations folder named {odoo-version}.{module-version}. Eg. if Odoo 17.0 and module version 1.1 the migration folder should be named `17.0.1.1`.
+- Increase the version in the manifest file of your module and create a folder inside the migrations folder named {odoo-version}.{module-version}. Eg. if Odoo 19.0 and module version 1.1 the migration folder should be named `19.0.1.1`.
 
 - Inside the migration folder you create your pre-, post- and/or end-scripts. The order of execution if you have several scripts of the same kind is lexical, like this:
 
