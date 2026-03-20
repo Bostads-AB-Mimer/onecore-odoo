@@ -9,19 +9,19 @@
             <xpath expr="//field[@name='todo_request_count_unscheduled']" position="after">
                 <field name="first_column_request_count"/>
             </xpath>
-            
-            <!-- Replace the "Scheduled" item in the right column with our custom count -->
-            <xpath expr="//div[@class='col-6 o_kanban_primary_right']/div[1]" position="replace">
-                <div t-if="record.first_column_request_count.raw_value > 0">
-                    <a name="%(maintenance.hr_equipment_todo_request_action_from_dashboard)d" type="action">
-                        <t t-esc="record.first_column_request_count.value"/>
-                        Väntar på handläggning
-                    </a>
-                </div>
+
+            <!-- Replace the "Scheduled" link with our custom "Väntar på handläggning" count -->
+            <xpath expr="//a[descendant::field[@name='todo_request_count_date']]" position="replace">
+                <a t-if="record.first_column_request_count.raw_value > 0"
+                   name="%(maintenance.hr_equipment_todo_request_action_from_dashboard)d"
+                   type="action" class="d-block">
+                    <field name="first_column_request_count"/>
+                    Väntar på handläggning
+                </a>
             </xpath>
-            
-            <!-- Remove the "Unscheduled" item from the right column -->
-            <xpath expr="//div[@class='col-6 o_kanban_primary_right']/div[4]" position="replace">
+
+            <!-- Remove the "Unscheduled" link from the dashboard -->
+            <xpath expr="//a[descendant::field[@name='todo_request_count_unscheduled']]" position="replace">
             </xpath>
         </field>
     </record>
