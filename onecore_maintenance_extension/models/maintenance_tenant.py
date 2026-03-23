@@ -16,6 +16,7 @@ class OnecoreMaintenanceTenantOption(models.Model):
     email_address = fields.Char("E-postadress")
     is_tenant = fields.Boolean("Är hyresgäst", default=True)
     special_attention = fields.Boolean(string="Viktig kundinfo", readonly=True)
+    lease_option_id = fields.Many2one("maintenance.lease.option", string="Lease Option")
 
 
 class OnecoreMaintenanceTenant(models.Model):
