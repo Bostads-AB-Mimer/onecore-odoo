@@ -88,7 +88,7 @@ patch(KanbanRecord.prototype, {
       // Existing external contractor validation for "Utförd" stage
       if (
         userIsExternalContractor &&
-        record.data.stage_id[1] === "Utförd"
+        targetStageName === "Utförd"
       ) {
         const confirmed = await ConfirmDialog(
           this.dialogService,
