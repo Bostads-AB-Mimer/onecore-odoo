@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-<t t-name="onecore_mail_extension.TenantChatter" t-inherit="mail.Chatter" t-inherit-mode="extension">
-        <!-- Hides the Send to and recipients list in the chatter/composer -->
-    <xpath expr="//RecipientsInput/.." position="replace">
+<t t-name="onecore_mail_extension.TenantChatter" t-inherit="mail.Chatter" t-inherit-mode="extension" owl="1">
+        <!-- Hides the Send to and recipients list - dropdown in the chatter/composer -->
+    <xpath expr="//div[hasclass('flex-shrink-0', 'text-truncate')]" position="replace">
         <div class="mb-4" />
     </xpath>
 
         <!-- Disable the "Send message" button if the record is restricted for external contractors -->
     <xpath expr="//button[hasclass('o-mail-Chatter-sendMessage')]" position="attributes">
-        <attribute name="t-att-disabled">props.record.data.restricted_external or (!state.thread.hasWriteAccess and !(state.thread.hasReadAccess and state.thread.canPostOnReadonly) and props.threadId)</attribute>
+        <attribute name="t-att-disabled">props.record and props.record.data.restricted_external or (!state.thread.hasWriteAccess and !(state.thread.hasReadAccess and state.thread.canPostOnReadonly) and props.threadId)</attribute>
     </xpath>
 
         <!-- Disable the "Activities" button if the record is restricted for external contractors -->
     <xpath expr="//button[hasclass('o-mail-Chatter-activity')]" position="attributes">
-        <attribute name="t-att-disabled">props.record.data.restricted_external</attribute>
+        <attribute name="t-att-disabled">props.record and props.record.data.restricted_external</attribute>
     </xpath>
 </t>
 
