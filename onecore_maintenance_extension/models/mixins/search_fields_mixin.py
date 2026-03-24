@@ -18,52 +18,60 @@ class SearchFieldsMixin(models.AbstractModel):
         store=True,
     )
 
-    # Search option fields (populated by handlers)
+    # Search option fields (populated by handlers, transient - not stored)
     property_option_id = fields.Many2one(
         "maintenance.property.option",
         string="Property Option Id",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     building_option_id = fields.Many2one(
         "maintenance.building.option",
         string="Building Option Id",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option",
         string="Rental Property Option Id",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     maintenance_unit_option_id = fields.Many2one(
         "maintenance.maintenance.unit.option",
         string="Maintenance Unit Option",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     tenant_option_id = fields.Many2one(
         "maintenance.tenant.option",
         string="Tenant",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     lease_option_id = fields.Many2one(
         "maintenance.lease.option",
         string="Lease",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     parking_space_option_id = fields.Many2one(
         "maintenance.parking.space.option",
         string="Parking Space",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
     facility_option_id = fields.Many2one(
         "maintenance.facility.option",
         string="Facility",
+        store=False,
         domain=lambda self: [("user_id", "=", self.env.user.id)],
         readonly=False,
     )
