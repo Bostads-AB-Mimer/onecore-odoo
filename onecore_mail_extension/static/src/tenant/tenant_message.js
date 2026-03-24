@@ -25,8 +25,14 @@ patch(Message.prototype, {
   toggleIsCollapsed() {
     this.isCollapsed = !this.isCollapsed;
   },
+  get attClass() {
+    return {
+      ...super.attClass,
+      collapsed: this.isCollapsed,
+    };
+  },
   getSentAsString() {
-    switch (this.message.type) {
+    switch (this.message.message_type) {
       case "tenant_sms":
       case "tenant_mail_failed_and_sms_ok":
         return " (via sms)";
