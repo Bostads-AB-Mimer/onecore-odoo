@@ -2,6 +2,7 @@
 
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
+import { user } from "@web/core/user";
 import { KanbanRecord } from "@web/views/kanban/kanban_record";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
@@ -53,7 +54,7 @@ patch(KanbanRecord.prototype, {
 
     const userIsExternalContractor =
       isMaintenanceRequest &&
-      this.props.record.model.user.hasGroup(
+      user.hasGroup(
         "onecore_maintenance_extension.group_external_contractor"
       );
 
