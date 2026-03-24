@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-    <t t-name="onecore_mail_extension.TenantComposer" t-inherit="mail.Composer" t-inherit-mode="extension" owl="1">
+    <t t-name="onecore_mail_extension.TenantComposer" t-inherit="mail.Composer" t-inherit-mode="extension">
 
+        <!-- Hide the "Replying to..." header for tenant messages -->
         <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
-        <xpath expr="//div[hasclass('o-mail-Composer-actions')]" position="attributes">
+
+        <!-- Hide quick actions (emoji, attachment buttons) when composer type is "message" -->
+        <xpath expr="//div[hasclass('o-mail-Composer-quickActions')]" position="attributes">
             <attribute name="t-if">props.type != 'message'</attribute>
         </xpath>
 
+        <!-- Add SMS/Email checkboxes and hidden-from-mimer warning after the input container -->
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
-            
-            
-            <t t-if="state.isHiddenFromMyPages">
+
+            <t t-if="tenantState.isHiddenFromMyPages">
                 <div class="alert alert-warning mt-3">
                     <strong>Information</strong>
                     <p>Det här ärendet är dolt från Mimer.nu och digital kommunikation med hyresgäst är därför
@@ -19,19 +22,19 @@
                 </div>
             </t>
 
-            <t t-if="props.type === 'message' and !state.isHiddenFromMyPages">
+            <t t-if="props.type === 'message' and !tenantState.isHiddenFromMyPages">
                 <p class="mt-3"><strong>Skicka som</strong></p>
                 <div class="d-flex mb-3">
-                    <CheckBox disabled="!state.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="state.sendSMS" onChange.bind="onSMSCheckboxChange">
+                    <CheckBox disabled="!tenantState.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="tenantState.sendSMS" onChange.bind="onSMSCheckboxChange">
                         SMS
                     </CheckBox>
-                    <CheckBox disabled="!state.tenantHasEmail" id="send_email" value="state.sendEmail" onChange.bind="onEMailCheckboxChange">
+                    <CheckBox disabled="!tenantState.tenantHasEmail" id="send_email" value="tenantState.sendEmail" onChange.bind="onEMailCheckboxChange">
                         E-post
                     </CheckBox>
                 </div>
             </t>
-        </xpath>      
-            
+        </xpath>
+
     </t>
 
 </templates>

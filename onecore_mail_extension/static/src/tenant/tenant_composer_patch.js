@@ -3,73 +3,90 @@
 import { CheckBox } from "@web/core/checkbox/checkbox";
 import { Composer } from "@mail/core/common/composer";
 import { patch } from "@web/core/utils/patch";
+import { useService } from "@web/core/utils/hooks";
 import { useState, onMounted } from "@odoo/owl";
 
 patch(Composer, {
-  components: { ...Composer.components, CheckBox },
+    components: { ...Composer.components, CheckBox },
 });
 
 patch(Composer.prototype, {
-  setup() {
-    super.setup();
-    this.state = useState({
-      sendSMS: false,
-      sendEmail: false,
-      tenantHasEmail: false,
-      tenantHasPhoneNumber: false,
-      isHiddenFromMyPages: false,
-    });
-    this.state.active = true;
+    setup() {
+        super.setup();
+        this.orm = useService("orm");
+        this.tenantState = useState({
+            sendSMS: false,
+            sendEmail: false,
+            tenantHasEmail: false,
+            tenantHasPhoneNumber: false,
+            isHiddenFromMyPages: false,
+        });
 
-    onMounted(async () => {
-      const isHiddenFromMyPagesResult =
-        await this.threadService.getIsHiddenFromMyPages(this.thread.id);
+        onMounted(async () => {
+            if (this.thread?.model !== "maintenance.request") {
+                return;
+            }
+            try {
+                const isHiddenResult = await this.orm.call(
+                    "maintenance.request",
+                    "fetch_is_hidden_from_my_pages",
+                    [this.thread.id]
+                );
+                this.tenantState.isHiddenFromMyPages =
+                    isHiddenResult?.hidden_from_my_pages || false;
+            } catch (error) {
+                console.error("Error fetching hidden state:", error);
+            }
+            try {
+                const tenantResult = await this.orm.call(
+                    "maintenance.request",
+                    "fetch_tenant_contact_data",
+                    [this.thread.id]
+                );
+                this.tenantState.tenantHasEmail = tenantResult?.has_email || false;
+                this.tenantState.tenantHasPhoneNumber =
+                    tenantResult?.has_phone_number || false;
+            } catch (error) {
+                console.error("Error fetching tenant data:", error);
+            }
+        });
+    },
 
-      const tenantResult = await this.threadService.getTenantContacts(
-        this.thread.id
-      );
-      this.state.tenantHasEmail = tenantResult.has_email;
-      this.state.tenantHasPhoneNumber = tenantResult.has_phone_number;
-      this.state.isHiddenFromMyPages =
-        isHiddenFromMyPagesResult.hidden_from_my_pages;
-    });
-  },
-  onSMSCheckboxChange(checked) {
-    this.state.sendSMS = checked;
-  },
-  onEMailCheckboxChange(checked) {
-    this.state.sendEmail = checked;
-  },
+    onSMSCheckboxChange(checked) {
+        this.tenantState.sendSMS = checked;
+    },
+    onEMailCheckboxChange(checked) {
+        this.tenantState.sendEmail = checked;
+    },
 
-  get placeholder() {
-    if (this.props.type === "message") {
-      return "Skriv ett meddelande till hyresgäst";
-    }
-    return super.placeholder;
-  },
-  get isSendButtonDisabled() {
-    if (
-      this.props.type === "message" &&
-      !this.state.sendSMS &&
-      !this.state.sendEmail
-    ) {
-      return true;
-    }
-    return super.isSendButtonDisabled;
-  },
-  async sendMessage() {
-    await this.processMessage(async (value) => {
-      const postData = {
-        attachments: this.props.composer.attachments,
-        isNote: this.props.type === "note",
-        mentionedChannels: this.props.composer.mentionedChannels,
-        mentionedPartners: this.props.composer.mentionedPartners,
-        cannedResponseIds: this.props.composer.cannedResponses.map((c) => c.id),
-        parentId: this.props.messageToReplyTo?.message?.id,
-        sendSMS: this.state.sendSMS,
-        sendEmail: this.state.sendEmail,
-      };
-      await this._sendMessage(value, postData);
-    });
-  },
+    get placeholder() {
+        if (
+            this.props.type === "message" &&
+            this.thread?.model === "maintenance.request"
+        ) {
+            return "Skriv ett meddelande till hyresgäst";
+        }
+        return super.placeholder;
+    },
+
+    get isSendButtonDisabled() {
+        if (
+            this.props.type === "message" &&
+            this.thread?.model === "maintenance.request" &&
+            !this.tenantState.sendSMS &&
+            !this.tenantState.sendEmail
+        ) {
+            return true;
+        }
+        return super.isSendButtonDisabled;
+    },
+
+    get postData() {
+        const data = super.postData;
+        if (this.thread?.model === "maintenance.request") {
+            data.sendSMS = this.tenantState.sendSMS;
+            data.sendEmail = this.tenantState.sendEmail;
+        }
+        return data;
+    },
 });

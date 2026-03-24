@@ -2,7 +2,7 @@
 
 {
     "name": "ONECore Mail Extension",
-    "version": "1.1",
+    "version": "19.0.1.0",
     "sequence": 100,
     "category": "Productivity/Discuss",
     "description": "Extends the mail module with ONECore features.",
