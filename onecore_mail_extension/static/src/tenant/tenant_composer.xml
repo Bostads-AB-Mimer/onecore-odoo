@@ -6,11 +6,6 @@
         <!-- Hide the "Replying to..." header for tenant messages -->
         <xpath expr="//div[hasclass('o-mail-Composer-coreHeader')]" position="replace" />
 
-        <!-- Hide quick actions (emoji, attachment buttons) when composer type is "message" -->
-        <xpath expr="//div[hasclass('o-mail-Composer-quickActions')]" position="attributes">
-            <attribute name="t-if">props.type != 'message'</attribute>
-        </xpath>
-
         <!-- Add SMS/Email checkboxes and hidden-from-mimer warning after the input container -->
         <xpath expr="//div[hasclass('o-mail-Composer-coreMain')]/div[1]" position="after">
 
@@ -35,6 +30,13 @@
             </t>
         </xpath>
 
+    </t>
+
+    <!-- Hide quick actions (emoji, attachment buttons) when composer type is "message" -->
+    <t t-name="onecore_mail_extension.TenantComposerQuickActions" t-inherit="mail.Composer.quickActions" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o-mail-Composer-quickActions')]" position="attributes">
+            <attribute name="t-if">props.type != 'message'</attribute>
+        </xpath>
     </t>
 
 </templates>
