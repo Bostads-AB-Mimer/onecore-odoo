@@ -28,7 +28,7 @@ def create_test_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,
@@ -57,7 +57,7 @@ def create_internal_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,
@@ -87,7 +87,7 @@ def create_external_contractor_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,

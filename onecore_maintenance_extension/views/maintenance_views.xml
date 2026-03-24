@@ -63,21 +63,24 @@
                             domain="[('message_needaction', '=', True)]"
                             groups="mail.group_mail_notification_type_inbox" />
                         <separator />
+                        <filter invisible="1" string="Mina aktiviteter" name="filter_activities_my"
+                            domain="[('activity_user_id', '=', uid)]" />
+                        <separator invisible="1" />
                         <filter invisible="1" string="Försenade aktiviteter"
                             name="activities_overdue"
-                            domain="[('my_activity_date_deadline', '&lt;', context_today().strftime('%Y-%m-%d'))]"
+                            domain="[('my_activity_date_deadline', '&lt;', 'today')]"
                             help="Visa alla ärenden med försenade aktiviteter" />
                         <filter invisible="1" string="Dagens aktiviteter" name="activities_today"
-                            domain="[('my_activity_date_deadline', '=', context_today().strftime('%Y-%m-%d'))]" />
+                            domain="[('my_activity_date_deadline', '=', 'today')]" />
                         <filter invisible="1" string="Framtida aktiviteter"
                             name="activities_upcoming_all"
-                            domain="[('my_activity_date_deadline', '&gt;', context_today().strftime('%Y-%m-%d'))]" />
+                            domain="[('my_activity_date_deadline', '&gt;', 'today')]" />
                         <separator />
                         <filter string="Aktiva ärenden" name="active"
                             domain="[('archive', '=', False)]" />
                         <filter string="Inaktiva ärenden" name="inactive"
                             domain="[('archive', '=', True)]" />
-                        <group expand='0' string='Gruppera efter...'>
+                        <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
                             <filter string='Kategori' name="category" domain="[]"
@@ -845,32 +848,32 @@
 
         <!-- Menu Items -->
         <record id="maintenance.menu_m_request" model="ir.ui.menu">
-            <field name="groups_id"
+            <field name="group_ids"
                 eval="[(6, 0, [ref('maintenance.group_equipment_manager'), ref('group_external_contractor')])]" />
         </record>
         <record id="maintenance.menu_m_request_form" model="ir.ui.menu">
-            <field name="groups_id"
+            <field name="group_ids"
                 eval="[(6, 0, [ref('maintenance.group_equipment_manager'), ref('group_external_contractor')])]" />
         </record>
         <record id="maintenance.menu_m_request_calendar" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager')])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('maintenance.group_equipment_manager')])]" />
         </record>
         <record id="maintenance.menu_m_dashboard" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
         </record>
         <record id="maintenance.menu_equipment_form" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
         </record>
         <record id="maintenance.maintenance_reporting" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
         </record>
         <record id="maintenance.menu_maintenance_configuration" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('maintenance.group_equipment_manager'),])]" />
         </record>
 
         <!-- Only admin with Administration set to settings can go to apps page -->
         <record id="base.menu_management" model="ir.ui.menu">
-            <field name="groups_id" eval="[(6, 0, [ref('base.group_system'),])]" />
+            <field name="group_ids" eval="[(6, 0, [ref('base.group_system'),])]" />
         </record>
     </data>
 </odoo>
