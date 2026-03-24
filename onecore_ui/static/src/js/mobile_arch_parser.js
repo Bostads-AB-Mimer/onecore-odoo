@@ -3,13 +3,12 @@ import { visitXML } from "@web/core/utils/xml";
 import { _t } from "@web/core/l10n/translation";
 import { Field } from "@web/views/fields/field";
 import {
-  addFieldDependencies,
-  archParseBoolean,
-  combineModifiers,
-  encodeObjectForTemplate,
   getActiveActions,
   processButton,
 } from "@web/views/utils";
+import { addFieldDependencies, combineModifiers } from "@web/model/relational_model/utils";
+import { encodeObjectForTemplate } from "@web/views/view_compiler";
+import { exprToBoolean } from "@web/core/utils/strings";
 import { Widget } from "@web/views/widgets/widget";
 
 export class GroupListArchParser {
@@ -150,7 +149,7 @@ export class MobileArchParser {
           optional: node.getAttribute("optional") || false,
           type: "field",
           hasLabel: !(
-            archParseBoolean(fieldInfo.attrs.nolabel) || fieldInfo.field.noLabel
+            exprToBoolean(fieldInfo.attrs.nolabel) || fieldInfo.field.noLabel
           ),
           label:
             (fieldInfo.widget && label && label.toString()) || fieldInfo.string,
