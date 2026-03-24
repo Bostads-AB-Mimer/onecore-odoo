@@ -1,6 +1,6 @@
 /** @odoo-module **/
 import { visitXML } from "@web/core/utils/xml";
-import { _t } from "@web/core/l10n/translation";
+import { _lt } from "@web/core/l10n/translation";
 import { Field } from "@web/views/fields/field";
 import {
   getActiveActions,
@@ -31,7 +31,7 @@ export class GroupListArchParser {
           models,
           modelName,
           "list",
-          jsClass
+          jsClass,
         );
         if (!(fieldInfo.name in fieldNextIds)) {
           fieldNextIds[fieldInfo.name] = 0;
@@ -118,7 +118,7 @@ export class MobileArchParser {
           buttonGroup.column_invisible = combineModifiers(
             buttonGroup.column_invisible,
             node.getAttribute("column_invisible"),
-            "AND"
+            "AND",
           );
         } else {
           buttonGroup = {
@@ -184,7 +184,7 @@ export class MobileArchParser {
         const groupByArchInfo = groupListArchParser.parse(
           groupByArch,
           models,
-          coModelName
+          coModelName,
         );
         groupBy.buttons[fieldName] = groupByArchInfo.buttons;
         groupBy.fields[fieldName] = {
