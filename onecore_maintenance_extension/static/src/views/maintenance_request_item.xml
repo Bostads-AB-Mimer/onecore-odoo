@@ -71,7 +71,7 @@
             <div class="d-flex align-items-center my-2">
                 <img
                     class="o_avatar o_user_avatar rounded"
-                    t-att-src="'web/image?model=res.users&amp;field=avatar_128&amp;id=' + record.user_id.raw_value"
+                    t-att-src="'/web/image/res.users/' + record.user_id.raw_value + '/avatar_128'"
                 />
                 <div class="mx-2">
                     <t t-esc="record.user_id.value" />
