@@ -15,7 +15,7 @@ class TestMaintenanceBasicUserSecurity(TransactionCase):
                 "name": "Basic User With Permissions",
                 "login": "basic_with_perms@test.com",
                 "email": "basic_with_perms@test.com",
-                "groups_id": [(6, 0, [
+                "group_ids": [(6, 0, [
                     self.env.ref("base.group_user").id,
                     self.env.ref("maintenance.group_equipment_manager").id,
                 ])],
@@ -27,7 +27,7 @@ class TestMaintenanceBasicUserSecurity(TransactionCase):
                 "name": "Basic User Without Permissions",
                 "login": "basic_no_perms@test.com",
                 "email": "basic_no_perms@test.com",
-                "groups_id": [(6, 0, [
+                "group_ids": [(6, 0, [
                     self.env.ref("base.group_user").id,
                 ])],
             }
