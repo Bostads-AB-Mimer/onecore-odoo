@@ -39,6 +39,8 @@ patch(Message.prototype, {
       case "tenant_mail":
       case "tenant_mail_ok_and_sms_failed":
         return " (via mejl)";
+      case "tenant_mail_and_sms":
+        return " (via sms och mejl)";
       default:
         return "";
     }
