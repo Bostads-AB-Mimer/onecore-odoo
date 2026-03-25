@@ -1,4 +1,5 @@
 {
+    "author": "Bostads-AB-Mimer",
     "name": "ONECore UI",
     "version": "1.0",
     "sequence": 100,
