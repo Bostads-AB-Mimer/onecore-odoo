@@ -507,6 +507,20 @@ class OneCoreMaintenanceRequest(
             # if not vals.get("space_caption"):
             #     vals["space_caption"] = "Tvättstuga"
 
+        # Extract transient option fields before create — they are needed
+        # for create_related_records but must not be cached by the ORM
+        # (Odoo 19 web_read would try to resolve deleted option records)
+        _option_fields = {
+            'property_option_id', 'building_option_id',
+            'rental_property_option_id', 'maintenance_unit_option_id',
+            'tenant_option_id', 'lease_option_id',
+            'parking_space_option_id', 'facility_option_id',
+            'staircase_option_id',
+        }
+        option_vals_list = []
+        for vals in vals_list:
+            option_vals_list.append({f: vals.pop(f, False) for f in _option_fields})
+
         # Create maintenance requests
         # Note: activity_update() is overridden to suppress automatic activities
         maintenance_requests = super(
@@ -517,7 +531,7 @@ class OneCoreMaintenanceRequest(
         stage_manager = MaintenanceStageManager(self.env)
 
         for idx, request in enumerate(maintenance_requests):
-            vals = vals_list[idx]
+            vals = {**vals_list[idx], **option_vals_list[idx]}
 
             create_service.create_related_records(request, vals)
 
@@ -578,6 +592,18 @@ class OneCoreMaintenanceRequest(
         changes_by_record = (
             {} if skip_tracking else change_tracker.track_field_changes(self, vals)
         )
+
+        # Strip transient option fields from vals to prevent Odoo 19
+        # web_read from caching and resolving deleted option records
+        _option_fields = {
+            'property_option_id', 'building_option_id',
+            'rental_property_option_id', 'maintenance_unit_option_id',
+            'tenant_option_id', 'lease_option_id',
+            'parking_space_option_id', 'facility_option_id',
+            'staircase_option_id',
+        }
+        for f in _option_fields:
+            vals.pop(f, None)
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
