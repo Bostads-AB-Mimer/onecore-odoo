@@ -1,33 +1,8 @@
-import logging
-from .base_handler import BaseMaintenanceHandler
-
-_logger = logging.getLogger(__name__)
+from .rental_object_base_handler import RentalObjectBaseHandler
 
 
-class ParkingSpaceHandler(BaseMaintenanceHandler):
+class ParkingSpaceHandler(RentalObjectBaseHandler):
     """Handler for parking space maintenance requests."""
-
-    def handle_search(self, search_type, search_value, space_caption):
-        """Handle search for parking space requests.
-
-        ParkingSpaceHandler can handle:
-        - lease-based searches (pnr, contactCode, leaseId, rentalObjectId): Find parking spaces via tenant/lease data
-        """
-        if search_type in ["pnr", "contactCode", "leaseId", "rentalObjectId"]:
-            work_order_data = self.core_api.fetch_form_data(
-                search_type, search_value, space_caption
-            )
-
-            if not work_order_data:
-                _logger.info("No data found in response.")
-                return self._return_no_results_warning(search_value)
-
-            self.update_form_options(work_order_data)
-            self._set_form_selections()
-        else:
-            raise ValueError(
-                f"ParkingSpaceHandler does not support search type: {search_type}"
-            )
 
     def update_form_options(self, work_order_data):
         """Update form options with parking space data."""
@@ -62,21 +37,14 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
 
             # Only create lease and tenant options if lease data exists
             if lease:
-                self._create_lease_option(
+                lease_option = self._create_lease_option(
                     lease, parking_space_option_id=parking_space_option.id
                 )
-
-                self._create_tenant_options(lease["tenants"])
+                self._create_tenant_options(lease["tenants"], lease_option_id=lease_option.id)
             else:
-                # Clear existing lease and tenant options when no lease data is available
-                self.env["maintenance.lease.option"].search(
-                    [("user_id", "=", self.env.user.id)]
-                ).unlink()
-                self.env["maintenance.tenant.option"].search(
-                    [("user_id", "=", self.env.user.id)]
-                ).unlink()
+                self._clear_lease_and_tenant_options()
 
-    def _set_form_selections(self):
+    def _set_form_selections(self, search_type=None, search_value=None):
         """Set the form field selections after creating options."""
         parking_space_records = self.env["maintenance.parking.space.option"].search(
             [("user_id", "=", self.env.user.id)]
@@ -84,14 +52,4 @@ class ParkingSpaceHandler(BaseMaintenanceHandler):
         if parking_space_records:
             self.record.parking_space_option_id = parking_space_records[0].id
 
-        lease_records = self.env["maintenance.lease.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if lease_records:
-            self.record.lease_option_id = lease_records[0].id
-
-        tenant_records = self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", self.env.user.id)]
-        )
-        if tenant_records:
-            self.record.tenant_option_id = tenant_records[0].id
+        self._set_lease_and_tenant_selections(search_type, search_value)
