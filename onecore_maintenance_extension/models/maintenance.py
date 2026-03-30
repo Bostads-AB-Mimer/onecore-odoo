@@ -572,7 +572,7 @@ class OneCoreMaintenanceRequest(
             external_contractor_service.validate_stage_transition(
                 self, vals["stage_id"]
             )
-            stage_updates = stage_manager.handle_stage_change(self, vals["stage_id"])
+            stage_updates = stage_manager.handle_stage_change(self, vals["stage_id"], vals)
             vals.update(stage_updates)
 
         # Handle resource assignment workflow (always run, even during creation)

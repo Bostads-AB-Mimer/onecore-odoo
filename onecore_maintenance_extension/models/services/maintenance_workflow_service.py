@@ -10,10 +10,12 @@ class MaintenanceStageManager:
     def __init__(self, env):
         self.env = env
 
-    def handle_stage_change(self, record, new_stage_id):
+    def handle_stage_change(self, record, new_stage_id, vals=None):
         """Handle all logic when stage changes. Returns dict of field updates."""
         # Handle resource assignment workflow
-        if not record.user_id:
+        # Check both the current user_id and any user_id being set in the same write
+        has_user = record.user_id or (vals and vals.get("user_id"))
+        if not has_user:
             self._validate_unassigned_resource(new_stage_id)
 
         # Set/clear performed_date/closed_date based on stage transitions
@@ -81,7 +83,6 @@ class FieldChangeTracker:
         "website_message_ids",
         "__last_update",
         "display_name",
-        "stage_id",
         "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
     }
