@@ -1,10 +1,9 @@
 /** @odoo-module **/
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, useRef } from "@odoo/owl";
 import { Layout } from "@web/search/layout";
 import { useModelWithSampleData } from "@web/model/model";
 import { CogMenu } from "@web/search/cog_menu/cog_menu";
 import { SearchBar } from "@web/search/search_bar/search_bar";
-import { ViewButton } from "@web/views/view_button/view_button";
 import { Dropdown } from "@web/core/dropdown/dropdown";
 import { DropdownItem } from "@web/core/dropdown/dropdown_item";
 import { extractFieldsFromArchInfo } from "@web/model/relational_model/utils";
@@ -12,6 +11,7 @@ import { session } from "@web/session";
 import { useBus, useService } from "@web/core/utils/hooks";
 import { useSearchBarToggler } from "@web/search/search_bar/search_bar_toggler";
 import { useSetupAction } from "@web/search/action_hook";
+import { rpc } from "@web/core/network/rpc";
 import { MobileRenderer } from "./mobile_renderer";
 import { standardViewProps } from "@web/views/standard_view_props";
 
@@ -21,11 +21,10 @@ export class MobileController extends Component {
     MobileRenderer,
     Dropdown,
     DropdownItem,
-    ViewButton,
     CogMenu,
     SearchBar,
   };
-  async setup() {
+  setup() {
     this.viewService = useService("view");
     this.dataSearch = [];
     this.isExternalContractor;
@@ -33,7 +32,7 @@ export class MobileController extends Component {
     useBus(this.ui.bus, "resize", this.render);
     this.archInfo = this.props.archInfo;
     const fields = this.props.fields;
-    this.rpc = useService("rpc");
+    this.rootRef = useRef("root");
     this.model = useState(
       useModelWithSampleData(this.props.Model, this.modelParams)
     );
@@ -59,7 +58,7 @@ export class MobileController extends Component {
       },
     });
     onWillStart(async () => {
-      const isExternalContractor = await this.rpc("/web/dataset/call_kw", {
+      const isExternalContractor = await rpc("/web/dataset/call_kw", {
         model: "maintenance.request",
         method: "is_user_external_contractor",
         args: [],
@@ -140,8 +139,6 @@ MobileController.props = {
     optional: true,
   },
   showButtons: { type: Boolean, optional: true },
-
-  Compiler: { type: Function, optional: true }, // optional in stable for backward compatibility
   Model: Function,
   Renderer: Function,
   archInfo: Object,

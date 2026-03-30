@@ -4,7 +4,7 @@
     <!-- The root element of the view component -->
     <div t-ref="root" t-att-class="props.className">
       <!-- Layout component for organizing the view -->
-      <Layout className="model.useSampleModel ? 'o_view_sample_data' : ''" display="props.display">
+      <Layout className="model and model.useSampleModel ? 'o_view_sample_data' : ''" display="props.display">
         
         <t t-set-slot="control-panel-create-button">
           <t t-if="canCreate and props.showButtons">
@@ -32,7 +32,7 @@
           <t t-component="searchBarToggler.component" t-props="searchBarToggler.props"/>
         </t>
         <!-- Render the main content using the Renderer component -->
-        <t t-component="props.Renderer" t-props="renderProps" list="model.root" archInfo="props.archInfo" Compiler="props.Compiler" openRecord.bind="openRecord"/>
+        <t t-component="props.Renderer" list="model.root" archInfo="props.archInfo" openRecord.bind="openRecord"/>
       </Layout>
     </div>
   </t>
