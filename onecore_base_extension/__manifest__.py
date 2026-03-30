@@ -1,6 +1,7 @@
 {
-    "author": "Bostads-AB-Mimer",
     "name": "OneCore Base Extension",
+    "author": "Bostads-AB-Mimer",
+    "license": "LGPL-3",
     "category": "ONECore",
     "summary": "Extends the Odoo base module with ONECore specific customizations.",
     "sequence": 100,
@@ -10,5 +11,4 @@
         "views/res_users_view.xml",
     ],
     "auto_install": True,
-    "license": "LGPL-3",
 }

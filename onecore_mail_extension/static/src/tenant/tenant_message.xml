@@ -3,7 +3,11 @@
     <t t-name="onecore_mail_extension.Message" t-inherit="mail.Message" t-inherit-mode="extension">
         <!-- Add "(via sms)" / "(via mejl)" indicator in message header -->
         <xpath expr="//div[hasclass('o-mail-Message-header')]//small" position="inside">
-            <span t-esc="getSentAsString()" />
+            <span t-if="!isSendFailure()" t-esc="getSentAsString()" />
+            <span t-if="isSendFailure()" class="text-danger fw-bold ms-1">
+                <i class="fa fa-exclamation-triangle me-1" />
+                <t t-esc="getSentAsString()" />
+            </span>
         </xpath>
 
         <!-- Add t-ref for collapse height measurement -->
