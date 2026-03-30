@@ -449,6 +449,16 @@ class OneCoreMaintenanceRequest(
         for record in self:
             field_manager.update_facility_fields(record)
 
+    @api.onchange("user_id")
+    def _onchange_user_id(self):
+        stage_manager = MaintenanceStageManager(self.env)
+        for record in self:
+            updates = stage_manager.handle_resource_assignment(
+                record, record.user_id.id if record.user_id else False
+            )
+            if "stage_id" in updates:
+                record.stage_id = updates["stage_id"]
+
     # ============================================================================
     # CRUD OPERATIONS
     # ============================================================================
