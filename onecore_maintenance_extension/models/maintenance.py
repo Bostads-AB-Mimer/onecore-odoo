@@ -747,7 +747,7 @@ class OneCoreMaintenanceRequest(
             "https://onecore.mimer.nu",
         )
 
-        url = f"{base_url}/tenants/{self.contact_code}"
+        url = f"{base_url}/hyresgaster/{self.contact_code}"
 
         return {
             "type": "ir.actions.act_url",
