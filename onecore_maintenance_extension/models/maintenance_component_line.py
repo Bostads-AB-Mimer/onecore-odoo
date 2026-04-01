@@ -147,12 +147,13 @@ class MaintenanceComponentLine(models.TransientModel):
             "condition": self.condition if self.condition else "NEW",
         }
 
-        # Add optional fields if they have values
+        # Add optional fields if they have truthy values
+        # Note: Odoo uses False (not None) for empty Integer/Float fields
         component_payload.update(
             {
                 payload_key: getattr(self, attr_name)
                 for attr_name, payload_key in optional_fields.items()
-                if getattr(self, attr_name) is not None
+                if getattr(self, attr_name)
             }
         )
 

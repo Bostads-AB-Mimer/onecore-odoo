@@ -138,7 +138,7 @@ class TestComponentLineActionSave(TransactionCase):
             line.action_save_component()
 
     def test_save_builds_correct_payload(self):
-        """Payload maps Odoo fields to API field names."""
+        """Payload maps Odoo fields to API field names and excludes empty fields."""
         serial = self.fake.component_serial_number()
         line = create_component_line(
             self.env,
@@ -147,6 +147,9 @@ class TestComponentLineActionSave(TransactionCase):
             condition='GOOD',
             warranty_months=24,
             price_at_purchase=5000.0,
+            # Leave these empty (Odoo uses False, not None)
+            economic_lifespan=False,
+            ncs_code=False,
         )
 
         with patch(f'{LINE_PATH}.core_api.CoreApi') as MockApi:
@@ -162,11 +165,16 @@ class TestComponentLineActionSave(TransactionCase):
             mock_api.update_component.assert_called_once()
             payload = mock_api.update_component.call_args[0][1]
 
+            # Fields with values are included
             self.assertEqual(payload['modelId'], line.model_id)
             self.assertEqual(payload['condition'], 'GOOD')
             self.assertEqual(payload['serialNumber'], serial)
             self.assertEqual(payload['warrantyMonths'], 24)
             self.assertEqual(payload['priceAtPurchase'], 5000.0)
+
+            # Empty fields (Odoo False) are excluded from payload
+            self.assertNotIn('economicLifespan', payload)
+            self.assertNotIn('ncsCode', payload)
 
     def test_save_calls_update_component_api(self):
         """Calls api.update_component with component ID."""
