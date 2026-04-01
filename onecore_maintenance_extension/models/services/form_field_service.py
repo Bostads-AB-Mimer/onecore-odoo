@@ -182,3 +182,11 @@ class FormFieldService:
         record.facility_building_name = record.facility_option_id.building_name
         record.facility_property_code = record.facility_option_id.property_code
         record.facility_property_name = record.facility_option_id.property_name
+
+        # Update related lease only if current lease doesn't belong to this facility
+        if not record.lease_option_id or record.lease_option_id.facility_option_id != record.facility_option_id:
+            lease_records = record.env["maintenance.lease.option"].search(
+                [("facility_option_id", "=", record.facility_option_id.id)]
+            )
+            if lease_records:
+                record.lease_option_id = select_active_lease(lease_records).id
