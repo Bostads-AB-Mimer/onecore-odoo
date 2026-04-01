@@ -116,7 +116,8 @@ class CoreApi:
                 item
                 for item in data
                 if isinstance(item, dict)
-                and item.get("type", "").strip() == "P-Platskontrakt"
+                and item.get("type", "").strip()
+                in ("P-Platskontrakt", "Garagekontrakt")
             ]
             return filtered_content
 
@@ -276,7 +277,9 @@ class CoreApi:
             f"/components/by-room/{urllib.parse.quote(str(room_id), safe='')}"
         )
 
-    def fetch_component_models(self, model_name, page=1, limit=20, type_id=None, subtype_id=None):
+    def fetch_component_models(
+        self, model_name, page=1, limit=20, type_id=None, subtype_id=None
+    ):
         """Fetch component models matching the given model name.
 
         Args:
@@ -305,14 +308,14 @@ class CoreApi:
         """Fetch component types for a category."""
         return self._get_json(
             "/component-types",
-            params={"categoryId": category_id, "page": page, "limit": limit}
+            params={"categoryId": category_id, "page": page, "limit": limit},
         )
 
     def fetch_component_subtypes(self, type_id, page=1, limit=100):
         """Fetch component subtypes for a type."""
         return self._get_json(
             "/component-subtypes",
-            params={"typeId": type_id, "page": page, "limit": limit}
+            params={"typeId": type_id, "page": page, "limit": limit},
         )
 
     def create_component(self, payload):
@@ -329,7 +332,9 @@ class CoreApi:
 
     def update_component_installation(self, installation_id, payload):
         """Update component installation via PUT /component-installations/{id}."""
-        response = self.request("PUT", f"/component-installations/{installation_id}", json=payload)
+        response = self.request(
+            "PUT", f"/component-installations/{installation_id}", json=payload
+        )
         response.raise_for_status()
         return response.json()
 
@@ -349,10 +354,10 @@ class CoreApi:
 
         # Ensure file_data is a string
         if isinstance(file_data, bytes):
-            file_data = file_data.decode('utf-8')
+            file_data = file_data.decode("utf-8")
 
         # Detect content type from image header bytes
-        content_type = 'image/jpeg'  # default
+        content_type = "image/jpeg"  # default
         try:
             header_bytes = b64.b64decode(file_data[:352])
             kind = filetype.guess(header_bytes)
@@ -365,27 +370,32 @@ class CoreApi:
         if file_name is None:
             import uuid
             from datetime import datetime
+
             ext_map = {
-                'image/jpeg': '.jpg',
-                'image/png': '.png',
-                'image/gif': '.gif',
-                'image/webp': '.webp',
+                "image/jpeg": ".jpg",
+                "image/png": ".png",
+                "image/gif": ".gif",
+                "image/webp": ".webp",
             }
-            extension = ext_map.get(content_type, '.jpg')
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            extension = ext_map.get(content_type, ".jpg")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             unique_id = uuid.uuid4().hex[:8]
             file_name = f"image_{timestamp}_{unique_id}{extension}"
 
-        _logger.info(f"upload_document: component_id={component_instance_id}, content_type={content_type}, file_name={file_name}")
+        _logger.info(
+            f"upload_document: component_id={component_instance_id}, content_type={content_type}, file_name={file_name}"
+        )
 
         # Build JSON payload
         payload = {
             "fileData": file_data,
             "fileName": file_name,
-            "contentType": content_type
+            "contentType": content_type,
         }
 
-        response = self.request("POST", f"/components/{component_instance_id}/upload", json=payload)
+        response = self.request(
+            "POST", f"/components/{component_instance_id}/upload", json=payload
+        )
         response.raise_for_status()
         return response.json() if response.text else {}
 
@@ -399,7 +409,9 @@ class CoreApi:
             list: List of document objects with fileData, fileName, contentType, etc.
         """
         # Using the documents endpoint for fetching component instance documents
-        response = self.request("GET", f"/documents/component-instances/{component_instance_id}")
+        response = self.request(
+            "GET", f"/documents/component-instances/{component_instance_id}"
+        )
         response.raise_for_status()
         return response.json() if response.text else []
 
@@ -408,6 +420,7 @@ class CoreApi:
             "Bostadskontrakt": lambda id: self.fetch_residence(id),
             "Kooperativ hyresrätt": lambda id: self.fetch_residence(id),
             "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
+            "Garagekontrakt": lambda id: self.fetch_parking_space(id),
             "Lokalkontrakt": lambda id: self.fetch_facility(id),
         }
         lease_types_with_maintenance_units = [
@@ -430,13 +443,22 @@ class CoreApi:
 
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
-                        fetched_data = fetch_fns[lease_type](
-                            lease["rentalPropertyId"]
-                        )
+                        fetched_data = fetch_fns[lease_type](lease["rentalPropertyId"])
 
-                        rental_property = fetched_data if lease_type == "Bostadskontrakt" or lease_type == "Kooperativ hyresrätt" else None
-                        parking_space = fetched_data if lease_type == "P-Platskontrakt" else None
-                        facility = fetched_data if lease_type == "Lokalkontrakt" else None
+                        rental_property = (
+                            fetched_data
+                            if lease_type == "Bostadskontrakt"
+                            or lease_type == "Kooperativ hyresrätt"
+                            else None
+                        )
+                        parking_space = (
+                            fetched_data
+                            if lease_type in ("P-Platskontrakt", "Garagekontrakt")
+                            else None
+                        )
+                        facility = (
+                            fetched_data if lease_type == "Lokalkontrakt" else None
+                        )
 
                         maintenance_units = (
                             self.fetch_maintenance_units(
