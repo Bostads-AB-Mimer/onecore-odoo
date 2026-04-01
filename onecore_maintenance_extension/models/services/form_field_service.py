@@ -159,6 +159,14 @@ class FormFieldService:
         record.parking_space_postal_code = record.parking_space_option_id.postal_code
         record.parking_space_city = record.parking_space_option_id.city
 
+        # Update related lease only if current lease doesn't belong to this parking space
+        if not record.lease_option_id or record.lease_option_id.parking_space_option_id != record.parking_space_option_id:
+            lease_records = record.env["maintenance.lease.option"].search(
+                [("parking_space_option_id", "=", record.parking_space_option_id.id)]
+            )
+            if lease_records:
+                record.lease_option_id = select_active_lease(lease_records).id
+
     def update_facility_fields(self, record):
         """Update facility-related fields."""
         if not record.facility_option_id:
