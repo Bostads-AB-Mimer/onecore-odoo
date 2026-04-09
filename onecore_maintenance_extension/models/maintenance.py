@@ -366,6 +366,7 @@ class OneCoreMaintenanceRequest(
         saved_search_value = self.search_value
         saved_search_type = self.search_type
         saved_space_caption = self.space_caption
+        saved_name = self.name
 
         # Only delete old options when we're about to perform a valid search.
         base_handler = BaseMaintenanceHandler(self, self.get_core_api())
@@ -375,6 +376,8 @@ class OneCoreMaintenanceRequest(
         self.search_value = saved_search_value
         self.search_type = saved_search_type
         self.space_caption = saved_space_caption
+        if saved_name:
+            self.name = saved_name
 
         handler = HandlerFactory.get_handler(
             self, self.get_core_api(), self.search_type, self.space_caption
