@@ -391,6 +391,25 @@ class OneCoreMaintenanceRequest(
             if result and isinstance(result, dict) and result.get("warning"):
                 return result
 
+        # After search, check if a specific maintenance unit was requested via URL context
+        params = self.env.context.get("params", {})
+        if "context" in params and isinstance(params["context"], str):
+            try:
+                url_ctx = json.loads(params["context"])
+                mu_code = url_ctx.get("default_maintenance_unit_code")
+                if mu_code:
+                    unit = self.env["maintenance.maintenance.unit.option"].search(
+                        [
+                            ("code", "=", mu_code),
+                            ("user_id", "=", self.env.user.id),
+                        ],
+                        limit=1,
+                    )
+                    if unit:
+                        self.maintenance_unit_option_id = unit
+            except (json.JSONDecodeError, TypeError):
+                pass
+
     # ============================================================================
     # ONCHANGE METHODS
     # ============================================================================
