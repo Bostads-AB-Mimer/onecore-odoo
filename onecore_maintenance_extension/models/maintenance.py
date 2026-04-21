@@ -397,6 +397,32 @@ class OneCoreMaintenanceRequest(
             if result and isinstance(result, dict) and result.get("warning"):
                 return result
 
+        # After search, check if a specific maintenance unit was requested via URL context.
+        # Check both direct context (Odoo 19 client action path) and params.context
+        # (legacy URL parameter path) for the maintenance unit code.
+        url_context = {}
+        params = self.env.context.get("params", {})
+        if "context" in params and isinstance(params["context"], str):
+            try:
+                url_context = json.loads(params["context"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        mu_code = self.env.context.get(
+            "default_maintenance_unit_code"
+        ) or url_context.get("default_maintenance_unit_code")
+
+        if mu_code:
+            unit = self.env["maintenance.maintenance.unit.option"].search(
+                [
+                    ("code", "=", mu_code),
+                    ("user_id", "=", self.env.user.id),
+                ],
+                limit=1,
+            )
+            if unit:
+                self.maintenance_unit_option_id = unit
+
     # ============================================================================
     # ONCHANGE METHODS
     # ============================================================================
@@ -527,11 +553,15 @@ class OneCoreMaintenanceRequest(
         # for create_related_records but must not be cached by the ORM
         # (Odoo 19 web_read would try to resolve deleted option records)
         _option_fields = {
-            'property_option_id', 'building_option_id',
-            'rental_property_option_id', 'maintenance_unit_option_id',
-            'tenant_option_id', 'lease_option_id',
-            'parking_space_option_id', 'facility_option_id',
-            'staircase_option_id',
+            "property_option_id",
+            "building_option_id",
+            "rental_property_option_id",
+            "maintenance_unit_option_id",
+            "tenant_option_id",
+            "lease_option_id",
+            "parking_space_option_id",
+            "facility_option_id",
+            "staircase_option_id",
         }
         option_vals_list = []
         for vals in vals_list:
@@ -588,7 +618,9 @@ class OneCoreMaintenanceRequest(
             external_contractor_service.validate_stage_transition(
                 self, vals["stage_id"]
             )
-            stage_updates = stage_manager.handle_stage_change(self, vals["stage_id"], vals)
+            stage_updates = stage_manager.handle_stage_change(
+                self, vals["stage_id"], vals
+            )
             vals.update(stage_updates)
 
         # Handle resource assignment workflow (always run, even during creation)
@@ -612,11 +644,15 @@ class OneCoreMaintenanceRequest(
         # Strip transient option fields from vals to prevent Odoo 19
         # web_read from caching and resolving deleted option records
         _option_fields = {
-            'property_option_id', 'building_option_id',
-            'rental_property_option_id', 'maintenance_unit_option_id',
-            'tenant_option_id', 'lease_option_id',
-            'parking_space_option_id', 'facility_option_id',
-            'staircase_option_id',
+            "property_option_id",
+            "building_option_id",
+            "rental_property_option_id",
+            "maintenance_unit_option_id",
+            "tenant_option_id",
+            "lease_option_id",
+            "parking_space_option_id",
+            "facility_option_id",
+            "staircase_option_id",
         }
         for f in _option_fields:
             vals.pop(f, None)
