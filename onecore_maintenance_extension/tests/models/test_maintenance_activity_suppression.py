@@ -34,6 +34,7 @@ class TestMaintenanceActivitySuppression(TransactionCase):
             "maintenance_team_id": self.test_team.id,
             "maintenance_request_category_id": self.test_category.id,
             "space_caption": "Lägenhet",
+            "priority_expanded": "7",
         }
         vals.update(kwargs)
         return self.MaintenanceRequest.create(vals)

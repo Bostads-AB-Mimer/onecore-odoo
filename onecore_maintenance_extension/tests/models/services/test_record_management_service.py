@@ -85,6 +85,7 @@ class TestRecordManagementService(TransactionCase):
                 "onecore_maintenance_extension.category_1"
             ).id,
             "space_caption": self.fake.space_caption(),
+            "priority_expanded": "7",
             "tenant_option_id": tenant_option.id,
             "phone_number": new_phone,
             "email_address": new_email,
