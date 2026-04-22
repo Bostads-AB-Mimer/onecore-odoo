@@ -43,13 +43,16 @@ SEARCH_TYPES = [
 
 # Priority options with time periods
 PRIORITY_OPTIONS = [
+    ("0", "Akut"),
     ("1", "1 dag"),
     ("5", "5 dagar"),
     ("7", "7 dagar"),
     ("10", "10 dagar"),
     ("14", "2 veckor"),
     ("21", "3 veckor"),
+    ("28", "4 veckor"),
     ("35", "5 veckor"),
+    ("42", "6 veckor"),
     ("56", "8 veckor"),
 ]
 

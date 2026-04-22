@@ -107,6 +107,7 @@ class OneCoreMaintenanceRequest(
         PRIORITY_OPTIONS,
         string="Prioritet",
         store=True,
+        required=True,
     )
     due_date = fields.Date("Förfallodatum", compute="_compute_due_date", store=True)
     creation_origin = fields.Selection(

@@ -35,6 +35,8 @@
                         <filter string="Klart" name="done"
                             domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'done')]" />
                         <separator />
+                        <filter string="Akut" name="acute"
+                            domain="[('priority_expanded', '=', '0')]" />
                         <filter string="1 dag" name="one_day"
                             domain="[('priority_expanded', '=', '1')]" />
                         <filter string="5 dagar" name="five_days"
@@ -45,11 +47,15 @@
                             domain="[('priority_expanded', '=', '10')]" />
                         <filter string="2 veckor" name="two_weeks"
                             domain="[('priority_expanded', '=', '14')]" />
-                        <filter string="3 veckor" name="two_weeks"
+                        <filter string="3 veckor" name="three_weeks"
                             domain="[('priority_expanded', '=', '21')]" />
-                        <filter string="5 veckor" name="two_weeks"
+                        <filter string="4 veckor" name="four_weeks"
+                            domain="[('priority_expanded', '=', '28')]" />
+                        <filter string="5 veckor" name="five_weeks"
                             domain="[('priority_expanded', '=', '35')]" />
-                        <filter string="8 veckor" name="two_weeks"
+                        <filter string="6 veckor" name="six_weeks"
+                            domain="[('priority_expanded', '=', '42')]" />
+                        <filter string="8 veckor" name="eight_weeks"
                             domain="[('priority_expanded', '=', '56')]" />
                         <separator />
                         <filter string="Ej schemalagt" name="unscheduled"
