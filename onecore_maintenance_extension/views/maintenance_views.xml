@@ -527,18 +527,22 @@
                                         <field name="national_registration_number"
                                             invisible="not national_registration_number"
                                             string="Person/Org. nr" />
-                                        <div class="d-flex align-items-center" invisible="not contact_code">
+                                        <div class="d-flex align-items-center"
+                                            invisible="not contact_code">
                                             <label for="contact_code" string="Kundnummer" />
                                             <button name="open_customer_card" type="object"
                                                 class="btn btn-link p-0 ms-1 d-inline-flex align-items-center"
                                                 style="line-height: 1;"
                                                 title="Öppna kundkort i OneCore"
                                                 invisible="user_is_external_contractor or not id">
-                                                <img src="/onecore_maintenance_extension/static/src/img/onecore_simple_black.svg"
-                                                    style="width: 12px; height: 12px;" alt="Kundkort" />
+                                                <img
+                                                    src="/onecore_maintenance_extension/static/src/img/onecore_simple_black.svg"
+                                                    style="width: 12px; height: 12px;"
+                                                    alt="Kundkort" />
                                             </button>
                                         </div>
-                                        <field name="contact_code" nolabel="1" invisible="not contact_code" />
+                                        <field name="contact_code" nolabel="1"
+                                            invisible="not contact_code" />
 
                                         <!-- Phone number and email address should only be editable
                                         for equipment managers -->
@@ -608,10 +612,12 @@
                                             help="Det datum ärendet ska vara utfört"
                                             readonly="user_is_external_contractor" />
                                         <field name="performed_date"
-                                            help="Datum och tid då ärendet markerades som utfört"
+                                            options="{'show_time': false}"
+                                            help="Datum då ärendet markerades som utfört"
                                             readonly="1" />
                                         <field name="closed_date"
-                                            help="Datum och tid då ärendet markerades som avslutat"
+                                            options="{'show_time': false}"
+                                            help="Datum då ärendet markerades som avslutat"
                                             readonly="1" />
                                         <field
                                             name="maintenance_request_category_id"
@@ -625,6 +631,7 @@
                                             domain="maintenance_team_domain" />
                                         <field
                                             name="schedule_date"
+                                            options="{'show_time': false}"
                                             help="Det datum arbete är planerat"
                                         />
 
@@ -792,10 +799,10 @@
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
                         <field name="start_date" optional="hide" />
-                        <field name="schedule_date" optional="hide" />
+                        <field name="schedule_date" options="{'show_time': false}" optional="hide" />
                         <field name="due_date" optional="show" />
-                        <field name="performed_date" optional="hide" />
-                        <field name="closed_date" optional="hide" />
+                        <field name="performed_date" options="{'show_time': false}" optional="hide" />
+                        <field name="closed_date" options="{'show_time': false}" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
                         <field name="priority_expanded" optional="hide" />
                         <field name="creation_origin" optional="hide" />
@@ -834,7 +841,7 @@
             <field name="target">current</field>
             <field name="context">{
                 'form_view_initial_mode': 'edit',
-            }</field>
+                }</field>
         </record>
 
         <menuitem
