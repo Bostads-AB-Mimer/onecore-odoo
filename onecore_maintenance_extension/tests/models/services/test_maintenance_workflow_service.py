@@ -303,7 +303,7 @@ class TestFieldChangeTracker(TransactionCase):
 
         # Update with change tracking enabled (clear creating_records context)
         request.with_context(creating_records=False).write(
-            {"description": "Updated description", "priority_expanded": "7"}
+            {"description": "Updated description", "priority_expanded": "10"}
         )
 
         # Should have posted a new message
@@ -339,7 +339,7 @@ class TestFieldChangeTracker(TransactionCase):
 
         # Update both records
         changes = self.change_tracker.track_field_changes(
-            requests, {"priority_expanded": "7"}
+            requests, {"priority_expanded": "10"}
         )
 
         # Should track changes for both records
