@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where.exe gh *)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -sSL -o /tmp/logs.zip \"https://api.github.com/repos/Bostads-AB-Mimer/onecore-odoo/actions/runs/24768628977/logs\" -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(env)",
+      "Bash(winget --version)",
+      "Bash(cmd.exe /c \"where winget\")"
+    ]
+  }
+}
