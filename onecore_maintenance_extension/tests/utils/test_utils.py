@@ -120,6 +120,7 @@ def create_maintenance_request(env, **kwargs):
             "onecore_maintenance_extension.category_1"
         ).id,
         "space_caption": fake.space_caption(),
+        "priority_expanded": "7",
     }
     defaults.update(kwargs)
     return env["maintenance.request"].create(defaults)
