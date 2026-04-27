@@ -4,7 +4,6 @@
 SPACES = [
     ("Byggnad", "Byggnad"),
     ("Fastighet", "Fastighet"),
-    ("Förråd", "Förråd"),
     ("Lägenhet", "Lägenhet"),
     ("Tvättstuga", "Tvättstuga"),
     ("Uppgång", "Uppgång"),  # saknas typ i maintenance_unit
