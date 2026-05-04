@@ -135,6 +135,12 @@ class OneCoreMaintenanceRequest(
         compute="_compute_new_mimer_notification",
         store=False,
     )
+    # Form-view only. Adding this to tree/kanban would fire one API call per row.
+    requires_pest_control = fields.Boolean(
+        string="Spärr skadedjur",
+        compute="_compute_requires_pest_control",
+        store=False,
+    )
     floor_plan_image = fields.Image(
         store=False, readonly=True, compute="_compute_floor_plan"
     )
@@ -228,6 +234,36 @@ class OneCoreMaintenanceRequest(
         record_service = RecordManagementService(self.env)
         for record in self:
             record_service.handle_empty_tenant_logic(record)
+
+    @api.depends("rental_property_id", "rental_property_option_id")
+    def _compute_requires_pest_control(self):
+        api = None
+        for record in self:
+            rental_id = None
+            if record.rental_property_id:
+                rental_id = record.rental_property_id.rental_property_id
+            elif record.rental_property_option_id:
+                rental_id = record.rental_property_option_id.name
+
+            if not rental_id:
+                record.requires_pest_control = False
+                continue
+
+            try:
+                if api is None:
+                    api = record.get_core_api()
+                data = api.fetch_residence(rental_id)
+                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
+                record.requires_pest_control = any(
+                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
+                )
+            except Exception as err:
+                _logger.warning(
+                    "Could not fetch pest control status for rental_id %s: %s",
+                    rental_id,
+                    err,
+                )
+                record.requires_pest_control = False
 
     @api.depends(
         "message_ids.notification_ids.is_read",
