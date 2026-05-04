@@ -71,11 +71,6 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         expected_due_date = start_date + timedelta(days=priority_days)
         self.assertEqual(request.due_date, expected_due_date)
 
-    def test_due_date_with_missing_priority(self):
-        """Due date should be None if priority_expanded is not set."""
-        request = create_maintenance_request(self.env, request_date=date.today())
-        self.assertFalse(request.due_date)
-
 
 @tagged("onecore")
 class TestMaintenanceRequestFormState(TransactionCase):

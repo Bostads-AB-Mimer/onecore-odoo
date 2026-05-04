@@ -5,6 +5,14 @@
     padding: 8px !important;
     margin: 0 16px;
     overflow: hidden;
+
+    /* Hide v19 bubble decorations */
+    .o-mail-Message-bubble {
+        display: none;
+    }
+    .o-mail-Message-bubbleTail {
+        display: none;
+    }
 }
 
 .o-mail-Message + .o-mail-Message {

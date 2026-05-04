@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 {
+    "author": "Bostads-AB-Mimer",
     "name": "ONECore Authentication",
     "version": "1.0",
     "sequence": 50,

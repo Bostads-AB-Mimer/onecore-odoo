@@ -6,7 +6,7 @@ class StaircaseFieldsMixin(models.AbstractModel):
     _name = 'maintenance.staircase.fields.mixin'
     _description = 'Staircase Fields Mixin'
 
-    staircase_option_id = fields.Many2one("maintenance.staircase.option", store=True, string="Trappuppgång")
+    staircase_option_id = fields.Many2one("maintenance.staircase.option", store=False, string="Trappuppgång")
     staircase_id = fields.Many2one("maintenance.staircase", store=True, string="Trappuppgång")
     staircase_name = fields.Char("Trappuppgång", related="staircase_id.name", depends=["staircase_id"])
     staircase_code = fields.Char("Trappuppgångskod", related="staircase_id.code", depends=["staircase_id"])

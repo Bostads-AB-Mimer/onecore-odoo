@@ -107,6 +107,7 @@ class OneCoreMaintenanceRequest(
         PRIORITY_OPTIONS,
         string="Prioritet",
         store=True,
+        required=True,
     )
     due_date = fields.Date("Förfallodatum", compute="_compute_due_date", store=True)
     creation_origin = fields.Selection(
@@ -366,6 +367,8 @@ class OneCoreMaintenanceRequest(
         saved_search_value = self.search_value
         saved_search_type = self.search_type
         saved_space_caption = self.space_caption
+        saved_name = self.name
+        saved_description = self.description
 
         # Only delete old options when we're about to perform a valid search.
         base_handler = BaseMaintenanceHandler(self, self.get_core_api())
@@ -375,6 +378,10 @@ class OneCoreMaintenanceRequest(
         self.search_value = saved_search_value
         self.search_type = saved_search_type
         self.space_caption = saved_space_caption
+        if saved_name:
+            self.name = saved_name
+        if saved_description:
+            self.description = saved_description
 
         handler = HandlerFactory.get_handler(
             self, self.get_core_api(), self.search_type, self.space_caption
@@ -390,6 +397,32 @@ class OneCoreMaintenanceRequest(
             # If handler returns a warning, propagate it to the UI
             if result and isinstance(result, dict) and result.get("warning"):
                 return result
+
+        # After search, check if a specific maintenance unit was requested via URL context.
+        # Check both direct context (Odoo 19 client action path) and params.context
+        # (legacy URL parameter path) for the maintenance unit code.
+        url_context = {}
+        params = self.env.context.get("params", {})
+        if "context" in params and isinstance(params["context"], str):
+            try:
+                url_context = json.loads(params["context"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        mu_code = self.env.context.get(
+            "default_maintenance_unit_code"
+        ) or url_context.get("default_maintenance_unit_code")
+
+        if mu_code:
+            unit = self.env["maintenance.maintenance.unit.option"].search(
+                [
+                    ("code", "=", mu_code),
+                    ("user_id", "=", self.env.user.id),
+                ],
+                limit=1,
+            )
+            if unit:
+                self.maintenance_unit_option_id = unit
 
     # ============================================================================
     # ONCHANGE METHODS
@@ -449,6 +482,16 @@ class OneCoreMaintenanceRequest(
         for record in self:
             field_manager.update_facility_fields(record)
 
+    @api.onchange("user_id")
+    def _onchange_user_id(self):
+        stage_manager = MaintenanceStageManager(self.env)
+        for record in self:
+            updates = stage_manager.handle_resource_assignment(
+                record, record.user_id.id if record.user_id else False
+            )
+            if "stage_id" in updates:
+                record.stage_id = updates["stage_id"]
+
     # ============================================================================
     # CRUD OPERATIONS
     # ============================================================================
@@ -507,6 +550,24 @@ class OneCoreMaintenanceRequest(
             # if not vals.get("space_caption"):
             #     vals["space_caption"] = "Tvättstuga"
 
+        # Extract transient option fields before create — they are needed
+        # for create_related_records but must not be cached by the ORM
+        # (Odoo 19 web_read would try to resolve deleted option records)
+        _option_fields = {
+            "property_option_id",
+            "building_option_id",
+            "rental_property_option_id",
+            "maintenance_unit_option_id",
+            "tenant_option_id",
+            "lease_option_id",
+            "parking_space_option_id",
+            "facility_option_id",
+            "staircase_option_id",
+        }
+        option_vals_list = []
+        for vals in vals_list:
+            option_vals_list.append({f: vals.pop(f, False) for f in _option_fields})
+
         # Create maintenance requests
         # Note: activity_update() is overridden to suppress automatic activities
         maintenance_requests = super(
@@ -517,7 +578,7 @@ class OneCoreMaintenanceRequest(
         stage_manager = MaintenanceStageManager(self.env)
 
         for idx, request in enumerate(maintenance_requests):
-            vals = vals_list[idx]
+            vals = {**vals_list[idx], **option_vals_list[idx]}
 
             create_service.create_related_records(request, vals)
 
@@ -558,7 +619,9 @@ class OneCoreMaintenanceRequest(
             external_contractor_service.validate_stage_transition(
                 self, vals["stage_id"]
             )
-            stage_updates = stage_manager.handle_stage_change(self, vals["stage_id"])
+            stage_updates = stage_manager.handle_stage_change(
+                self, vals["stage_id"], vals
+            )
             vals.update(stage_updates)
 
         # Handle resource assignment workflow (always run, even during creation)
@@ -578,6 +641,22 @@ class OneCoreMaintenanceRequest(
         changes_by_record = (
             {} if skip_tracking else change_tracker.track_field_changes(self, vals)
         )
+
+        # Strip transient option fields from vals to prevent Odoo 19
+        # web_read from caching and resolving deleted option records
+        _option_fields = {
+            "property_option_id",
+            "building_option_id",
+            "rental_property_option_id",
+            "maintenance_unit_option_id",
+            "tenant_option_id",
+            "lease_option_id",
+            "parking_space_option_id",
+            "facility_option_id",
+            "staircase_option_id",
+        }
+        for f in _option_fields:
+            vals.pop(f, None)
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
@@ -711,7 +790,7 @@ class OneCoreMaintenanceRequest(
             "https://onecore.mimer.nu",
         )
 
-        url = f"{base_url}/tenants/{self.contact_code}"
+        url = f"{base_url}/hyresgaster/{self.contact_code}"
 
         return {
             "type": "ir.actions.act_url",

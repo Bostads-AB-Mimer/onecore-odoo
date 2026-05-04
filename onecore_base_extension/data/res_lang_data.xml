@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <!-- MIM-1638: Align English (US) date format with Swedish ISO convention.
+             Mimer is a Swedish customer; en_US users should still see
+             2026-04-29 rather than 04/29/2026. -->
+        <record id="base.lang_en" model="res.lang">
+            <field name="date_format">%Y-%m-%d</field>
+        </record>
+    </data>
+</odoo>

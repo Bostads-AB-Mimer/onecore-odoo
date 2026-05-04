@@ -24,7 +24,7 @@ class TestMaintenanceExternalContractorSecurity(TransactionCase):
                 "name": "External Contractor",
                 "login": "external@test.com",
                 "email": "external@test.com",
-                "groups_id": [(6, 0, [
+                "group_ids": [(6, 0, [
                     self.env.ref("base.group_user").id,
                     self.env.ref("onecore_maintenance_extension.group_external_contractor").id,
                 ])],
@@ -39,7 +39,7 @@ class TestMaintenanceExternalContractorSecurity(TransactionCase):
                 "name": "Basic User With Permissions",
                 "login": "basic_with_perms@test.com",
                 "email": "basic_with_perms@test.com",
-                "groups_id": [(6, 0, [
+                "group_ids": [(6, 0, [
                     self.env.ref("base.group_user").id,
                     self.env.ref("maintenance.group_equipment_manager").id,
                 ])],
