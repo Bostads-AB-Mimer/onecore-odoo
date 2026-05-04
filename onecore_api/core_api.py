@@ -443,7 +443,18 @@ class CoreApi:
 
                     lease_type = lease["type"].strip()
                     if lease_type in fetch_fns:
-                        fetched_data = fetch_fns[lease_type](lease["rentalPropertyId"])
+                        try:
+                            fetched_data = fetch_fns[lease_type](
+                                lease["rentalPropertyId"]
+                            )
+                        except Exception:
+                            _logger.warning(
+                                "Skipping lease %s: could not fetch rental property %s as %s",
+                                lease.get("leaseId"),
+                                lease.get("rentalPropertyId"),
+                                lease_type,
+                            )
+                            continue
 
                         rental_property = (
                             fetched_data
