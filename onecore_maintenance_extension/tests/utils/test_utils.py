@@ -28,7 +28,7 @@ def create_test_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,
@@ -57,7 +57,7 @@ def create_internal_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,
@@ -87,7 +87,7 @@ def create_external_contractor_user(env, **kwargs):
     defaults = {
         "name": fake.name(),
         "login": fake.email(),
-        "groups_id": [
+        "group_ids": [
             (
                 6,
                 0,
@@ -120,6 +120,7 @@ def create_maintenance_request(env, **kwargs):
             "onecore_maintenance_extension.category_1"
         ).id,
         "space_caption": fake.space_caption(),
+        "priority_expanded": "7",
     }
     defaults.update(kwargs)
     return env["maintenance.request"].create(defaults)

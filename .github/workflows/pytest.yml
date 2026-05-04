@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - develop
+      - 'epic/**'
   push:
     branches:
       - main
       - develop
+      - 'epic/**'
 
 jobs:
   pytest:

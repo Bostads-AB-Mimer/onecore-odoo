@@ -2,7 +2,14 @@ def _post_init_hook(env):
     _update_maintenance_stages(env)
 
 
+def _has_lang(env, lang_code):
+    """Check if a language is installed and active."""
+    return bool(env['res.lang']._get_data(code=lang_code))
+
+
 def _update_maintenance_stages(env):
+    sv_installed = _has_lang(env, 'sv_SE')
+
     stage_data = {
         "stage_0": {
             "name": "Väntar på handläggning",
@@ -39,7 +46,8 @@ def _update_maintenance_stages(env):
         )
         if xml_id in stage_data:
             stage.write(stage_data[xml_id])
-            stage.with_context(lang="sv_SE").write(stage_data[xml_id])
+            if sv_installed:
+                stage.with_context(lang="sv_SE").write(stage_data[xml_id])
             del stage_data[xml_id]
 
     # Add new stages
@@ -53,4 +61,5 @@ def _update_maintenance_stages(env):
                 "res_id": stage.id,
             }
         )
-        new_stage.with_context(lang="sv_SE").write({"name": stage_values["name"]})
+        if sv_installed:
+            new_stage.with_context(lang="sv_SE").write({"name": stage_values["name"]})

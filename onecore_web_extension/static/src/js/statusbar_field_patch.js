@@ -20,13 +20,13 @@ patch(StatusBarField.prototype, {
 
     if (this.field.type === "many2one") {
       // Many2one
-      const currentStageName = record.data.stage_id[1];
+      const currentStageName = record.data.stage_id.display_name;
 
       return this.specialData.data.map((option) => ({
         value: option.id,
         label: option.display_name,
         isFolded: option[foldField],
-        isSelected: Boolean(currentValue && option.id === currentValue[0]),
+        isSelected: Boolean(currentValue && option.id === currentValue.id),
         isDisabled:
           (currentStageName === "Väntar på handläggning" &&
             !record.data.user_id) ||

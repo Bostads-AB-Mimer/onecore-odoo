@@ -1,10 +1,11 @@
 {
+    "author": "Bostads-AB-Mimer",
     "name": "ONECore UI",
     "version": "1.0",
     "sequence": 100,
     "category": "ONECore",
     "description": "Provides ONECore UI",
-    "depends": [],
+    "depends": ["web"],
     "summary": "Provides ONECore UI",
     "assets": {
         "web.assets_backend": [

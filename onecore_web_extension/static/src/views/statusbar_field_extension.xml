@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-inherit="web.StatusBarField" t-inherit-mode="extension">
-        <xpath expr="//div[hasclass('o_statusbar_status')]/t" position="replace">
+        <xpath expr="//div[hasclass('o_statusbar_status')]/t[not(@t-set)][not(@t-set-slot)]" position="replace">
             <t t-foreach="items.inline" t-as="item" t-key="item.value">
                 <button
                     type="button"
@@ -13,7 +13,6 @@
                     }"
                     t-att-disabled="props.isDisabled || item.isSelected || item.isDisabled"
                     role="radio"
-                    t-att-aria-label="getItemTooltip(item)"
                     t-att-aria-checked="item.isSelected.toString()"
                     t-att-aria-current="item.isSelected and 'step'"
                     t-att-data-value="item.value"
