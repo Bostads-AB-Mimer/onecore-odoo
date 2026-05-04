@@ -141,6 +141,7 @@
 
                 <xpath expr="//group[1]" position="inside">
                     <field name="special_attention" invisible="1" />
+                    <field name="requires_pest_control" invisible="1" />
                     <field name="creation_origin" invisible="1" readonly="1"></field>
 
                     <div>
@@ -153,6 +154,11 @@
                             class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill bg-danger text-white"
                             invisible="not special_attention">
                             <span>Viktig kundinfo</span>
+                        </div>
+                        <div
+                            class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill bg-warning text-dark"
+                            invisible="not requires_pest_control">
+                            <span>Spärr skadedjur</span>
                         </div>
                     </div>
 
