@@ -109,7 +109,13 @@ class OneCoreMaintenanceRequest(
         store=True,
         required=True,
     )
-    due_date = fields.Date("Förfallodatum", compute="_compute_due_date", store=True)
+    due_date = fields.Date(
+        "Förfallodatum",
+        compute="_compute_due_date",
+        inverse="_inverse_due_date",
+        store=True,
+        readonly=False,
+    )
     creation_origin = fields.Selection(
         CREATION_ORIGINS,
         string="Skapad från",
@@ -302,6 +308,12 @@ class OneCoreMaintenanceRequest(
                 record.due_date = fields.Date.add(
                     base_date, days=int(record.priority_expanded)
                 )
+
+    def _inverse_due_date(self):
+        # Presence of this inverse lets the stored computed field retain
+        # values supplied by the user; without it the recompute on flush
+        # overwrites manual edits to förfallodatum.
+        pass
 
     # ============================================================================
     # UTILITY METHODS

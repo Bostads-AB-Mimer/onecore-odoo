@@ -63,6 +63,8 @@ PRIORITY_OPTIONS = [
     ("35", "5 veckor"),
     ("42", "6 veckor"),
     ("56", "8 veckor"),
+    ("183", "6 månader"),
+    ("365", "mer än 1 år"),
 ]
 
 # Creation origin options
