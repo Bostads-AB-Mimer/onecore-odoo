@@ -71,6 +71,73 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         expected_due_date = start_date + timedelta(days=priority_days)
         self.assertEqual(request.due_date, expected_due_date)
 
+    def test_due_date_with_priority_6_months(self):
+        """6 månader option should map to 183 days."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="183"
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=183))
+
+    def test_due_date_with_priority_more_than_one_year(self):
+        """mer än 1 år option should map to 365 days."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="365"
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=365))
+
+    def test_manual_due_date_persists_on_write(self):
+        """Manually overriding due_date after auto-fill should survive save."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="42"
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=42))
+
+        manual_due_date = request_date + timedelta(days=30)
+        request.write({"due_date": manual_due_date})
+        request.invalidate_recordset()
+        self.assertEqual(request.due_date, manual_due_date)
+
+    def test_priority_change_recomputes_due_date(self):
+        """Changing priority without touching due_date should refresh the deadline."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="14"
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=14))
+
+        request.write({"priority_expanded": "42"})
+        self.assertEqual(request.due_date, request_date + timedelta(days=42))
+
+    def test_explicit_due_date_wins_over_recompute(self):
+        """Writing priority and due_date in the same vals should persist the user's due_date."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="14"
+        )
+
+        manual_due_date = request_date + timedelta(days=100)
+        request.write(
+            {"priority_expanded": "42", "due_date": manual_due_date}
+        )
+        request.invalidate_recordset()
+        self.assertEqual(request.due_date, manual_due_date)
+
+    def test_explicit_due_date_in_create_persists(self):
+        """Creating with both priority and explicit due_date should keep the explicit value."""
+        request_date = date.today()
+        manual_due_date = request_date + timedelta(days=100)
+        request = create_maintenance_request(
+            self.env,
+            request_date=request_date,
+            priority_expanded="42",
+            due_date=manual_due_date,
+        )
+        request.invalidate_recordset()
+        self.assertEqual(request.due_date, manual_due_date)
+
 
 @tagged("onecore")
 class TestMaintenanceRequestFormState(TransactionCase):
