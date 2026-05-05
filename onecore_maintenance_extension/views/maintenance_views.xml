@@ -108,6 +108,11 @@
                 <!-- Remove the Cancel button -->
                 <xpath expr="//header/button[1]" position="replace" />
 
+                <!-- Hide the kanban_state "blocked" indicator (MIM-1713) -->
+                <xpath expr="//field[@name='kanban_state']" position="attributes">
+                    <attribute name="invisible">1</attribute>
+                </xpath>
+
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
