@@ -15,7 +15,7 @@
  */
 import { registry } from "@web/core/registry";
 import { patch } from "@web/core/utils/patch";
-import * as fieldFormatters from "@web/views/fields/formatters";
+import { DateTimeField } from "@web/views/fields/datetime/datetime_field";
 import {
     formatDate as langFormatDate,
     formatDateTime as langFormatDateTime,
@@ -43,10 +43,13 @@ formatDateTime.extractOptions = ({ options } = {}) => ({
 formatters.add("date", formatDate, { force: true });
 formatters.add("datetime", formatDateTime, { force: true });
 
-// Form-view DateField/DateTimeField read-only display imports
-// formatDate/formatDateTime directly from @web/views/fields/formatters,
-// bypassing the registry above.
-patch(fieldFormatters, {
-    formatDate,
-    formatDateTime,
+// Form-view DateTimeField imports upstream formatDate/formatDateTime directly
+// from @web/views/fields/formatters (bypassing the registry above) and calls
+// them with options.numeric=false by default, which routes through
+// toLocaleDateString and strips the year ("4 maj" instead of "2026-05-04").
+// Force numeric=true so upstream takes its own lang-aware branch.
+patch(DateTimeField.prototype, {
+    getFormattedValue(valueIndex, numeric) {
+        return super.getFormattedValue(valueIndex, numeric ?? true);
+    },
 });
