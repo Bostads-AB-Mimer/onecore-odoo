@@ -14,29 +14,42 @@
  * still honor localization.dateFormat (derived from res.lang).
  */
 import { registry } from "@web/core/registry";
+import { patch } from "@web/core/utils/patch";
+import { DateTimeField } from "@web/views/fields/datetime/datetime_field";
 import {
-    formatDate as langFormatDate,
-    formatDateTime as langFormatDateTime,
+  formatDate as langFormatDate,
+  formatDateTime as langFormatDateTime,
 } from "@web/core/l10n/dates";
 
 const formatters = registry.category("formatters");
 
 function formatDate(value, options = {}) {
-    return langFormatDate(value, options);
+  return langFormatDate(value, options);
 }
 formatDate.extractOptions = () => ({});
 
 function formatDateTime(value, options = {}) {
-    if (options?.showTime === false) {
-        return langFormatDate(value, options);
-    }
-    return langFormatDateTime(value, options);
+  if (options?.showTime === false) {
+    return langFormatDate(value, options);
+  }
+  return langFormatDateTime(value, options);
 }
 formatDateTime.extractOptions = ({ options } = {}) => ({
-    showSeconds: Boolean(options?.show_seconds ?? false),
-    showTime: Boolean(options?.show_time ?? true),
-    showDate: Boolean(options?.show_date ?? true),
+  showSeconds: Boolean(options?.show_seconds ?? false),
+  showTime: Boolean(options?.show_time ?? true),
+  showDate: Boolean(options?.show_date ?? true),
 });
 
 formatters.add("date", formatDate, { force: true });
 formatters.add("datetime", formatDateTime, { force: true });
+
+// Form-view DateTimeField imports upstream formatDate/formatDateTime directly
+// from @web/views/fields/formatters (bypassing the registry above) and calls
+// them with options.numeric=false by default, which routes through
+// toLocaleDateString and strips the year ("4 maj" instead of "2026-05-04").
+// Force numeric=true so upstream takes its own lang-aware branch.
+patch(DateTimeField.prototype, {
+  getFormattedValue(valueIndex, numeric) {
+    return super.getFormattedValue(valueIndex, numeric ?? true);
+  },
+});
