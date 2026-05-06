@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceFacilityOption(models.Model):
     _name = "maintenance.facility.option"
     _description = "Facility Option"
+    _unaccent = True
 
     user_id = fields.Many2one(
         "res.users", "Användare", default=lambda self: self.env.user
@@ -23,6 +24,7 @@ class OnecoreMaintenanceFacilityOption(models.Model):
 class OnecoreMaintenanceFacility(models.Model):
     _name = "maintenance.facility"
     _description = "Facility"
+    _unaccent = True
 
     rental_property_id = fields.Char(string="Hyresobjekt ID", store=True)
     name = fields.Char("Namn", required=True)

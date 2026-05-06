@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
     _name = "maintenance.maintenance.unit.option"
     _description = "Maintenance Unit Option"
+    _unaccent = True
 
     name = fields.Char("name", required=True)
     type = fields.Char("Utrymmestyp")
@@ -24,6 +25,7 @@ class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
 class OnecoreMaintenanceMaintenanceUnit(models.Model):
     _name = "maintenance.maintenance.unit"
     _description = "Maintenance Unit"
+    _unaccent = True
 
     name = fields.Char("name", required=True)
     type = fields.Char("Utrymmestyp")  # TODO vill vi nullable?

@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceStaircaseOption(models.Model):
     _name = "maintenance.staircase.option"
     _description = "Staircase Option"
+    _unaccent = True
 
     # Core identification fields
     staircase_id = fields.Char(string="Trappuppgångs ID", store=True)
@@ -31,6 +32,7 @@ class OnecoreMaintenanceStaircaseOption(models.Model):
 class OnecoreMaintenanceStaircase(models.Model):
     _name = "maintenance.staircase"
     _description = "Staircase"
+    _unaccent = True
 
     # Core identification fields
     staircase_id = fields.Char(string="Trappuppgångs ID", store=True)
