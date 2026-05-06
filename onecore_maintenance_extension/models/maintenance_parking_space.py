@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceParkingSpaceOption(models.Model):
     _name = "maintenance.parking.space.option"
     _description = "Parking Space Option"
+    _unaccent = True
 
     user_id = fields.Many2one(
         "res.users", "Användare", default=lambda self: self.env.user
@@ -23,6 +24,7 @@ class OnecoreMaintenanceParkingSpaceOption(models.Model):
 class OnecoreMaintenanceParkingSpace(models.Model):
     _name = "maintenance.parking.space"
     _description = "Parking Space"
+    _unaccent = True
 
     rental_property_id = fields.Char(string="Hyresobjekt ID", store=True)
     name = fields.Char("Namn", required=True)

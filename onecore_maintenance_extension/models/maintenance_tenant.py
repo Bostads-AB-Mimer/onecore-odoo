@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceTenantOption(models.Model):
     _name = "maintenance.tenant.option"
     _description = "Tenant Option"
+    _unaccent = True
 
     user_id = fields.Many2one(
         "res.users", "Användare", default=lambda self: self.env.user
@@ -22,6 +23,7 @@ class OnecoreMaintenanceTenantOption(models.Model):
 class OnecoreMaintenanceTenant(models.Model):
     _name = "maintenance.tenant"
     _description = "Tenant"
+    _unaccent = True
 
     name = fields.Char("Namn", required=True)
     contact_code = fields.Char("Kundnummer", required=True)

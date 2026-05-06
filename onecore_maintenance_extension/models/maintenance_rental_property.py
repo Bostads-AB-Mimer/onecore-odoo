@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceRentalPropertyOption(models.Model):
     _name = "maintenance.rental.property.option"
     _description = "Rental Property Option"
+    _unaccent = True
 
     user_id = fields.Many2one(
         "res.users", "Användare", default=lambda self: self.env.user

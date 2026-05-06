@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceLeaseOption(models.Model):
     _name = "maintenance.lease.option"
     _description = "Lease Option"
+    _unaccent = True
 
     user_id = fields.Many2one("res.users", "User", default=lambda self: self.env.user)
     name = fields.Char("name", required=True)
@@ -35,6 +36,7 @@ class OnecoreMaintenanceLeaseOption(models.Model):
 class OnecoreMaintenanceLease(models.Model):
     _name = "maintenance.lease"
     _description = "Lease"
+    _unaccent = True
 
     name = fields.Char("name", required=True)
     lease_id = fields.Char(string="Kontrakt", store=True, readonly=True)

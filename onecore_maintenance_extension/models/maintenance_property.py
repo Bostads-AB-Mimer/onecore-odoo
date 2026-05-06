@@ -5,6 +5,7 @@ class OnecoreMaintenancePropertyOption(models.Model):
     _name = "maintenance.property.option"
     _description = "Property"
     _rec_name = "designation"
+    _unaccent = True
 
     code = fields.Char("Kod", required=True)
     designation = fields.Char("Beteckning", required=True)
@@ -16,6 +17,7 @@ class OnecoreMaintenanceProperty(models.Model):
     _name = "maintenance.property"
     _description = "Property"
     _rec_name = "designation"
+    _unaccent = True
 
     code = fields.Char("Kod", required=True)
     designation = fields.Char("Beteckning", required=True)

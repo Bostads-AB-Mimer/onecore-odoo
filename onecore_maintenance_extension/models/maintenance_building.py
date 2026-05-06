@@ -4,6 +4,7 @@ from odoo import models, fields
 class OnecoreMaintenanceBuildingOption(models.Model):
     _name = "maintenance.building.option"
     _description = "building"
+    _unaccent = True
 
     building_id = fields.Char(string="Byggnads ID", store=True)
     name = fields.Char("Namn", required=True)
@@ -23,6 +24,7 @@ class OnecoreMaintenanceBuildingOption(models.Model):
 class OnecoreMaintenanceBuilding(models.Model):
     _name = "maintenance.building"
     _description = "Building"
+    _unaccent = True
 
     building_id = fields.Char(string="Byggnads ID", store=True)
     name = fields.Char("Namn", required=True)
