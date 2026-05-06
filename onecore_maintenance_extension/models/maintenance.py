@@ -56,6 +56,7 @@ class OneCoreMaintenanceRequest(
 ):
     _inherit = "maintenance.request"
     _order = "recently_added_tenant desc, request_date desc"
+    _unaccent = True
 
     # ============================================================================
     # CORE FIELDS
