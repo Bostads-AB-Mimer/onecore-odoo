@@ -278,24 +278,10 @@ class OneCoreMaintenanceRequest(
         "message_ids.notification_ids.notification_type",
     )
     def _compute_new_mimer_notification(self):
+        # TEMP A/B: short-circuited to measure how much of the kanban
+        # web_read_group cost comes from the original per-record search.
         for record in self:
-            message_ids = record.message_ids.ids
-
-            unread_mimer_notifications = self.env["mail.notification"].search(
-                [
-                    ("mail_message_id", "in", message_ids),
-                    ("res_partner_id", "=", self.env.user.partner_id.id),
-                    ("is_read", "!=", True),
-                    ("notification_type", "=", "inbox"),
-                    (
-                        "mail_message_id.author_id.user_ids.login",
-                        "=",
-                        "odoo@mimer.nu",
-                    ),
-                ]
-            )
-
-            record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
+            record.new_mimer_notification = False
 
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
