@@ -2,13 +2,17 @@
 <odoo>
     <data noupdate="1">
         <!-- Maintenance Request subtype for tenant messages -->
+        <!-- Do NOT set relation_field here. Odoo 19 reads it unconditionally
+             (Odoo 17 silently ignored it for same-model subtypes via an elif),
+             which causes _get_auto_subscription_subtypes to treat the user_id
+             value as a maintenance.request id and copy that ticket's followers
+             onto every new ticket. See MIM-1768. -->
         <record id="mt_from_tenant" model="mail.message.subtype">
             <field name="name">Meddelande från hyresgäst</field>
             <field name="res_model">maintenance.request</field>
             <field name="default" eval="True" />
             <field name="hidden" eval="False" />
             <field name="description">Meddelande postat av hyresgäst</field>
-            <field name="relation_field">user_id</field>
         </record>
     </data>
 </odoo>
