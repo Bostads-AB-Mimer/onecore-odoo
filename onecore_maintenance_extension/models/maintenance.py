@@ -278,24 +278,28 @@ class OneCoreMaintenanceRequest(
         "message_ids.notification_ids.notification_type",
     )
     def _compute_new_mimer_notification(self):
+        # Batched: one mail.notification search for the whole recordset.
+        # The previous per-record loop fired ~2 queries per card and
+        # dominated the kanban web_read_group cost.
+        if not self:
+            return
+        notifications = self.env["mail.notification"].search(
+            [
+                ("mail_message_id.model", "=", "maintenance.request"),
+                ("mail_message_id.res_id", "in", self.ids),
+                ("res_partner_id", "=", self.env.user.partner_id.id),
+                ("is_read", "!=", True),
+                ("notification_type", "=", "inbox"),
+                (
+                    "mail_message_id.author_id.user_ids.login",
+                    "=",
+                    "odoo@mimer.nu",
+                ),
+            ]
+        )
+        flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
         for record in self:
-            message_ids = record.message_ids.ids
-
-            unread_mimer_notifications = self.env["mail.notification"].search(
-                [
-                    ("mail_message_id", "in", message_ids),
-                    ("res_partner_id", "=", self.env.user.partner_id.id),
-                    ("is_read", "!=", True),
-                    ("notification_type", "=", "inbox"),
-                    (
-                        "mail_message_id.author_id.user_ids.login",
-                        "=",
-                        "odoo@mimer.nu",
-                    ),
-                ]
-            )
-
-            record.new_mimer_notification = len(unread_mimer_notifications.ids) > 0
+            record.new_mimer_notification = record.id in flagged_ids
 
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
