@@ -1,5 +1,6 @@
 /** @odoo-module **/
 import { Component, useState, onMounted } from "@odoo/owl";
+import { _t } from "@web/core/l10n/translation";
 import { View } from "@web/views/view";
 import { Field } from "@web/views/fields/field";
 import { isNull } from "@web/views/utils";
