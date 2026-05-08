@@ -1,7 +1,7 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import UserError
-from datetime import date
+from datetime import date, datetime
 
 from ...utils.test_utils import create_internal_user, create_maintenance_request
 
@@ -293,6 +293,36 @@ class TestFieldChangeTracker(TransactionCase):
         )
         self.assertIn("2023-01-15", change)
         self.assertIn("invalid-date", change)
+
+    def test_datetime_field_change_uses_user_timezone(self):
+        """Datetime values must format in the user's local TZ, not UTC.
+
+        Regression: schedule_date showed UTC date in chatter while the form
+        showed the local date — a 1-day discrepancy near midnight CEST/CET
+        that confused tenants asking when contractors were planned to visit.
+        """
+        request = create_maintenance_request(self.env)
+        field_obj = request._fields["schedule_date"]
+
+        # CEST is UTC+2: 22:00 UTC = 00:00 next-day local
+        self.env.user.tz = "Europe/Stockholm"
+
+        # Setting from empty: 2026-05-06 22:00 UTC -> 2026-05-07 local
+        change = self.change_tracker._format_field_change(
+            field_obj, False, datetime(2026, 5, 6, 22, 0, 0), "Planerat utförandedatum"
+        )
+        self.assertIn("2026-05-07", change)
+        self.assertNotIn("2026-05-06", change)
+
+        # Both old and new converted: 12:00 UTC -> same-day local; 22:00 UTC -> next-day local
+        change = self.change_tracker._format_field_change(
+            field_obj,
+            datetime(2026, 5, 6, 12, 0, 0),
+            datetime(2026, 5, 7, 22, 0, 0),
+            "Planerat utförandedatum",
+        )
+        self.assertIn("2026-05-06", change)
+        self.assertIn("2026-05-08", change)
 
     def test_change_notification_posting(self):
         """Test that change notifications are properly posted as messages"""
