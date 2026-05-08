@@ -1,5 +1,7 @@
 """Service for managing maintenance request workflow, stages and field changes."""
 
+from datetime import datetime
+
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
@@ -160,7 +162,7 @@ class FieldChangeTracker:
         elif isinstance(field_obj, fields.Boolean):
             return self._format_boolean_change(old_value, new_value, field_label)
         elif isinstance(field_obj, (fields.Date, fields.Datetime)):
-            return self._format_date_change(old_value, new_value, field_label)
+            return self._format_date_change(field_obj, old_value, new_value, field_label)
         else:
             return self._format_generic_change(old_value, new_value, field_label)
 
@@ -204,22 +206,33 @@ class FieldChangeTracker:
         new_display = "Ja" if new_value else "Nej"
         return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
 
-    def _format_date_change(self, old_value, new_value, field_label):
-        """Format Date/Datetime field change."""
-        old_display = old_value.strftime("%Y-%m-%d") if old_value else "Inte satt"
+    def _format_date_change(self, field_obj, old_value, new_value, field_label):
+        """Format Date/Datetime field change as YYYY-MM-DD in the user's timezone."""
+        is_datetime = isinstance(field_obj, fields.Datetime)
+        old_display = self._format_date_value(old_value, is_datetime)
+        new_display = self._format_date_value(new_value, is_datetime)
+        return (
+            f"<strong>{field_label}:</strong> "
+            f"<span style='color: #999; text-decoration: line-through;'>{old_display}</span> "
+            f"→ {new_display}"
+        )
 
-        if isinstance(new_value, str):
+    def _format_date_value(self, value, is_datetime):
+        if not value or value == "False":
+            return "Inte satt"
+        if isinstance(value, str):
             try:
-                new_date = (
-                    fields.Date.from_string(new_value) if new_value != "False" else None
+                value = (
+                    fields.Datetime.from_string(value)
+                    if is_datetime
+                    else fields.Date.from_string(value)
                 )
-                new_display = new_date.strftime("%Y-%m-%d") if new_date else "Inte satt"
-            except:
-                new_display = str(new_value) if new_value else "Inte satt"
-        else:
-            new_display = new_value.strftime("%Y-%m-%d") if new_value else "Inte satt"
-
-        return f"<strong>{field_label}:</strong> <span style='color: #999; text-decoration: line-through;'>{old_display}</span> → {new_display}"
+            except (ValueError, TypeError):
+                return str(value)
+        if is_datetime and isinstance(value, datetime):
+            # UTC -> user's timezone, so the logged date matches the form field
+            value = fields.Datetime.context_timestamp(self.env.user, value)
+        return value.strftime("%Y-%m-%d")
 
     def _format_generic_change(self, old_value, new_value, field_label):
         """Format generic field change."""
