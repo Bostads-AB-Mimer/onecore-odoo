@@ -377,6 +377,14 @@ class OneCoreMaintenanceRequest(
         # the key before it reaches message_post (see the mail.message field).
         return super()._get_allowed_message_params() | {"informs_opposite_party"}
 
+    def _get_message_create_valid_field_names(self):
+        # message_post() -> _message_create() validates the message values
+        # against this allow-list; our custom field must be added or posting a
+        # note with informs_opposite_party raises ValueError.
+        return super()._get_message_create_valid_field_names() | {
+            "informs_opposite_party"
+        }
+
     @api.model
     def _dialog_unread_message_ids(self, messages):
         """Return the ids of ``messages`` that are unread dialog notes for the
