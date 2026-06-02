@@ -108,6 +108,12 @@
                 <!-- Remove the Cancel button -->
                 <xpath expr="//header/button[1]" position="replace" />
 
+                <!-- Expose dialog-unread flags to the chatter button (see tenant_chatter.xml) -->
+                <xpath expr="//header" position="inside">
+                    <field name="has_unread_supplier_dialog" invisible="1" />
+                    <field name="has_unread_internal_dialog" invisible="1" />
+                </xpath>
+
                 <!-- Add a div before the first group tag -->
                 <xpath expr="//group[1]" position="before">
                     <div class="d-flex flex-nowrap align-items-center mb-3 border rounded"
@@ -784,6 +790,8 @@
                     <field name="new_mimer_notification" />
                     <field name="recently_added_tenant" />
                     <field name="special_attention" />
+                    <field name="has_unread_supplier_dialog" />
+                    <field name="has_unread_internal_dialog" />
                     <field name="has_loan_product" />
                     <field name="loan_product_details" />
                 </xpath>

@@ -143,6 +143,24 @@ class OneCoreMaintenanceRequest(
         compute="_compute_new_mimer_notification",
         store=False,
     )
+    supplier_dialog_ack_at = fields.Datetime(
+        string="Mimer har bekräftat att de läst meddelandet",
+        help="Senaste tidpunkt en Mimer-handläggare kvitterade entreprenörens noteringar.",
+    )
+    internal_dialog_ack_at = fields.Datetime(
+        string="Leverantören bekräftar att de läst meddelandet",
+        help="Senaste tidpunkt en entreprenör kvitterade Mimers noteringar.",
+    )
+    has_unread_supplier_dialog = fields.Boolean(
+        string="Olästa meddelanden från leverantör",
+        compute="_compute_dialog_indicators",
+        store=False,
+    )
+    has_unread_internal_dialog = fields.Boolean(
+        string="Olästa meddelanden från Mimer",
+        compute="_compute_dialog_indicators",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -300,6 +318,102 @@ class OneCoreMaintenanceRequest(
         flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
         for record in self:
             record.new_mimer_notification = record.id in flagged_ids
+
+    @api.depends(
+        "message_ids.date",
+        "message_ids.author_id",
+        "message_ids.message_type",
+        "message_ids.subtype_id",
+        "supplier_dialog_ack_at",
+        "internal_dialog_ack_at",
+    )
+    def _compute_dialog_indicators(self):
+        # Bidirectional orange-chip for log-note dialog between internal Mimer
+        # handlers and external contractors. Only log notes (subtype mt_note)
+        # by human authors count — tracking events and auto-notifications
+        # never trigger the indicator.
+        for record in self:
+            record.has_unread_supplier_dialog = False
+            record.has_unread_internal_dialog = False
+
+        if not self:
+            return
+
+        external_group = self.env.ref(
+            "onecore_maintenance_extension.group_external_contractor",
+            raise_if_not_found=False,
+        )
+        note_subtype = self.env.ref("mail.mt_note", raise_if_not_found=False)
+        if not external_group or not note_subtype:
+            return
+
+        is_external = self.env.user.has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        )
+
+        messages = self.env["mail.message"].search(
+            [
+                ("model", "=", "maintenance.request"),
+                ("res_id", "in", self.ids),
+                ("message_type", "=", "comment"),
+                ("subtype_id", "=", note_subtype.id),
+                ("author_id", "!=", False),
+            ]
+        )
+        if not messages:
+            return
+
+        author_partner_ids = list(set(messages.mapped("author_id").ids))
+        external_users = self.env["res.users"].search(
+            [
+                ("partner_id", "in", author_partner_ids),
+                ("all_group_ids", "in", external_group.id),
+            ]
+        )
+        external_partner_ids = set(external_users.mapped("partner_id").ids)
+
+        if is_external:
+            ack_field = "internal_dialog_ack_at"
+            indicator_field = "has_unread_internal_dialog"
+        else:
+            ack_field = "supplier_dialog_ack_at"
+            indicator_field = "has_unread_supplier_dialog"
+
+        messages_by_request = {}
+        for msg in messages:
+            messages_by_request.setdefault(msg.res_id, []).append(msg)
+
+        for record in self:
+            ack_at = record[ack_field]
+            for msg in messages_by_request.get(record.id, ()):
+                author_is_external = msg.author_id.id in external_partner_ids
+                # Only count messages from the opposite party.
+                if is_external == author_is_external:
+                    continue
+                if ack_at and msg.date and msg.date <= ack_at:
+                    continue
+                record[indicator_field] = True
+                break
+
+    def action_acknowledge_dialog(self):
+        """Mark the log-note dialog as read for the current user's side."""
+        self.ensure_one()
+        now = fields.Datetime.now()
+        is_external = self.env.user.has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        )
+        if is_external:
+            self.internal_dialog_ack_at = now
+        else:
+            self.supplier_dialog_ack_at = now
+        # Non-stored computed fields don't invalidate automatically on the
+        # depended stored field's write — force a recompute so the button's
+        # invisible attribute re-evaluates and the badge disappears.
+        self.invalidate_recordset(
+            ["has_unread_supplier_dialog", "has_unread_internal_dialog"]
+        )
+        self.env["mail.message"].invalidate_model(["is_dialog_unread_for_user"])
+        return True
 
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
