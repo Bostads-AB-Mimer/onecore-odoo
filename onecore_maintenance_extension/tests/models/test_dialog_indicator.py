@@ -20,11 +20,12 @@ class TestDialogIndicator(TransactionCase):
         self.external_user = create_external_contractor_user(self.env)
         self.request = create_maintenance_request(self.env)
 
-    def _post_log_note(self, user, body="hej"):
+    def _post_log_note(self, user, body="hej", inform=True):
         return self.request.with_user(user).message_post(
             body=body,
             message_type="comment",
             subtype_xmlid="mail.mt_note",
+            informs_opposite_party=inform,
         )
 
     def _refresh(self, user):
@@ -58,6 +59,23 @@ class TestDialogIndicator(TransactionCase):
         self._post_log_note(self.external_user)
         record = self._refresh(self.external_user)
         self.assertFalse(record.has_unread_internal_dialog)
+
+    def test_unflagged_note_does_not_trigger_chip(self):
+        # A log note posted without "inform the opposite party" must never
+        # surface the indicator, even to the opposite side.
+        self._post_log_note(self.external_user, inform=False)
+        record = self._refresh(self.internal_user)
+        self.assertFalse(record.has_unread_supplier_dialog)
+        self.assertFalse(record.has_unread_internal_dialog)
+
+    def test_inform_flag_is_an_allowed_message_param(self):
+        # The chatter composer sends informs_opposite_party through
+        # /mail/message/post, which only forwards keys in
+        # _get_allowed_message_params(). Lock that wiring here.
+        self.assertIn(
+            "informs_opposite_party",
+            self.request._get_allowed_message_params(),
+        )
 
     def test_acknowledge_clears_supplier_dialog_for_internal(self):
         self._post_log_note(self.external_user)
@@ -139,11 +157,12 @@ class TestMailMessageDialogUnread(TransactionCase):
         self.external_user = create_external_contractor_user(self.env)
         self.request = create_maintenance_request(self.env)
 
-    def _post_log_note(self, user, body="hej"):
+    def _post_log_note(self, user, body="hej", inform=True):
         return self.request.with_user(user).message_post(
             body=body,
             message_type="comment",
             subtype_xmlid="mail.mt_note",
+            informs_opposite_party=inform,
         )
 
     def test_internal_user_flags_supplier_log_note(self):
@@ -158,6 +177,11 @@ class TestMailMessageDialogUnread(TransactionCase):
 
     def test_own_log_note_is_not_flagged(self):
         msg = self._post_log_note(self.internal_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_side)
+
+    def test_unflagged_note_is_not_flagged(self):
+        msg = self._post_log_note(self.external_user, inform=False)
         msg.invalidate_recordset(["is_dialog_unread_for_side"])
         self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_side)
 

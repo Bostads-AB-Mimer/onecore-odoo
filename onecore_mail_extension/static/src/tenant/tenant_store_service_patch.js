@@ -17,6 +17,9 @@ patch(Store.prototype, {
             }
             params.post_data.message_type = messageType;
         }
+        if (postData.informOpposite) {
+            params.post_data.informs_opposite_party = true;
+        }
         return params;
     },
 });
