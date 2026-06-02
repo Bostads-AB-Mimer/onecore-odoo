@@ -17,6 +17,8 @@ patch(Composer.prototype, {
         this.tenantState = useState({
             sendSMS: false,
             sendEmail: false,
+            informOpposite: false,
+            userIsExternalContractor: false,
             tenantHasEmail: false,
             tenantHasPhoneNumber: false,
             isHiddenFromMyPages: false,
@@ -49,6 +51,15 @@ patch(Composer.prototype, {
             } catch (error) {
                 console.error("Error fetching tenant data:", error);
             }
+            try {
+                this.tenantState.userIsExternalContractor = await this.orm.call(
+                    "maintenance.request",
+                    "is_user_external_contractor",
+                    []
+                );
+            } catch (error) {
+                console.error("Error fetching external contractor state:", error);
+            }
         });
     },
 
@@ -57,6 +68,26 @@ patch(Composer.prototype, {
     },
     onEMailCheckboxChange(checked) {
         this.tenantState.sendEmail = checked;
+    },
+    onInformOppositeChange(checked) {
+        this.tenantState.informOpposite = checked;
+    },
+
+    // "Inform the opposite party" only applies to the internal Mimer <-> external
+    // contractor log-note dialog, so the checkbox is shown in Log note mode only.
+    get showInformOpposite() {
+        return (
+            this.props.type === "note" &&
+            this.thread?.model === "maintenance.request"
+        );
+    },
+
+    // Name the actual recipient side: a contractor informs Mimer, a Mimer
+    // handler informs the contractor.
+    get informOppositeLabel() {
+        return this.tenantState.userIsExternalContractor
+            ? "Informera Mimer"
+            : "Informera leverantör";
     },
 
     get placeholder() {
@@ -86,6 +117,7 @@ patch(Composer.prototype, {
         if (this.thread?.model === "maintenance.request") {
             data.sendSMS = this.tenantState.sendSMS;
             data.sendEmail = this.tenantState.sendEmail;
+            data.informOpposite = this.tenantState.informOpposite;
         }
         return data;
     },

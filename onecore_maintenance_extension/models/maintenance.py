@@ -324,6 +324,7 @@ class OneCoreMaintenanceRequest(
         "message_ids.author_id",
         "message_ids.message_type",
         "message_ids.subtype_id",
+        "message_ids.informs_opposite_party",
         "supplier_dialog_ack_at",
         "internal_dialog_ack_at",
     )
@@ -349,6 +350,7 @@ class OneCoreMaintenanceRequest(
                 ("message_type", "=", "comment"),
                 ("subtype_id", "=", note_subtype.id),
                 ("author_id", "!=", False),
+                ("informs_opposite_party", "=", True),
             ]
         )
         unread_ids = self._dialog_unread_message_ids(messages)
@@ -369,6 +371,12 @@ class OneCoreMaintenanceRequest(
             if record.id in unread_res_ids:
                 record[indicator_field] = True
 
+    def _get_allowed_message_params(self):
+        # Let the chatter composer flag a log note as "inform the opposite
+        # party" through /mail/message/post; without this the controller drops
+        # the key before it reaches message_post (see the mail.message field).
+        return super()._get_allowed_message_params() | {"informs_opposite_party"}
+
     @api.model
     def _dialog_unread_message_ids(self, messages):
         """Return the ids of ``messages`` that are unread dialog notes for the
@@ -376,21 +384,24 @@ class OneCoreMaintenanceRequest(
         contractors).
 
         A message counts when it is a log note (``mail.mt_note`` comment) on a
-        maintenance.request authored by the *opposite* side and posted after
-        that side last acknowledged the dialog. Acknowledgement is a single
-        per-side timestamp on the request, so one staffer marking it read
-        clears it for everyone on their side. The current user only selects
+        maintenance.request that its author flagged with
+        ``informs_opposite_party``, authored by the *opposite* side, and posted
+        after that side last acknowledged the dialog. Acknowledgement is a
+        single per-side timestamp on the request, so one staffer marking it
+        read clears it for everyone on their side. The current user only selects
         which side's view to compute; this is not per-user read state. Shared
         by ``_compute_dialog_indicators`` and
         ``mail.message._compute_is_dialog_unread_for_side`` so the rules live
         in exactly one place.
         """
-        # Cheap structural pre-filter before any ref lookups.
+        # Cheap structural pre-filter before any ref lookups. Only notes the
+        # author flagged "inform the opposite party" count.
         candidates = messages.filtered(
             lambda m: m.model == "maintenance.request"
             and m.message_type == "comment"
             and m.author_id
             and m.res_id
+            and m.informs_opposite_party
         )
         if not candidates:
             return set()

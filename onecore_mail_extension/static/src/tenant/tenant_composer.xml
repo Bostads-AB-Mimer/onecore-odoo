@@ -28,6 +28,14 @@
                     </CheckBox>
                 </div>
             </t>
+
+            <t t-if="showInformOpposite">
+                <div class="d-flex mb-3 mt-3">
+                    <CheckBox id="inform_opposite" value="tenantState.informOpposite" onChange.bind="onInformOppositeChange">
+                        <t t-out="informOppositeLabel"/>
+                    </CheckBox>
+                </div>
+            </t>
         </xpath>
 
     </t>

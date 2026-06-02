@@ -10,13 +10,27 @@ _logger = logging.getLogger(__name__)
 class OneCoreMailMessage(models.Model):
     _inherit = "mail.message"
 
+    informs_opposite_party = fields.Boolean(
+        string="Informera motparten",
+        default=False,
+        help="Loggnoteringar som markeras här visar dialogindikatorn (orange) "
+        "för motparten — Mimer ⇄ extern entreprenör.",
+    )
     is_dialog_unread_for_side = fields.Boolean(
         string="Okvitterad dialognotering",
         compute="_compute_is_dialog_unread_for_side",
         store=False,
     )
 
-    @api.depends("author_id", "date", "message_type", "subtype_id", "model", "res_id")
+    @api.depends(
+        "author_id",
+        "date",
+        "message_type",
+        "subtype_id",
+        "model",
+        "res_id",
+        "informs_opposite_party",
+    )
     def _compute_is_dialog_unread_for_side(self):
         # Highlights log notes from the opposite party (internal Mimer vs
         # external contractor) on maintenance.request until acknowledged via
