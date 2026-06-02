@@ -1,4 +1,7 @@
 """Tests for the bidirectional log-note dialog indicator (orange chip)."""
+from datetime import timedelta
+
+from odoo.addons.mail.tools.discuss import Store
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
@@ -83,16 +86,24 @@ class TestDialogIndicator(TransactionCase):
             self._refresh(self.internal_user).has_unread_supplier_dialog
         )
 
-        self._post_log_note(self.external_user)
+        new_note = self._post_log_note(self.external_user)
+        # fields.Datetime.now() has second resolution, so a note posted in the
+        # same second as the acknowledgement would be treated as read. Stamp it
+        # one second later so the test does not depend on execution speed.
+        new_note.sudo().write(
+            {"date": self.request.supplier_dialog_ack_at + timedelta(seconds=1)}
+        )
         record = self._refresh(self.internal_user)
         self.assertTrue(record.has_unread_supplier_dialog)
 
     def test_tracking_notification_does_not_trigger_chip(self):
-        # Status / field tracking produces message_type='notification', not 'comment'.
-        # Simulate by writing a tracked field as the external user.
+        # Status / field tracking produces message_type='notification', not
+        # 'comment', so it must never trigger the chip. Ensure a stage exists so
+        # the tracked write actually happens and the assertion is meaningful.
         stage = self.env["maintenance.stage"].search([], limit=1)
-        if stage:
-            self.request.with_user(self.external_user).write({"stage_id": stage.id})
+        if not stage:
+            stage = self.env["maintenance.stage"].create({"name": "Test stage"})
+        self.request.with_user(self.external_user).write({"stage_id": stage.id})
         record = self._refresh(self.internal_user)
         self.assertFalse(record.has_unread_supplier_dialog)
 
@@ -137,26 +148,26 @@ class TestMailMessageDialogUnread(TransactionCase):
 
     def test_internal_user_flags_supplier_log_note(self):
         msg = self._post_log_note(self.external_user)
-        msg.invalidate_recordset(["is_dialog_unread_for_user"])
-        self.assertTrue(msg.with_user(self.internal_user).is_dialog_unread_for_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertTrue(msg.with_user(self.internal_user).is_dialog_unread_for_side)
 
     def test_external_user_flags_internal_log_note(self):
         msg = self._post_log_note(self.internal_user)
-        msg.invalidate_recordset(["is_dialog_unread_for_user"])
-        self.assertTrue(msg.with_user(self.external_user).is_dialog_unread_for_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertTrue(msg.with_user(self.external_user).is_dialog_unread_for_side)
 
     def test_own_log_note_is_not_flagged(self):
         msg = self._post_log_note(self.internal_user)
-        msg.invalidate_recordset(["is_dialog_unread_for_user"])
-        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_side)
 
     def test_acknowledge_clears_flag(self):
         msg = self._post_log_note(self.external_user)
-        msg.invalidate_recordset(["is_dialog_unread_for_user"])
-        self.assertTrue(msg.with_user(self.internal_user).is_dialog_unread_for_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertTrue(msg.with_user(self.internal_user).is_dialog_unread_for_side)
 
         self.request.with_user(self.internal_user).action_acknowledge_dialog()
-        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_user)
+        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_side)
 
     def test_send_message_subtype_is_not_flagged(self):
         msg = self.request.with_user(self.external_user).message_post(
@@ -164,5 +175,20 @@ class TestMailMessageDialogUnread(TransactionCase):
             message_type="comment",
             subtype_xmlid="mail.mt_comment",
         )
-        msg.invalidate_recordset(["is_dialog_unread_for_user"])
-        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        self.assertFalse(msg.with_user(self.internal_user).is_dialog_unread_for_side)
+
+    def test_store_exposes_dialog_unread_flag(self):
+        # Locks the server -> client wiring: _to_store_defaults must serialize
+        # is_dialog_unread_for_side so the OWL Message component can toggle the
+        # orange-background CSS class. The compute is covered above; this guards
+        # the serialization hook, which no other test exercises.
+        msg = self._post_log_note(self.external_user)
+        msg.invalidate_recordset(["is_dialog_unread_for_side"])
+        result = Store().add(msg.with_user(self.internal_user)).get_result()
+        serialized = [
+            m for m in result.get("mail.message", []) if m.get("id") == msg.id
+        ]
+        self.assertTrue(serialized, "the message must be present in the store payload")
+        self.assertIn("is_dialog_unread_for_side", serialized[0])
+        self.assertTrue(serialized[0]["is_dialog_unread_for_side"])

@@ -29,7 +29,7 @@ patch(Message.prototype, {
     return {
       ...super.attClass,
       collapsed: this.isCollapsed,
-      "mimer-dialog-unread": this.message.is_dialog_unread_for_user,
+      "mimer-dialog-unread": this.message.is_dialog_unread_for_side,
     };
   },
   isSendFailure() {
