@@ -15,6 +15,11 @@
     }
 }
 
+.o-mail-Message.mimer-dialog-unread {
+    background-color: #FFF3E0;
+    border-color: #FFB74D;
+}
+
 .o-mail-Message + .o-mail-Message {
     margin-top: 8px;
 }
