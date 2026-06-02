@@ -10,72 +10,36 @@ _logger = logging.getLogger(__name__)
 class OneCoreMailMessage(models.Model):
     _inherit = "mail.message"
 
-    is_dialog_unread_for_user = fields.Boolean(
-        string="Olästa i dialogen för aktuell användare",
-        compute="_compute_is_dialog_unread_for_user",
+    is_dialog_unread_for_side = fields.Boolean(
+        string="Okvitterad dialognotering",
+        compute="_compute_is_dialog_unread_for_side",
         store=False,
     )
 
     @api.depends("author_id", "date", "message_type", "subtype_id", "model", "res_id")
-    def _compute_is_dialog_unread_for_user(self):
+    def _compute_is_dialog_unread_for_side(self):
         # Highlights log notes from the opposite party (internal Mimer vs
         # external contractor) on maintenance.request until acknowledged via
-        # action_acknowledge_dialog on the parent record.
+        # action_acknowledge_dialog on the parent record. The classification is
+        # owned by maintenance.request._dialog_unread_message_ids so the rules
+        # are not duplicated here.
         for message in self:
-            message.is_dialog_unread_for_user = False
+            message.is_dialog_unread_for_side = False
 
-        external_group = self.env.ref(
-            "onecore_maintenance_extension.group_external_contractor",
-            raise_if_not_found=False,
-        )
-        note_subtype = self.env.ref("mail.mt_note", raise_if_not_found=False)
-        if not external_group or not note_subtype:
+        # onecore_mail_extension does not declare a dependency on the
+        # maintenance module, so guard against it being absent.
+        if "maintenance.request" not in self.env:
             return
 
-        candidates = self.filtered(
-            lambda m: m.model == "maintenance.request"
-            and m.message_type == "comment"
-            and m.subtype_id.id == note_subtype.id
-            and m.author_id
-            and m.res_id
-        )
-        if not candidates:
-            return
-
-        is_external_user = self.env.user.has_group(
-            "onecore_maintenance_extension.group_external_contractor"
-        )
-        ack_field = (
-            "internal_dialog_ack_at" if is_external_user else "supplier_dialog_ack_at"
-        )
-
-        request_ids = list(set(candidates.mapped("res_id")))
-        requests = self.env["maintenance.request"].browse(request_ids)
-        ack_by_request = {req.id: req[ack_field] for req in requests}
-
-        author_ids = list(set(candidates.mapped("author_id").ids))
-        external_users = self.env["res.users"].search(
-            [
-                ("partner_id", "in", author_ids),
-                ("all_group_ids", "in", external_group.id),
-            ]
-        )
-        external_partner_ids = set(external_users.mapped("partner_id").ids)
-
-        for message in candidates:
-            author_is_external = message.author_id.id in external_partner_ids
-            # Only highlight messages from the opposite party.
-            if is_external_user == author_is_external:
-                continue
-            ack_at = ack_by_request.get(message.res_id)
-            if ack_at and message.date and message.date <= ack_at:
-                continue
-            message.is_dialog_unread_for_user = True
+        unread_ids = self.env["maintenance.request"]._dialog_unread_message_ids(self)
+        for message in self:
+            if message.id in unread_ids:
+                message.is_dialog_unread_for_side = True
 
     def _to_store_defaults(self, target):
-        # Exposes is_dialog_unread_for_user to the OWL chatter so the Message
+        # Exposes is_dialog_unread_for_side to the OWL chatter so the Message
         # component can toggle the orange-background CSS class.
-        return super()._to_store_defaults(target) + ["is_dialog_unread_for_user"]
+        return super()._to_store_defaults(target) + ["is_dialog_unread_for_side"]
 
     message_type = fields.Selection(
         selection_add=[

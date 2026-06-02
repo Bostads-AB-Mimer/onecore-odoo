@@ -67,19 +67,12 @@ patch(Chatter.prototype, {
       "action_acknowledge_dialog",
       [[record.resId]],
     );
-    // Reload the form record so has_unread_* refreshes -> button hides.
+    // Reload the form record so has_unread_* refreshes -> the button hides.
     await record.load();
-    // Refresh the chatter thread so is_dialog_unread_for_user re-evaluates
-    // -> orange background on messages clears. The exact method name varies
-    // across Odoo 19 minor releases — try the known candidates defensively.
-    const thread = this.state?.thread;
-    if (thread) {
-      try {
-        await thread.fetchNewMessages?.();
-      } catch (_) {}
-      try {
-        await thread.fetchMessages?.();
-      } catch (_) {}
-    }
+    // Re-fetch the chatter messages so is_dialog_unread_for_side is
+    // re-serialized and the orange background clears. Acknowledging only
+    // changes a computed flag on existing messages, so fetchNewMessages()
+    // (which pulls messages newer than the latest) would not refresh them.
+    await this.state?.thread?.fetchMessages();
   },
 });

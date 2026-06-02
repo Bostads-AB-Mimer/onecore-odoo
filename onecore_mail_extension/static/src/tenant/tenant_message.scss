@@ -15,9 +15,14 @@
     }
 }
 
+// Mimer "unread dialog" highlight (Material orange 50 / 300). Mirrors the
+// .mimer-badge-orange chip in onecore_maintenance_extension.
+$mimer-dialog-unread-bg: #FFF3E0;
+$mimer-dialog-unread-border: #FFB74D;
+
 .o-mail-Message.mimer-dialog-unread {
-    background-color: #FFF3E0;
-    border-color: #FFB74D;
+    background-color: $mimer-dialog-unread-bg;
+    border-color: $mimer-dialog-unread-border;
 }
 
 .o-mail-Message + .o-mail-Message {

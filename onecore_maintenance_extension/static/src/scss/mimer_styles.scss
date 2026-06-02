@@ -14,10 +14,15 @@
     border-radius: 50rem;
 }
 
+// Mimer attention-orange (Material orange 50 / 300 / 900).
+$mimer-orange-bg: #FFF3E0;
+$mimer-orange-border: #FFB74D;
+$mimer-orange-text: #E65100;
+
 .mimer-badge-orange {
-    background: #FFF3E0;
-    border-color: #FFB74D;
-    color: #E65100;
+    background: $mimer-orange-bg;
+    border-color: $mimer-orange-border;
+    color: $mimer-orange-text;
 }
 
 /* Component wizard - component list table styling */

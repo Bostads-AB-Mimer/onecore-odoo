@@ -328,10 +328,9 @@ class OneCoreMaintenanceRequest(
         "internal_dialog_ack_at",
     )
     def _compute_dialog_indicators(self):
-        # Bidirectional orange-chip for log-note dialog between internal Mimer
-        # handlers and external contractors. Only log notes (subtype mt_note)
-        # by human authors count — tracking events and auto-notifications
-        # never trigger the indicator.
+        # Bidirectional orange-chip for the log-note dialog between internal
+        # Mimer handlers and external contractors. The classification rules
+        # live in _dialog_unread_message_ids (shared with mail.message).
         for record in self:
             record.has_unread_supplier_dialog = False
             record.has_unread_internal_dialog = False
@@ -339,17 +338,9 @@ class OneCoreMaintenanceRequest(
         if not self:
             return
 
-        external_group = self.env.ref(
-            "onecore_maintenance_extension.group_external_contractor",
-            raise_if_not_found=False,
-        )
         note_subtype = self.env.ref("mail.mt_note", raise_if_not_found=False)
-        if not external_group or not note_subtype:
+        if not note_subtype:
             return
-
-        is_external = self.env.user.has_group(
-            "onecore_maintenance_extension.group_external_contractor"
-        )
 
         messages = self.env["mail.message"].search(
             [
@@ -360,59 +351,120 @@ class OneCoreMaintenanceRequest(
                 ("author_id", "!=", False),
             ]
         )
-        if not messages:
+        unread_ids = self._dialog_unread_message_ids(messages)
+        if not unread_ids:
             return
 
-        author_partner_ids = list(set(messages.mapped("author_id").ids))
-        external_users = self.env["res.users"].search(
-            [
-                ("partner_id", "in", author_partner_ids),
-                ("all_group_ids", "in", external_group.id),
-            ]
+        # Pick the indicator for the viewing side: an internal handler only
+        # ever sees supplier notes, an external contractor only ever sees
+        # Mimer notes.
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        indicator_field = (
+            "has_unread_internal_dialog" if is_external else "has_unread_supplier_dialog"
+        )
+        unread_res_ids = set(
+            messages.filtered(lambda m: m.id in unread_ids).mapped("res_id")
+        )
+        for record in self:
+            if record.id in unread_res_ids:
+                record[indicator_field] = True
+
+    @api.model
+    def _dialog_unread_message_ids(self, messages):
+        """Return the ids of ``messages`` that are unread dialog notes for the
+        side the current user belongs to (Mimer handlers vs external
+        contractors).
+
+        A message counts when it is a log note (``mail.mt_note`` comment) on a
+        maintenance.request authored by the *opposite* side and posted after
+        that side last acknowledged the dialog. Acknowledgement is a single
+        per-side timestamp on the request, so one staffer marking it read
+        clears it for everyone on their side. The current user only selects
+        which side's view to compute; this is not per-user read state. Shared
+        by ``_compute_dialog_indicators`` and
+        ``mail.message._compute_is_dialog_unread_for_side`` so the rules live
+        in exactly one place.
+        """
+        # Cheap structural pre-filter before any ref lookups.
+        candidates = messages.filtered(
+            lambda m: m.model == "maintenance.request"
+            and m.message_type == "comment"
+            and m.author_id
+            and m.res_id
+        )
+        if not candidates:
+            return set()
+
+        external_group = self.env.ref(
+            "onecore_maintenance_extension.group_external_contractor",
+            raise_if_not_found=False,
+        )
+        note_subtype = self.env.ref("mail.mt_note", raise_if_not_found=False)
+        if not external_group or not note_subtype:
+            return set()
+
+        candidates = candidates.filtered(lambda m: m.subtype_id.id == note_subtype.id)
+        if not candidates:
+            return set()
+
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        ack_field = "internal_dialog_ack_at" if is_external else "supplier_dialog_ack_at"
+
+        # Per-request acknowledgement timestamp.
+        request_ids = list(set(candidates.mapped("res_id")))
+        ack_by_request = {req.id: req[ack_field] for req in self.browse(request_ids)}
+
+        # Classify message authors as external. sudo() so correctness does not
+        # depend on whether the requesting user may read other users' groups.
+        author_partner_ids = list(set(candidates.mapped("author_id").ids))
+        external_users = (
+            self.env["res.users"]
+            .sudo()
+            .search(
+                [
+                    ("partner_id", "in", author_partner_ids),
+                    ("all_group_ids", "in", external_group.id),
+                ]
+            )
         )
         external_partner_ids = set(external_users.mapped("partner_id").ids)
 
-        if is_external:
-            ack_field = "internal_dialog_ack_at"
-            indicator_field = "has_unread_internal_dialog"
-        else:
-            ack_field = "supplier_dialog_ack_at"
-            indicator_field = "has_unread_supplier_dialog"
-
-        messages_by_request = {}
-        for msg in messages:
-            messages_by_request.setdefault(msg.res_id, []).append(msg)
-
-        for record in self:
-            ack_at = record[ack_field]
-            for msg in messages_by_request.get(record.id, ()):
-                author_is_external = msg.author_id.id in external_partner_ids
-                # Only count messages from the opposite party.
-                if is_external == author_is_external:
-                    continue
-                if ack_at and msg.date and msg.date <= ack_at:
-                    continue
-                record[indicator_field] = True
-                break
+        unread_ids = set()
+        for message in candidates:
+            author_is_external = message.author_id.id in external_partner_ids
+            # Only the opposite party's notes count.
+            if is_external == author_is_external:
+                continue
+            ack_at = ack_by_request.get(message.res_id)
+            # Second-resolution edge: a note posted in the same second as the
+            # acknowledgement is treated as read (<=). A sub-second race between
+            # two different human users is negligible in practice.
+            if ack_at and message.date and message.date <= ack_at:
+                continue
+            unread_ids.add(message.id)
+        return unread_ids
 
     def action_acknowledge_dialog(self):
-        """Mark the log-note dialog as read for the current user's side."""
+        """Mark the log-note dialog read for the acking user's whole side.
+
+        Acknowledgement is stored as one timestamp per side on the request, so
+        every staffer on that side (all Mimer handlers, or all external
+        contractors) shares it — one person marking read clears the chip and
+        the highlight for the whole side.
+        """
         self.ensure_one()
         now = fields.Datetime.now()
-        is_external = self.env.user.has_group(
-            "onecore_maintenance_extension.group_external_contractor"
-        )
-        if is_external:
+        if ExternalContractorService(self.env).is_external_contractor():
             self.internal_dialog_ack_at = now
         else:
             self.supplier_dialog_ack_at = now
-        # Non-stored computed fields don't invalidate automatically on the
-        # depended stored field's write — force a recompute so the button's
-        # invisible attribute re-evaluates and the badge disappears.
+        # Non-stored computed fields don't invalidate automatically when the
+        # stored ack field is written — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
         self.invalidate_recordset(
             ["has_unread_supplier_dialog", "has_unread_internal_dialog"]
         )
-        self.env["mail.message"].invalidate_model(["is_dialog_unread_for_user"])
+        self.env["mail.message"].invalidate_model(["is_dialog_unread_for_side"])
         return True
 
     def _send_creation_sms(self):
