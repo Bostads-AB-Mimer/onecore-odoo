@@ -1,4 +1,6 @@
-from odoo import models, fields
+from odoo import api, models, fields
+
+from .constants import LEASE_STATUS_LABELS
 
 
 class OnecoreMaintenanceTenantOption(models.Model):
@@ -18,6 +20,24 @@ class OnecoreMaintenanceTenantOption(models.Model):
     is_tenant = fields.Boolean("Är hyresgäst", default=True)
     special_attention = fields.Boolean(string="Viktig kundinfo", readonly=True)
     lease_option_id = fields.Many2one("maintenance.lease.option", string="Lease Option")
+
+    @api.depends("name", "lease_option_id.lease_status")
+    def _compute_display_name(self):
+        """Show the lease status next to the name in the dropdown only.
+
+        `name` stays the bare person name (the value that gets persisted onto
+        the request and used in the SMS); the status label (e.g. "Gällande") is
+        purely presentational so users can tell apart a person's several leases.
+        """
+        for option in self:
+            status_label = (
+                LEASE_STATUS_LABELS.get(option.lease_option_id.lease_status)
+                if option.lease_option_id
+                else None
+            )
+            option.display_name = (
+                f"{option.name} ({status_label})" if status_label else option.name
+            )
 
 
 class OnecoreMaintenanceTenant(models.Model):

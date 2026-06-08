@@ -430,6 +430,37 @@ class TestBaseMaintenanceHandler(TransactionCase):
         )
         self.assertEqual(tenant_option.lease_option_id.id, lease_option.id)
 
+    def test_create_tenant_options_status_label_only_in_display_name(self):
+        """`name` stays the bare person name; status shows only in display_name."""
+        rental_property_option = create_rental_property_option(self.env)
+        lease_option = create_lease_option(
+            self.env,
+            rental_property_option_id=rental_property_option.id,
+            lease_status=0,  # 0 -> "Gällande"
+        )
+
+        first_name = self.fake.first_name()
+        last_name = self.fake.last_name()
+        tenants = [
+            {
+                "contactCode": self.fake.contact_code(),
+                "contactKey": self.fake.contact_key(),
+                "firstName": first_name,
+                "lastName": last_name,
+                "phoneNumbers": [],
+                "isTenant": True,
+            }
+        ]
+
+        self.handler._create_tenant_options(tenants, lease_option_id=lease_option.id)
+
+        tenant_option = self.env["maintenance.tenant.option"].search(
+            [("contact_code", "=", tenants[0]["contactCode"])]
+        )
+        bare_name = f"{first_name} {last_name}"
+        self.assertEqual(tenant_option.name, bare_name)
+        self.assertEqual(tenant_option.display_name, f"{bare_name} (Gällande)")
+
     def test_create_tenant_options_without_lease_option(self):
         """Test that tenant options have no lease link when none is provided."""
         tenants = [
