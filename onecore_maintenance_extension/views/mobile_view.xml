@@ -44,6 +44,7 @@
         <field name="master_key" />
         <field name="hidden_from_my_pages" />
         <field name="due_date" />
+        <field name="schedule_date_date" />
         <field name="today_date" />
         <field name="new_mimer_notification" />
         <field name="recently_added_tenant" />

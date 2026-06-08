@@ -61,6 +61,14 @@
             </b>
             <br/>
         </span>
+        Planerat utförandedatum:
+        <t t-if="record.schedule_date_date.value">
+            <t t-esc="record.schedule_date_date.value"/>
+        </t>
+        <t t-else="">
+            Ej angett
+        </t>
+        <br/>
         Förfallodatum:
         <t t-if="record.due_date.value">
             <t t-if="record.today_date.value > record.due_date.value">
