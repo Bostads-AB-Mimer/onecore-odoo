@@ -101,21 +101,18 @@ class BaseMaintenanceHandler:
         return self.env["maintenance.lease.option"].create(lease_data)
 
     def _create_tenant_options(self, tenants, lease_option_id=None):
-        """Create tenant option records for a list of tenants."""
-        status_label = ""
-        if lease_option_id:
-            lease_record = self.env["maintenance.lease.option"].browse(lease_option_id)
-            if lease_record.exists():
-                status_label = LEASE_STATUS_LABELS.get(lease_record.lease_status, "")
+        """Create tenant option records for a list of tenants.
 
+        `name` holds the bare person name; the lease status is shown only in the
+        dropdown via the option's computed display_name (see maintenance_tenant).
+        """
         for tenant in tenants:
             name = get_tenant_name(tenant)
-            tenant_name = f"{name} ({status_label})" if status_label else name
             phone_number = get_main_phone_number(tenant)
 
             tenant_data = {
                 "user_id": self.env.user.id,
-                "name": tenant_name,
+                "name": name,
                 "contact_code": tenant["contactCode"],
                 "contact_key": tenant["contactKey"],
                 "national_registration_number": tenant.get(

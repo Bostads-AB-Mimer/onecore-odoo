@@ -8,6 +8,7 @@ from ...utils.test_utils import (
     create_building_option,
     create_rental_property_option,
     create_tenant_option,
+    create_lease_option,
 )
 
 
@@ -70,6 +71,23 @@ class TestRecordManagementService(TransactionCase):
         self.assertEqual(request.tenant_id.name, tenant_option.name)
         self.assertEqual(request.tenant_id.contact_code, tenant_option.contact_code)
         self.assertEqual(request.tenant_id.phone_number, tenant_option.phone_number)
+
+    def test_save_tenant_option_persists_name_without_status_label(self):
+        """The lease-status label is a dropdown-only decoration on display_name,
+        so the persisted tenant name and SMS source stay free of it."""
+        lease_option = create_lease_option(self.env, lease_status=0)  # "Gällande"
+        tenant_option = create_tenant_option(
+            self.env, name="David Lindblom", lease_option_id=lease_option.id
+        )
+        # The dropdown shows the status, but the stored name does not.
+        self.assertEqual(tenant_option.display_name, "David Lindblom (Gällande)")
+
+        request = create_maintenance_request(
+            self.env, tenant_option_id=tenant_option.id, hidden_from_my_pages=True
+        )
+
+        self.assertEqual(request.tenant_id.name, "David Lindblom")
+        self.assertEqual(request.tenant_name, "David Lindblom")
 
     def test_save_tenant_uses_form_phone_email_over_option_values(self):
         """When creating with modified phone/email in form, should use form values over option values"""

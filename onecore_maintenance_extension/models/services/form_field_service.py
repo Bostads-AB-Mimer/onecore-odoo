@@ -90,6 +90,8 @@ class FormFieldService:
 
     def _copy_tenant_fields(self, record):
         """Copy tenant data fields from tenant_option_id to the record."""
+        # `name` is the bare person name; the lease-status label lives only in
+        # the option's display_name, so it never leaks into the record or SMS.
         record.tenant_id = record.tenant_option_id.name
         record.tenant_name = record.tenant_option_id.name
         record.contact_code = record.tenant_option_id.contact_code
