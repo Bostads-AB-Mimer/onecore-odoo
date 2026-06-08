@@ -138,6 +138,11 @@ class OneCoreMaintenanceRequest(
     # ============================================================================
 
     today_date = fields.Date(string="Today", compute="_compute_today_date", store=False)
+    schedule_date_date = fields.Date(
+        string="Planerat utförandedatum",
+        compute="_compute_schedule_date_date",
+        store=False,
+    )
     new_mimer_notification = fields.Boolean(
         string="New Mimer Message",
         compute="_compute_new_mimer_notification",
@@ -511,6 +516,16 @@ class OneCoreMaintenanceRequest(
     def _compute_today_date(self):
         for record in self:
             record.today_date = fields.Date.context_today(self)
+
+    @api.depends("schedule_date")
+    def _compute_schedule_date_date(self):
+        for record in self:
+            if record.schedule_date:
+                record.schedule_date_date = fields.Datetime.context_timestamp(
+                    record, record.schedule_date
+                ).date()
+            else:
+                record.schedule_date_date = False
 
     def _compute_restricted_external(self):
         external_contractor_service = ExternalContractorService(self.env)

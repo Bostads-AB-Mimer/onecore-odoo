@@ -771,6 +771,7 @@
                     <field name="color" />
                     <field name="priority_expanded" />
                     <field name="due_date" />
+                    <field name="schedule_date_date" />
                     <field name="today_date" />
                     <field name="equipment_id" />
                     <field name="user_id" />
