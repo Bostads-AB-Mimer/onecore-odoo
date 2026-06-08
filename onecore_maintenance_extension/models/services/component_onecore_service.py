@@ -125,15 +125,8 @@ class ComponentOneCoreService:
             return '[]', '[]', []
 
         try:
-            # Fetch residence to get residenceId
-            residence = self.api.fetch_residence(rental_property_id)
-            if not residence or not residence.get('id'):
-                return '[]', '[]', []
-
-            residence_id = residence['id']
-
-            # Fetch rooms
-            rooms = self.api.fetch_rooms(residence_id)
+            # Fetch rooms directly by rental id
+            rooms = self.api.fetch_rooms(rental_property_id)
             if not rooms:
                 return '[]', '[]', []
 
