@@ -505,9 +505,6 @@ class OneCoreMaintenanceRequest(
             if record.maintenance_team_id:
                 ids = record.maintenance_team_id.member_ids.ids
                 record.maintenance_team_domain = [("id", "in", ids)]
-
-                if record.user_id.id not in ids:
-                    record.user_id = False
             else:
                 record.maintenance_team_domain = []
 
@@ -743,6 +740,18 @@ class OneCoreMaintenanceRequest(
             )
             if "stage_id" in updates:
                 record.stage_id = updates["stage_id"]
+
+    @api.onchange("maintenance_team_id")
+    def _onchange_maintenance_team_id(self):
+        # Clear an assignee who is not a member of the newly selected team.
+        # This is UI-only: it must never run from a compute (i.e. on read),
+        # since user_id is stored and writing it would mutate the record and
+        # break web_read. See _compute_maintenance_team_domain.
+        for record in self:
+            if record.maintenance_team_id and record.user_id:
+                member_ids = record.maintenance_team_id.member_ids.ids
+                if record.user_id.id not in member_ids:
+                    record.user_id = False
 
     # ============================================================================
     # CRUD OPERATIONS
