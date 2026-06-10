@@ -536,7 +536,6 @@ class ComponentProvider(BaseProvider):
             'economic_lifespan': self.component_lifespan_months(),
             'technical_lifespan': self.component_lifespan_months(),
             'replacement_interval': self.component_replacement_interval(),
-            'image_urls_json': '[]',
         }
         data.update(overrides)
         return data

@@ -7,6 +7,17 @@ import { KanbanRecord } from "@web/views/kanban/kanban_record";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
 import ConfirmDialog from "./confirm_dialog";
+import { askComponentQuestion } from "./component_question_dialog";
+import { openComponentWizardDialog } from "./open_component_wizard_dialog";
+
+/**
+ * Records that answered "Ja" to the component question and are waiting for
+ * their stage write to commit before the component wizard opens.
+ * Module-level because the model hooks are reassigned per KanbanRecord
+ * instance — per-instance state would be unsafe. Keyed by resId, value is
+ * the target stage id (revalidated after save).
+ */
+const pendingComponentWizard = new Map();
 
 /**
  * Shows a dialog asking if the loan product has been returned.
@@ -48,15 +59,13 @@ patch(KanbanRecord.prototype, {
   setup() {
     super.setup();
     this.dialogService = useService("dialog");
+    this.orm = useService("orm");
+    this.actionService = useService("action");
+    this.notificationService = useService("notification");
+    this.uiService = useService("ui");
 
     const isMaintenanceRequest =
       this.props.record.model.config.resModel === "maintenance.request";
-
-    const userIsExternalContractor =
-      isMaintenanceRequest &&
-      user.hasGroup(
-        "onecore_maintenance_extension.group_external_contractor"
-      );
 
     this.props.record.model.hooks.onWillSaveRecord = async (
       record,
@@ -85,21 +94,62 @@ patch(KanbanRecord.prototype, {
         return false;
       }
 
-      // Existing external contractor validation for "Utförd" stage
-      if (
-        userIsExternalContractor &&
-        targetStageName === "Utförd"
-      ) {
-        const confirmed = await ConfirmDialog(
-          this.dialogService,
-          "Bekräfta ändring",
-          "Är du säker på att du vill ändra statusen till Utförd? Om du gör detta kan du inte ändra tillbaka."
+      if (targetStageName === "Utförd") {
+        // user.hasGroup returns a Promise and MUST be awaited — the previous
+        // unawaited call was always truthy, so the confirm fired for all
+        // users, not just external contractors.
+        const userIsExternalContractor = await user.hasGroup(
+          "onecore_maintenance_extension.group_external_contractor"
         );
 
-        return confirmed;
+        // External contractors keep the plain irreversibility confirm —
+        // component functionality is internal-only for now.
+        if (userIsExternalContractor) {
+          return await ConfirmDialog(
+            this.dialogService,
+            "Bekräfta ändring",
+            "Är du säker på att du vill ändra statusen till Utförd? Om du gör detta kan du inte ändra tillbaka."
+          );
+        }
+
+        // Internal users on apartment ärenden: ask the component question
+        if (record.data.space_caption === "Lägenhet" && record.resId) {
+          const answer = await askComponentQuestion(this.dialogService);
+          if (answer === "abort") {
+            return false;
+          }
+          if (answer === "yes") {
+            pendingComponentWizard.set(record.resId, changes.stage_id);
+          }
+          return true;
+        }
       }
 
       return true;
+    };
+
+    // Opens the component wizard AFTER the stage write committed. NOTE:
+    // model hooks are single-slot — another patch assigning onRecordSaved
+    // would clobber this (nothing else in the repo does today).
+    this.props.record.model.hooks.onRecordSaved = async (record) => {
+      if (!isMaintenanceRequest) {
+        return;
+      }
+      const targetStageId = pendingComponentWizard.get(record.resId);
+      if (targetStageId === undefined) {
+        return;
+      }
+      // Consume before opening — guards against double-fire
+      pendingComponentWizard.delete(record.resId);
+      if (record.data.stage_id?.id === targetStageId) {
+        await openComponentWizardDialog(
+          this.orm,
+          this.actionService,
+          this.notificationService,
+          record.resId,
+          this.uiService
+        );
+      }
     };
   },
 });

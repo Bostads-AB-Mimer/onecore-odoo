@@ -60,14 +60,55 @@ class TestComponentLineComputedFields(TransactionCase):
         )
         self.assertFalse(line.has_images)
 
-    def test_has_images_false_with_none(self):
-        """has_images is False when image_urls_json is falsy."""
-        line = create_component_line(
-            self.env,
-            self.wizard.id,
-            image_urls_json=False,
-        )
+    def test_image_urls_json_empty_at_load(self):
+        """image_urls_json defaults empty — images are loaded on demand."""
+        line = create_component_line(self.env, self.wizard.id)
+        self.assertEqual(line.image_urls_json or '[]', '[]')
         self.assertFalse(line.has_images)
+
+    def test_get_component_image_urls_fetches_for_one_component(self):
+        """get_component_image_urls returns URLs for the given line only."""
+        line = create_component_line(self.env, self.wizard.id)
+        urls = ['https://example.com/a.jpg', 'https://example.com/b.jpg']
+
+        with patch(f'{LINE_PATH}.ComponentOneCoreService') as MockService:
+            MockService.return_value.fetch_all_component_image_urls.return_value = urls
+            result = self.env['maintenance.component.line'].get_component_image_urls(
+                line.id
+            )
+
+        self.assertEqual(result, urls)
+        MockService.return_value.fetch_all_component_image_urls.assert_called_once_with(
+            line.onecore_component_id
+        )
+
+    def test_get_component_image_urls_without_component_id(self):
+        """Returns [] (no fetch) when the line has no OneCore id."""
+        line = create_component_line(
+            self.env, self.wizard.id, onecore_component_id=False
+        )
+
+        with patch(f'{LINE_PATH}.ComponentOneCoreService') as MockService:
+            result = self.env['maintenance.component.line'].get_component_image_urls(
+                line.id
+            )
+
+        self.assertEqual(result, [])
+        MockService.return_value.fetch_all_component_image_urls.assert_not_called()
+
+    def test_get_component_image_urls_on_error(self):
+        """Returns [] when the image fetch raises."""
+        line = create_component_line(self.env, self.wizard.id)
+
+        with patch(f'{LINE_PATH}.ComponentOneCoreService') as MockService:
+            MockService.return_value.fetch_all_component_image_urls.side_effect = (
+                Exception("API error")
+            )
+            result = self.env['maintenance.component.line'].get_component_image_urls(
+                line.id
+            )
+
+        self.assertEqual(result, [])
 
     def test_current_value_with_depreciation(self):
         """current_value computed via linear depreciation."""

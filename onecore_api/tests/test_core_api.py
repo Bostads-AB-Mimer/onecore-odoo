@@ -780,3 +780,55 @@ class TestFetchFormData:
             api.fetch_form_data("leaseId", "123", "Bostad")
 
         assert str(exc_info.value) == "Test error"
+
+
+class TestParallelGetJson:
+    """Tests for parallel_get_json (concurrent OneCore fan-out)."""
+
+    def _resp(self, content):
+        r = Mock()
+        r.json.return_value = {"content": content}
+        r.raise_for_status.return_value = None
+        return r
+
+    def test_empty_urls_returns_empty(self, api):
+        """No URLs -> no work, empty list."""
+        assert api.parallel_get_json([]) == []
+
+    def test_returns_results_in_input_order(self, api):
+        """Results align with the input path order."""
+        with patch('core_api.requests.get') as mock_get:
+            mock_get.side_effect = lambda url, **kwargs: self._resp(url)
+            result = api.parallel_get_json(["/a", "/b", "/c"])
+
+        # base_url from mock_env fixture is https://api.example.com
+        assert result == [
+            "https://api.example.com/a",
+            "https://api.example.com/b",
+            "https://api.example.com/c",
+        ]
+
+    def test_per_path_error_becomes_none(self, api):
+        """A failing path yields None without failing the batch."""
+        def _side_effect(url, **kwargs):
+            if url.endswith("/bad"):
+                raise requests.HTTPError("500")
+            return self._resp("ok")
+
+        with patch('core_api.requests.get', side_effect=_side_effect):
+            result = api.parallel_get_json(["/good", "/bad"])
+
+        assert result == ["ok", None]
+
+    def test_falls_back_to_serial_without_token(self, mock_env):
+        """With no token, uses the serial _get_json path."""
+        with patch('core_api.CoreApi._get_auth_token'):
+            api = CoreApi(mock_env)
+        # Drop the token so the threaded precondition fails
+        mock_env["ir.config_parameter"].sudo().set_param("onecore_api_token", None)
+
+        with patch.object(api, '_get_json', side_effect=lambda url: f"serial:{url}") as mock_serial:
+            result = api.parallel_get_json(["/x", "/y"])
+
+        assert result == ["serial:/x", "serial:/y"]
+        assert mock_serial.call_count == 2

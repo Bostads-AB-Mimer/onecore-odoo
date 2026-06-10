@@ -120,9 +120,6 @@ class TestComponentOneCoreService(TransactionCase):
         ]
 
         cat_id = self.fake.component_category_id()
-        self.mock_api.fetch_component_categories.return_value = [
-            {'id': cat_id, 'categoryName': 'Kök'}
-        ]
 
         component = {
             'id': self.fake.component_instance_id(),
@@ -145,8 +142,13 @@ class TestComponentOneCoreService(TransactionCase):
                 }
             ]
         }
-        self.mock_api.fetch_components_by_room.return_value = [component]
-        self.mock_api.fetch_component_documents.return_value = []
+        # Categories + per-room components are fetched in one parallel wave;
+        # results are aligned: [categories, room1_components, room2_components]
+        self.mock_api.parallel_get_json.return_value = [
+            [{'id': cat_id, 'categoryName': 'Kök'}],
+            [component],
+            [component],
+        ]
 
         rooms_json, categories_json, components = service.load_components_for_residence(
             'rental-prop-123', 'Lägenhet'
@@ -162,6 +164,13 @@ class TestComponentOneCoreService(TransactionCase):
         self.assertEqual(len(components), 2)
         self.assertEqual(components[0]['model'], model_name)
         self.assertEqual(components[0]['serial_number'], serial)
+
+        # Components are loaded via the parallel helper, not per-room serial
+        # calls, and image URLs are NOT fetched during load (deferred to the
+        # gallery widget) — both used to dominate the wizard's load time.
+        self.mock_api.parallel_get_json.assert_called_once()
+        self.mock_api.fetch_component_documents.assert_not_called()
+        self.assertNotIn('image_urls_json', components[0])
 
     def test_onecore_load_components_non_apartment(self):
         """Returns empty for non-apartment space_caption."""

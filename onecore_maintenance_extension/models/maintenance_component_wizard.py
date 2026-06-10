@@ -463,10 +463,16 @@ class MaintenanceComponentWizard(models.TransientModel):
         self.available_rooms_json = rooms_json
         self.available_categories_json = categories_json
 
-        ComponentLine = self.env['maintenance.component.line']
+        line_vals = []
         for comp_data in component_data_list:
             comp_data['wizard_id'] = self.id
-            ComponentLine.create(comp_data)
+            # image_urls_json is left empty at load (the gallery widget
+            # fetches it lazily) — drop it if a caller still provides it
+            comp_data.pop('image_urls_json', None)
+            line_vals.append(comp_data)
+        if line_vals:
+            # Single batched create instead of one insert per component
+            self.env['maintenance.component.line'].create(line_vals)
 
     @api.model
     def search_component_models(self, search_text, type_id=None, subtype_id=None):

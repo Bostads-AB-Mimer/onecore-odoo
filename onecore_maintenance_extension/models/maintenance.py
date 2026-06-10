@@ -1105,4 +1105,5 @@ class OneCoreMaintenanceRequest(
             "view_type": "form",
             "views": [(False, "form")],
             "target": "new",
+            "context": {"dialog_size": "extra-large"},
         }

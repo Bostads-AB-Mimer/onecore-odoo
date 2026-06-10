@@ -3,7 +3,16 @@ import logging
 import urllib.parse
 import json
 
+from concurrent.futures import ThreadPoolExecutor
+
 _logger = logging.getLogger(__name__)
+
+# Cap on concurrent outbound HTTP calls to OneCore when fanning out (e.g.
+# fetching components for every room of an apartment).
+_PARALLEL_GET_MAX_WORKERS = 8
+# (connect, read) timeout for each parallel call — without it a single hung
+# OneCore call would block its worker thread and stall the whole wave.
+_PARALLEL_GET_TIMEOUT = (5, 30)
 
 
 class CoreApi:
@@ -60,6 +69,69 @@ class CoreApi:
         response = self.request("GET", url, **kwargs)
         response.raise_for_status()
         return response.json().get("content")
+
+    def parallel_get_json(self, urls):
+        """Fetch several GET endpoints concurrently and return their ``content``.
+
+        Pure outbound HTTP: the auth token and base URL are read ONCE here on
+        the calling (main) thread, then each request runs in a worker thread
+        that only touches the captured strings + ``requests`` — never
+        ``self.env``/the ORM (not thread-safe).
+
+        Args:
+            urls: list of path strings (same form as ``_get_json``).
+
+        Returns:
+            list aligned with ``urls``; each item is the parsed ``content`` on
+            success or ``None`` on any error (logged). Falls back to serial
+            ``_get_json`` if the prerequisites for threading aren't met.
+        """
+        if not urls:
+            return []
+
+        token = self._get_persisted_token()
+        base_url = self._get_env_value("onecore_base_url")
+
+        # Without a token/base_url we can't do the pure-HTTP threaded path;
+        # fall back to the serial (ORM-aware, token-refreshing) client.
+        if not token or not base_url:
+            return self._serial_get_json_safe(urls)
+
+        headers = {"Authorization": f"Bearer {token}"}
+
+        def _fetch(path):
+            # Runs in a worker thread — no self.env access here.
+            try:
+                response = requests.get(
+                    f"{base_url}{path}",
+                    headers=headers,
+                    timeout=_PARALLEL_GET_TIMEOUT,
+                )
+                response.raise_for_status()
+                return response.json().get("content")
+            except Exception as err:
+                _logger.warning("parallel_get_json failed for %s: %s", path, err)
+                return None
+
+        try:
+            max_workers = min(_PARALLEL_GET_MAX_WORKERS, len(urls))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # executor.map preserves input order.
+                return list(executor.map(_fetch, urls))
+        except Exception as err:
+            _logger.warning("parallel_get_json pool failed, falling back to serial: %s", err)
+            return self._serial_get_json_safe(urls)
+
+    def _serial_get_json_safe(self, urls):
+        """Serial fallback for parallel_get_json: same shape (None on error)."""
+        results = []
+        for url in urls:
+            try:
+                results.append(self._get_json(url))
+            except Exception as err:
+                _logger.warning("parallel_get_json (serial) failed for %s: %s", url, err)
+                results.append(None)
+        return results
 
     def fetch_leases(self, identifier, value, location_type):
         paths = {

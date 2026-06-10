@@ -3,8 +3,16 @@
 
     <t t-name="onecore_maintenance_extension.ImageGallery">
         <div class="image-gallery-container">
+            <!-- Lazy-load spinner while fetching this component's images -->
+            <t t-if="state.loading">
+                <div class="text-muted text-center p-3">
+                    <i class="fa fa-circle-o-notch fa-spin fa-2x mb-2 d-block"/>
+                    <span>Laddar bilder…</span>
+                </div>
+            </t>
+
             <!-- 3-column responsive grid for thumbnails -->
-            <t t-if="hasImages">
+            <t t-elif="hasImages">
                 <div class="row g-2">
                     <t t-foreach="imageUrls" t-as="url" t-key="url_index">
                         <div class="col-4">

@@ -2,6 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
+import { useService } from "@web/core/utils/hooks";
 import { Component, useState, useEffect } from "@odoo/owl";
 
 /**
@@ -17,10 +18,54 @@ export class ImageGallery extends Component {
     };
 
     setup() {
+        this.orm = useService("orm");
         this.state = useState({
             isFullscreen: false,
             fullscreenIndex: 0,
+            // Lazily-fetched URLs (null until loaded). When set, takes
+            // precedence over the bound field value.
+            lazyUrls: null,
+            loading: false,
+            // resId we've already fetched for — guards against refetching on
+            // every re-render / dependency tick.
+            lastFetchedId: null,
         });
+
+        // Lazy image load: the wizard leaves image_urls_json empty at load to
+        // avoid a documents-call per component. When this gallery is shown for
+        // a component (its detail form opened) and the field is empty, fetch
+        // just this component's URLs. useEffect (not onWillStart) so it runs
+        // AFTER mount once the dialog record is populated, and re-runs if the
+        // bound record changes.
+        useEffect(
+            (resId, componentId) => {
+                const fieldEmpty = !this._parseUrls(
+                    this.props.record.data[this.props.name]
+                ).length;
+                if (
+                    fieldEmpty &&
+                    componentId &&
+                    resId &&
+                    this.state.lastFetchedId !== resId
+                ) {
+                    this.state.lastFetchedId = resId;
+                    this.state.loading = true;
+                    this.orm
+                        .call(this.props.record.resModel, "get_component_image_urls", [resId])
+                        .then((urls) => {
+                            this.state.lazyUrls = Array.isArray(urls) ? urls : [];
+                        })
+                        .catch((e) => {
+                            console.warn("Failed to load component images", e);
+                            this.state.lazyUrls = [];
+                        })
+                        .finally(() => {
+                            this.state.loading = false;
+                        });
+                }
+            },
+            () => [this.props.record.resId, this.props.record.data.onecore_component_id]
+        );
 
         // Handle escape key to close fullscreen
         useEffect(
@@ -63,12 +108,24 @@ export class ImageGallery extends Component {
      * @returns {string[]} Array of image URLs
      */
     get imageUrls() {
-        const value = this.props.record.data[this.props.name];
-        if (!value) return [];
+        // Lazily-fetched URLs (when the field was left empty at load) take
+        // precedence over the stored field value.
+        if (this.state.lazyUrls !== null) {
+            return this.state.lazyUrls.filter((url) => url);
+        }
+        return this._parseUrls(this.props.record.data[this.props.name]);
+    }
 
+    /**
+     * Parses a JSON-array field value into a clean list of URLs.
+     * @param {string} value
+     * @returns {string[]}
+     */
+    _parseUrls(value) {
+        if (!value) return [];
         try {
             const urls = JSON.parse(value);
-            return Array.isArray(urls) ? urls.filter(url => url) : [];
+            return Array.isArray(urls) ? urls.filter((url) => url) : [];
         } catch (e) {
             return [];
         }

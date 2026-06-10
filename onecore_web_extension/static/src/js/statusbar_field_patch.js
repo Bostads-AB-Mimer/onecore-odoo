@@ -4,11 +4,17 @@ import { patch } from "@web/core/utils/patch";
 import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
 import { useService } from "@web/core/utils/hooks";
 import ConfirmDialog from "./confirm_dialog";
+import { askComponentQuestion } from "./component_question_dialog";
+import { openComponentWizardDialog } from "./open_component_wizard_dialog";
 
 patch(StatusBarField.prototype, {
   setup() {
     super.setup();
     this.dialogService = useService("dialog");
+    this.orm = useService("orm");
+    this.actionService = useService("action");
+    this.notificationService = useService("notification");
+    this.uiService = useService("ui");
     this.userIsExternalContractor =
       this.props.record.model.config.resModel === "maintenance.request" &&
       this.props.record.data.user_is_external_contractor;
@@ -55,17 +61,59 @@ patch(StatusBarField.prototype, {
   },
 
   async selectItem(item) {
-    if (this.userIsExternalContractor && item.label === "Utförd") {
+    const record = this.props.record;
+    const isMaintenanceRequest =
+      record.model.config.resModel === "maintenance.request";
+    const goingToUtford =
+      isMaintenanceRequest && item.label === "Utförd" && !item.isSelected;
+
+    if (!goingToUtford) {
+      return super.selectItem(item);
+    }
+
+    // External contractors keep the plain irreversibility confirm —
+    // component functionality is internal-only for now.
+    if (this.userIsExternalContractor) {
       const confirmed = await ConfirmDialog(
         this.dialogService,
         "Bekräfta ändring",
         "Är du säker på att du vill ändra statusen till Utförd? Om du gör detta kan du inte ändra tillbaka."
       );
-      if (confirmed) {
-        super.selectItem(item);
+      if (!confirmed) {
+        return;
       }
-    } else {
-      super.selectItem(item);
+      return super.selectItem(item);
+    }
+
+    // Internal users on apartment ärenden: ask the component question
+    const isApartment =
+      record.data.space_caption === "Lägenhet" && !!record.resId;
+    let answer = null;
+
+    if (isApartment) {
+      answer = await askComponentQuestion(this.dialogService);
+      if (answer === "abort") {
+        return;
+      }
+    }
+
+    // Odoo 19's selectItem awaits record.update() + record.save(); awaiting
+    // here guarantees the stage write committed before the wizard opens.
+    await super.selectItem(item);
+
+    if (
+      answer === "yes" &&
+      record.resId &&
+      !record.dirty &&
+      record.data.stage_id?.id === item.value
+    ) {
+      await openComponentWizardDialog(
+        this.orm,
+        this.actionService,
+        this.notificationService,
+        record.resId,
+        this.uiService
+      );
     }
   },
 });

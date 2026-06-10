@@ -75,9 +75,13 @@
                                         <!-- Images section -->
                                         <separator string="Bilder"/>
 
-                                        <!-- Existing images from OneCore (read-only gallery with fullscreen) -->
-                                        <field name="has_images" invisible="1"/>
-                                        <div invisible="not has_images" class="mb-3">
+                                        <!-- Existing images from OneCore (read-only gallery with
+                                             fullscreen). Gated on the component id, NOT has_images:
+                                             image_urls_json is left empty at load and the gallery
+                                             widget fetches this component's URLs lazily on mount —
+                                             a has_images gate would keep the widget unmounted and
+                                             the lazy load would never fire. -->
+                                        <div invisible="not onecore_component_id" class="mb-3">
                                             <div class="o_form_label mb-2">Befintliga bilder</div>
                                             <field name="image_urls_json" widget="image_gallery" readonly="1" nolabel="1"/>
                                         </div>
