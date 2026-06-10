@@ -2,6 +2,7 @@
 
 import json
 import logging
+import urllib.parse
 from datetime import datetime
 
 from odoo import fields
@@ -125,7 +126,8 @@ class ComponentOneCoreService:
             return '[]', '[]', []
 
         try:
-            # Fetch rooms directly by rental id
+            # Fetch rooms first (serial): primes/refreshes the auth token so
+            # the parallel wave below runs with a valid token.
             rooms = self.api.fetch_rooms(rental_property_id)
             if not rooms:
                 return '[]', '[]', []
@@ -136,23 +138,28 @@ class ComponentOneCoreService:
                 for r in rooms
             ])
 
-            # Fetch categories
-            categories_json = '[]'
-            try:
-                categories = self.api.fetch_component_categories()
-                if categories:
-                    categories_json = json.dumps(categories)
-            except Exception as e:
-                _logger.warning(f"Failed to fetch component categories: {e}")
+            # Fan out concurrently: component categories + components for every
+            # room in a single parallel wave (was a serial call per room, which
+            # dominated the wizard's load time).
+            categories_path = "/component-categories"
+            room_paths = [
+                "/components/by-room/%s"
+                % urllib.parse.quote(str(room.get('propertyObjectId')), safe='')
+                for room in rooms
+            ]
+            results = self.api.parallel_get_json([categories_path] + room_paths)
 
-            # Fetch components for each room
+            categories = results[0]
+            categories_json = json.dumps(categories) if categories else '[]'
+
+            # Transform components (main thread — pure dict work, no HTTP/ORM).
+            # Image URLs are intentionally NOT loaded here; the wizard loads a
+            # component's images lazily when its detail is opened.
             component_data_list = []
-            for room in rooms:
-                room_id = room.get('propertyObjectId')
+            for room, room_components in zip(rooms, results[1:]):
                 room_name = room.get('name', 'Okänt rum')
-
-                room_components = self._fetch_room_components(room_id)
-                for comp in room_components:
+                room_id = room.get('propertyObjectId')
+                for comp in room_components or []:
                     comp_data = self._transform_component_data(comp, room_name, room_id)
                     if comp_data:
                         component_data_list.append(comp_data)
@@ -162,22 +169,6 @@ class ComponentOneCoreService:
         except Exception as e:
             _logger.warning(f"Failed to fetch components from OneCore: {e}")
             return '[]', '[]', []
-
-    def _fetch_room_components(self, room_id):
-        """Fetch components for a specific room.
-
-        Args:
-            room_id: The room/property object ID
-
-        Returns:
-            list: List of component dicts from API
-        """
-        try:
-            components = self.api.fetch_components_by_room(room_id)
-            return components or []
-        except Exception as e:
-            _logger.warning(f"Failed to fetch components for room {room_id}: {e}")
-            return []
 
     def _transform_component_data(self, comp, room_name, room_id):
         """Transform OneCore component data to wizard format.
@@ -211,9 +202,10 @@ class ComponentOneCoreService:
                 install_date = install_date_str[:10]  # Extract YYYY-MM-DD
             installation_id = installations[0].get('id')
 
-        # Fetch all image URLs for the component (not base64 data)
-        image_urls = self.fetch_all_component_image_urls(comp.get('id'))
-
+        # NOTE: image URLs are intentionally NOT fetched here — that used to
+        # cost one documents-call per component and dominated the wizard's
+        # load time. maintenance.component.line fetches them lazily via the
+        # image_urls_json compute when a component's detail form is opened.
         return {
             'typ': component_type_data.get('typeName'),
             'subtype': subtype_data.get('subTypeName'),
@@ -238,8 +230,6 @@ class ComponentOneCoreService:
             'economic_lifespan': comp.get('economicLifespan') or 0,
             'technical_lifespan': subtype_data.get('technicalLifespan') or 0,
             'replacement_interval': subtype_data.get('replacementIntervalMonths') or 0,
-            # All image URLs from OneCore as JSON array
-            'image_urls_json': json.dumps(image_urls) if image_urls else '[]',
         }
 
     def search_models(self, search_text, type_id=None, subtype_id=None):

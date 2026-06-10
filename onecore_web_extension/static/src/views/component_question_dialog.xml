@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_web_extension.ComponentQuestionDialog">
+        <Dialog size="'md'" title="'Fastighetskomponent'">
+            <p>
+                Har du bytt ut eller ändrat någon fastighetskomponent i samband
+                med ärendet? Om du svarar Ja får du hjälp att uppdatera
+                komponentens uppgifter i nästa steg.
+            </p>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary" t-on-click="onYes">Ja</button>
+                <button class="btn btn-secondary" t-on-click="onNo">Nej</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

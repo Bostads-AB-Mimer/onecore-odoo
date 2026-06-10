@@ -27,7 +27,10 @@ class MaintenanceComponentLine(models.TransientModel):
         ondelete="cascade",
     )
 
-    # All image URLs from OneCore as JSON array
+    # All image URLs from OneCore as JSON array. Left empty at wizard load —
+    # the image_gallery widget fetches a component's URLs on demand via
+    # get_component_image_urls() only when that component's detail is opened.
+    # (Loading every component's documents at load dominated the load time.)
     image_urls_json = fields.Text(string="Bild-URLer (JSON)", default='[]')
 
     # Computed field to check if there are any images
@@ -106,6 +109,30 @@ class MaintenanceComponentLine(models.TransientModel):
                 economic_lifespan_months=record.economic_lifespan,
                 installation_date=record.installation_date,
             )
+
+    @api.model
+    def get_component_image_urls(self, line_id):
+        """Fetch image URLs for a single component on demand.
+
+        Called by the image_gallery widget when a component's detail form is
+        opened, so the documents-call happens once for the viewed component
+        instead of for every component at wizard load.
+        """
+        line = self.browse(line_id)
+        if not line.exists() or not line.onecore_component_id:
+            return []
+        try:
+            urls = ComponentOneCoreService(self.env).fetch_all_component_image_urls(
+                line.onecore_component_id
+            )
+            return urls or []
+        except Exception as e:
+            _logger.warning(
+                "Failed to fetch image URLs for component %s: %s",
+                line.onecore_component_id,
+                e,
+            )
+            return []
 
     @api.depends('image_urls_json')
     def _compute_has_images(self):
