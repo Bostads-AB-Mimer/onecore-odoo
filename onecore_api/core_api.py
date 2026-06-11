@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 _logger = logging.getLogger(__name__)
 
+DEFAULT_TIMEOUT = 15  # seconds; callers can override per request
 # Cap on concurrent outbound HTTP calls to OneCore when fanning out (e.g.
 # fetching components for every room of an apartment).
 _PARALLEL_GET_MAX_WORKERS = 8
@@ -36,7 +37,9 @@ class CoreApi:
             "password": self._get_env_value("onecore_password"),
         }
         base_url = self._get_env_value("onecore_base_url")
-        response = requests.post(f"{base_url}/auth/generateToken", json=body)
+        response = requests.post(
+            f"{base_url}/auth/generateToken", json=body, timeout=DEFAULT_TIMEOUT
+        )
 
         if response.status_code == 200:
             new_token = response.json().get("token")
@@ -46,6 +49,7 @@ class CoreApi:
             response.raise_for_status()
 
     def request(self, method, url, **kwargs):
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
         token = self._get_persisted_token()
         base_url = self._get_env_value("onecore_base_url")
         full_url = f"{base_url}{url}"
@@ -220,9 +224,9 @@ class CoreApi:
 
         return filtered_content
 
-    def fetch_residence(self, id):
+    def fetch_residence(self, id, **kwargs):
         return self._get_json(
-            f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
+            f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}", **kwargs
         )
 
     # Fetch staircases for specified building code

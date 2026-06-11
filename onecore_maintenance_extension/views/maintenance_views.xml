@@ -692,7 +692,7 @@
                         <!-- Bofaktablad -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3"
-                            invisible="not floor_plan_image">
+                            invisible="not floor_plan_image_url">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-2"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
@@ -711,7 +711,7 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <p class="mb-1 fw-bold inline-block">Planlösning:</p>
-                                    <field name="floor_plan_image" widget="image_viewer"
+                                    <field name="floor_plan_image_url" widget="image_viewer"
                                         thumbnailSize="160" nolabel="1" />
                                 </div>
                             </div>
