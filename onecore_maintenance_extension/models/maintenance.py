@@ -1,9 +1,8 @@
 import urllib.parse
-import base64
 import uuid
-import requests
 import logging
 import json
+import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
@@ -39,6 +38,11 @@ from .mixins import (
 )
 
 _logger = logging.getLogger(__name__)
+
+# Per-worker cache so the pest control badge doesn't trigger a OneCore call on
+# every form read (web_save re-reads included). Worst-case staleness = TTL.
+PEST_CONTROL_CACHE_TTL = 300  # seconds
+_pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
 
 
 class OneCoreMaintenanceRequest(
@@ -184,7 +188,7 @@ class OneCoreMaintenanceRequest(
         compute="_compute_requires_pest_control",
         store=False,
     )
-    floor_plan_image = fields.Image(
+    floor_plan_image_url = fields.Char(
         store=False, readonly=True, compute="_compute_floor_plan"
     )
     form_state = fields.Selection(FORM_STATES, compute="_compute_form_state")
@@ -250,8 +254,9 @@ class OneCoreMaintenanceRequest(
                 # Fallback for any undefined space_caption
                 record.form_state = "rental-property"
 
-    @api.depends("rental_property_id", "rental_property_option_id")
+    @api.depends("rental_property_id", "rental_property_option_id", "space_caption")
     def _compute_floor_plan(self):
+        # No HTTP here: the browser loads the image via the image_viewer widget.
         for record in self:
             id = (
                 record.rental_property_id
@@ -260,17 +265,11 @@ class OneCoreMaintenanceRequest(
             )
 
             if id and record.space_caption == "Lägenhet":
-                url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
-                try:
-                    response = requests.get(url)
-                    if response.status_code == 200:
-                        record.floor_plan_image = base64.b64encode(response.content)
-                    else:
-                        record.floor_plan_image = ""
-                except (requests.RequestException, requests.Timeout):
-                    record.floor_plan_image = ""
+                record.floor_plan_image_url = (
+                    f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
+                )
             else:
-                record.floor_plan_image = ""
+                record.floor_plan_image_url = False
 
     @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
@@ -292,14 +291,24 @@ class OneCoreMaintenanceRequest(
                 record.requires_pest_control = False
                 continue
 
+            cached = _pest_control_cache.get(rental_id)
+            if cached and time.monotonic() < cached[0]:
+                record.requires_pest_control = cached[1]
+                continue
+
             try:
                 if api is None:
                     api = record.get_core_api()
-                data = api.fetch_residence(rental_id)
+                data = api.fetch_residence(rental_id, timeout=5)
                 blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                record.requires_pest_control = any(
+                value = any(
                     (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
                 )
+                _pest_control_cache[rental_id] = (
+                    time.monotonic() + PEST_CONTROL_CACHE_TTL,
+                    value,
+                )
+                record.requires_pest_control = value
             except Exception as err:
                 _logger.warning(
                     "Could not fetch pest control status for rental_id %s: %s",

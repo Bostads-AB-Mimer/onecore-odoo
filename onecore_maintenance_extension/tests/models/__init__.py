@@ -14,6 +14,7 @@ from . import test_maintenance_component_wizard
 from . import test_maintenance_component_line
 from . import test_dialog_indicator
 from . import test_master_key_change_indicator
+from . import test_mim_1869_form_read_perf
 from .handlers import test_base_handler
 from .handlers import test_handler_factory
 from .services import test_record_management_service
