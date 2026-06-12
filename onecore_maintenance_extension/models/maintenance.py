@@ -108,7 +108,6 @@ class OneCoreMaintenanceRequest(
         PRIORITY_OPTIONS,
         string="Prioritet",
         store=True,
-        required=True,
     )
     due_date = fields.Date(
         "Förfallodatum",
