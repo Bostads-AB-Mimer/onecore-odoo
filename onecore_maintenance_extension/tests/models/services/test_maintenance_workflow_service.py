@@ -160,6 +160,67 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         self.assertTrue(request.performed_date)
         self.assertGreaterEqual(request.performed_date, first_performed_date)
 
+    def test_priority_required_for_resurs_tilldelad(self):
+        """Moving from 'Väntar på handläggning' to 'Resurs tilldelad' without priority raises."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+            user_id=self.internal_user.id,
+        )
+        # Initial user assignment auto-moved stage to 'Resurs tilldelad'.
+        # Move back to 'Väntar' (exempt) to isolate the forward transition.
+        request.with_user(self.internal_user).write({"stage_id": self.stage_vantar.id})
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"stage_id": self.stage_tilldelad.id}
+            )
+
+    def test_priority_required_for_utford(self):
+        """Moving to 'Utförd' without priority raises."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+            user_id=self.internal_user.id,
+        )
+        # Initial user assignment auto-moved stage to 'Resurs tilldelad'.
+        # Move back to 'Väntar' (exempt) to isolate the forward transition.
+        request.with_user(self.internal_user).write({"stage_id": self.stage_vantar.id})
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"stage_id": self.stage_utford.id}
+            )
+
+    def test_priority_not_required_for_avslutad(self):
+        """Closing directly to 'Avslutad' without priority is allowed."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_avslutad.id}
+        )
+
+        self.assertEqual(request.stage_id, self.stage_avslutad)
+
+    def test_priority_not_required_when_staying_in_vantar(self):
+        """Writes that don't change stage succeed with empty priority."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        request.with_user(self.internal_user).write({"description": "uppdaterad"})
+
+        self.assertFalse(request.priority_expanded)
+        self.assertEqual(request.stage_id, self.stage_vantar)
+
 
 @tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
