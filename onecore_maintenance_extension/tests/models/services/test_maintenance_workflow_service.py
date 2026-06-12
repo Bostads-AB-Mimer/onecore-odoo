@@ -162,15 +162,18 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
 
     def test_priority_required_for_resurs_tilldelad(self):
         """Moving from 'Väntar på handläggning' to 'Resurs tilldelad' without priority raises."""
+        # Create with a priority + user so the auto-transition during create
+        # succeeds, then clear priority in the same write that returns the
+        # request to 'Väntar' (exempt). This leaves a record that has a user
+        # assigned (so _validate_unassigned_resource passes) but no priority.
         request = create_maintenance_request(
             self.env,
             stage_id=self.stage_vantar.id,
-            priority_expanded=False,
             user_id=self.internal_user.id,
         )
-        # Initial user assignment auto-moved stage to 'Resurs tilldelad'.
-        # Move back to 'Väntar' (exempt) to isolate the forward transition.
-        request.with_user(self.internal_user).write({"stage_id": self.stage_vantar.id})
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_vantar.id, "priority_expanded": False}
+        )
 
         with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
             request.with_user(self.internal_user).write(
@@ -182,12 +185,11 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request = create_maintenance_request(
             self.env,
             stage_id=self.stage_vantar.id,
-            priority_expanded=False,
             user_id=self.internal_user.id,
         )
-        # Initial user assignment auto-moved stage to 'Resurs tilldelad'.
-        # Move back to 'Väntar' (exempt) to isolate the forward transition.
-        request.with_user(self.internal_user).write({"stage_id": self.stage_vantar.id})
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_vantar.id, "priority_expanded": False}
+        )
 
         with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
             request.with_user(self.internal_user).write(
