@@ -45,6 +45,7 @@ class MaintenanceStageManager:
             # Auto-transition to "Resurs tilldelad" when user is assigned
             resource_allocated_stage = self._get_stage_by_name("Resurs tilldelad")
             if resource_allocated_stage:
+                self._validate_priority_set(record, resource_allocated_stage.id)
                 return {"stage_id": resource_allocated_stage.id}
 
         elif new_user_id is False and record.stage_id.name != "Avslutad":
