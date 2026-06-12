@@ -221,6 +221,34 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         self.assertFalse(request.priority_expanded)
         self.assertEqual(request.stage_id, self.stage_vantar)
 
+    def test_auto_transition_via_user_assignment_requires_priority(self):
+        """Assigning a user while in 'Väntar på handläggning' without priority must raise."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"user_id": self.internal_user.id}
+            )
+
+    def test_auto_transition_via_user_assignment_passes_when_priority_set(self):
+        """Assigning a user when priority is set auto-transitions to 'Resurs tilldelad'."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded="7",
+        )
+
+        request.with_user(self.internal_user).write(
+            {"user_id": self.internal_user.id}
+        )
+
+        self.assertEqual(request.stage_id, self.stage_tilldelad)
+        self.assertEqual(request.user_id, self.internal_user)
+
 
 @tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
