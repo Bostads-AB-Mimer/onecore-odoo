@@ -173,6 +173,11 @@ class OneCoreMaintenanceRequest(
         string="Huvudnyckeländring kvitterad",
         help="Senaste tidpunkt någon kvitterade ändring av huvudnyckel. Delas av alla användare som har tillgång till ärendet.",
     )
+    has_unread_master_key_change = fields.Boolean(
+        string="Okvitterad huvudnyckeländring",
+        compute="_compute_has_unread_master_key_change",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -474,6 +479,20 @@ class OneCoreMaintenanceRequest(
                 continue
             unread_ids.add(message.id)
         return unread_ids
+
+    @api.depends("master_key_changed_at", "master_key_ack_at")
+    def _compute_has_unread_master_key_change(self):
+        # One shared ack timestamp — first user from any side to click
+        # "Markera som läst" clears the chip for everyone with access to the
+        # request (external contractors, equipment managers, internal staff).
+        for record in self:
+            if not record.master_key_changed_at:
+                record.has_unread_master_key_change = False
+                continue
+            ack_at = record.master_key_ack_at
+            record.has_unread_master_key_change = (
+                not ack_at or record.master_key_changed_at > ack_at
+            )
 
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
