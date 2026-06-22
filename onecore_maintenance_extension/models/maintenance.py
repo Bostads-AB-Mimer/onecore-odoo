@@ -165,6 +165,14 @@ class OneCoreMaintenanceRequest(
         compute="_compute_dialog_indicators",
         store=False,
     )
+    master_key_changed_at = fields.Datetime(
+        string="Huvudnyckel senast ändrad",
+        help="Sätts automatiskt när fältet Huvudnyckel ändras efter att ärendet skapats.",
+    )
+    master_key_ack_at = fields.Datetime(
+        string="Huvudnyckeländring kvitterad",
+        help="Senaste tidpunkt någon kvitterade ändring av huvudnyckel. Delas av alla användare som har tillgång till ärendet.",
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -888,6 +896,16 @@ class OneCoreMaintenanceRequest(
             {} if skip_tracking else self._track_loan_product_changes(vals)
         )
 
+        # MIM-1846: stamp the change time so every viewer of the request
+        # gets an unacknowledged-change chip on the kanban card. Capture old
+        # values before super().write() applies the new one.
+        master_key_changed_ids = []
+        if "master_key" in vals:
+            new_master_key = vals["master_key"]
+            for record in self:
+                if record.master_key != new_master_key:
+                    master_key_changed_ids.append(record.id)
+
         # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
         changes_by_record = (
@@ -912,6 +930,11 @@ class OneCoreMaintenanceRequest(
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
+
+        if master_key_changed_ids:
+            self.browse(master_key_changed_ids).write(
+                {"master_key_changed_at": fields.Datetime.now()}
+            )
 
         # Post loan product messages first, then other change notifications
         if not skip_tracking:
