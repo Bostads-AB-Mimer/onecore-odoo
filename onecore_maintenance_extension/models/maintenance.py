@@ -517,6 +517,21 @@ class OneCoreMaintenanceRequest(
         self.env["mail.message"].invalidate_model(["is_dialog_unread_for_side"])
         return True
 
+    def action_acknowledge_master_key_change(self):
+        """Mark the master-key change read for every viewer of the request.
+
+        Acknowledgement is one timestamp per request, shared by everyone with
+        access — the first user to click "Markera som läst" (external
+        contractor, equipment manager, or internal handler) clears the chip
+        and the chatter button for the whole audience.
+        """
+        self.ensure_one()
+        self.master_key_ack_at = fields.Datetime.now()
+        # Non-stored computed field — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
+        self.invalidate_recordset(["has_unread_master_key_change"])
+        return True
+
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
         if not self.phone_number or self.hidden_from_my_pages:

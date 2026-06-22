@@ -93,3 +93,45 @@ class TestHasUnreadMasterKeyChange(TransactionCase):
         )
         record = self._refresh(self.external_user)
         self.assertTrue(record.has_unread_master_key_change)
+
+
+@tagged("onecore")
+class TestAcknowledgeMasterKeyChange(TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.internal_user = create_internal_user(self.env)
+        self.external_user = create_external_contractor_user(self.env)
+        self.request = create_maintenance_request(self.env, master_key=False)
+        self.request.with_user(self.internal_user).write({"master_key": True})
+
+    def _refresh(self, user):
+        record = self.request.with_user(user)
+        record.invalidate_recordset(["has_unread_master_key_change"])
+        return record
+
+    def test_external_ack_clears_flag_for_everyone(self):
+        record = self._refresh(self.external_user)
+        self.assertTrue(record.has_unread_master_key_change)
+
+        record.action_acknowledge_master_key_change()
+        self.assertFalse(self._refresh(self.external_user).has_unread_master_key_change)
+        self.assertFalse(self._refresh(self.internal_user).has_unread_master_key_change)
+        self.assertTrue(self.request.master_key_ack_at)
+
+    def test_internal_ack_clears_flag_for_everyone(self):
+        record = self._refresh(self.internal_user)
+        self.assertTrue(record.has_unread_master_key_change)
+
+        record.action_acknowledge_master_key_change()
+        self.assertFalse(self._refresh(self.external_user).has_unread_master_key_change)
+        self.assertFalse(self._refresh(self.internal_user).has_unread_master_key_change)
+        self.assertTrue(self.request.master_key_ack_at)
+
+    def test_ack_invalidates_flag_without_manual_refresh(self):
+        # The action must invalidate the non-stored compute so the chip and
+        # button re-evaluate immediately in the UI.
+        record = self.request.with_user(self.external_user)
+        self.assertTrue(record.has_unread_master_key_change)
+
+        record.action_acknowledge_master_key_change()
+        self.assertFalse(record.has_unread_master_key_change)
