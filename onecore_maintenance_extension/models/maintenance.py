@@ -165,6 +165,19 @@ class OneCoreMaintenanceRequest(
         compute="_compute_dialog_indicators",
         store=False,
     )
+    master_key_changed_at = fields.Datetime(
+        string="Huvudnyckel senast ändrad",
+        help="Sätts automatiskt när fältet Huvudnyckel ändras efter att ärendet skapats.",
+    )
+    master_key_ack_at = fields.Datetime(
+        string="Huvudnyckeländring kvitterad",
+        help="Senaste tidpunkt någon kvitterade ändring av huvudnyckel. Delas av alla användare som har tillgång till ärendet.",
+    )
+    has_unread_master_key_change = fields.Boolean(
+        string="Okvitterad huvudnyckeländring",
+        compute="_compute_has_unread_master_key_change",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -467,6 +480,20 @@ class OneCoreMaintenanceRequest(
             unread_ids.add(message.id)
         return unread_ids
 
+    @api.depends("master_key_changed_at", "master_key_ack_at")
+    def _compute_has_unread_master_key_change(self):
+        # One shared ack timestamp — first user from any side to click
+        # "Markera som läst" clears the chip for everyone with access to the
+        # request (external contractors, equipment managers, internal staff).
+        for record in self:
+            if not record.master_key_changed_at:
+                record.has_unread_master_key_change = False
+                continue
+            ack_at = record.master_key_ack_at
+            record.has_unread_master_key_change = (
+                not ack_at or record.master_key_changed_at > ack_at
+            )
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -488,6 +515,21 @@ class OneCoreMaintenanceRequest(
             ["has_unread_supplier_dialog", "has_unread_internal_dialog"]
         )
         self.env["mail.message"].invalidate_model(["is_dialog_unread_for_side"])
+        return True
+
+    def action_acknowledge_master_key_change(self):
+        """Mark the master-key change read for every viewer of the request.
+
+        Acknowledgement is one timestamp per request, shared by everyone with
+        access — the first user to click "Markera som läst" (external
+        contractor, equipment manager, or internal handler) clears the chip
+        and the chatter button for the whole audience.
+        """
+        self.ensure_one()
+        self.master_key_ack_at = fields.Datetime.now()
+        # Non-stored computed field — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
+        self.invalidate_recordset(["has_unread_master_key_change"])
         return True
 
     def _send_creation_sms(self):
@@ -897,6 +939,16 @@ class OneCoreMaintenanceRequest(
             {} if skip_tracking else self._track_loan_product_changes(vals)
         )
 
+        # MIM-1846: stamp the change time so every viewer of the request
+        # gets an unacknowledged-change chip on the kanban card. Capture old
+        # values before super().write() applies the new one.
+        master_key_changed_ids = []
+        if "master_key" in vals:
+            new_master_key = vals["master_key"]
+            for record in self:
+                if record.master_key != new_master_key:
+                    master_key_changed_ids.append(record.id)
+
         # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
         changes_by_record = (
@@ -921,6 +973,11 @@ class OneCoreMaintenanceRequest(
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
+
+        if master_key_changed_ids:
+            self.browse(master_key_changed_ids).write(
+                {"master_key_changed_at": fields.Datetime.now()}
+            )
 
         # Post loan product messages first, then other change notifications
         if not skip_tracking:

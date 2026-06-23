@@ -103,6 +103,8 @@ class FieldChangeTracker:
         "display_name",
         "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
+        "master_key_changed_at",
+        "master_key_ack_at",
     }
 
     def __init__(self, env):

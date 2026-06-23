@@ -26,6 +26,11 @@
                         Meddelande från Mimer
                     </span>
                 </div>
+                <div t-if="record.has_unread_master_key_change.raw_value">
+                    <span class="mimer-badge mimer-badge-orange">
+                        Huvudnyckel ändrad
+                    </span>
+                </div>
             </div>
         </div>
 

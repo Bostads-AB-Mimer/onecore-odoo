@@ -62,11 +62,23 @@ patch(Chatter.prototype, {
     if (!record?.resId) {
       return;
     }
-    await this.env.services.orm.call(
-      "maintenance.request",
-      "action_acknowledge_dialog",
-      [[record.resId]],
-    );
+    // The button is shared by two independent unread signals: the
+    // bidirectional supplier/internal dialog and the one-directional
+    // master-key change shared by all viewers. One click clears both.
+    // The dialog RPC is a no-op when no log-note dialog is unread for the
+    // caller's side, so calling both unconditionally is safe.
+    await Promise.all([
+      this.env.services.orm.call(
+        "maintenance.request",
+        "action_acknowledge_dialog",
+        [[record.resId]],
+      ),
+      this.env.services.orm.call(
+        "maintenance.request",
+        "action_acknowledge_master_key_change",
+        [[record.resId]],
+      ),
+    ]);
     // Reload the form record so has_unread_* refreshes -> the button hides.
     await record.load();
     // Re-fetch the chatter messages so is_dialog_unread_for_side is
