@@ -9,11 +9,15 @@ from markupsafe import Markup
 class MaintenanceStageManager:
     """Service for managing maintenance request workflow and stage transitions."""
 
+    PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad")
+
     def __init__(self, env):
         self.env = env
 
     def handle_stage_change(self, record, new_stage_id, vals=None):
         """Handle all logic when stage changes. Returns dict of field updates."""
+        self._validate_priority_set(record, new_stage_id)
+
         # Handle resource assignment workflow
         # Check both the current user_id and any user_id being set in the same write
         has_user = record.user_id or (vals and vals.get("user_id"))
@@ -41,6 +45,7 @@ class MaintenanceStageManager:
             # Auto-transition to "Resurs tilldelad" when user is assigned
             resource_allocated_stage = self._get_stage_by_name("Resurs tilldelad")
             if resource_allocated_stage:
+                self._validate_priority_set(record, resource_allocated_stage.id)
                 return {"stage_id": resource_allocated_stage.id}
 
         elif new_user_id is False and record.stage_id.name != "Avslutad":
@@ -59,6 +64,17 @@ class MaintenanceStageManager:
         if new_stage_id not in allowed_stages.ids:
             raise exceptions.UserError(
                 "Ingen resurs är tilldelad. Vänligen välj en resurs."
+            )
+
+    def _validate_priority_set(self, record, new_stage_id):
+        """Validate priority_expanded is set before moving to a handling stage."""
+        new_stage = self.env["maintenance.stage"].browse(new_stage_id)
+        if new_stage.name in self.PRIORITY_EXEMPT_STAGES:
+            return
+        if not record.priority_expanded:
+            raise exceptions.UserError(
+                _("Prioritet måste anges innan ärendet flyttas till '%s'.")
+                % new_stage.name
             )
 
     def handle_initial_user_assignment(self, request):

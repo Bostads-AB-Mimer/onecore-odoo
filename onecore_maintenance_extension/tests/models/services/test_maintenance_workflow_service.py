@@ -160,6 +160,97 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         self.assertTrue(request.performed_date)
         self.assertGreaterEqual(request.performed_date, first_performed_date)
 
+    def test_priority_required_for_resurs_tilldelad(self):
+        """Moving from 'Väntar på handläggning' to 'Resurs tilldelad' without priority raises."""
+        # Create with a priority + user so the auto-transition during create
+        # succeeds, then clear priority in the same write that returns the
+        # request to 'Väntar' (exempt). This leaves a record that has a user
+        # assigned (so _validate_unassigned_resource passes) but no priority.
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            user_id=self.internal_user.id,
+        )
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_vantar.id, "priority_expanded": False}
+        )
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"stage_id": self.stage_tilldelad.id}
+            )
+
+    def test_priority_required_for_utford(self):
+        """Moving to 'Utförd' without priority raises."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            user_id=self.internal_user.id,
+        )
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_vantar.id, "priority_expanded": False}
+        )
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"stage_id": self.stage_utford.id}
+            )
+
+    def test_priority_not_required_for_avslutad(self):
+        """Closing directly to 'Avslutad' without priority is allowed."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_avslutad.id}
+        )
+
+        self.assertEqual(request.stage_id, self.stage_avslutad)
+
+    def test_priority_not_required_when_staying_in_vantar(self):
+        """Writes that don't change stage succeed with empty priority."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        request.with_user(self.internal_user).write({"description": "uppdaterad"})
+
+        self.assertFalse(request.priority_expanded)
+        self.assertEqual(request.stage_id, self.stage_vantar)
+
+    def test_auto_transition_via_user_assignment_requires_priority(self):
+        """Assigning a user while in 'Väntar på handläggning' without priority must raise."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded=False,
+        )
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"user_id": self.internal_user.id}
+            )
+
+    def test_auto_transition_via_user_assignment_passes_when_priority_set(self):
+        """Assigning a user when priority is set auto-transitions to 'Resurs tilldelad'."""
+        request = create_maintenance_request(
+            self.env,
+            stage_id=self.stage_vantar.id,
+            priority_expanded="7",
+        )
+
+        request.with_user(self.internal_user).write(
+            {"user_id": self.internal_user.id}
+        )
+
+        self.assertEqual(request.stage_id, self.stage_tilldelad)
+        self.assertEqual(request.user_id, self.internal_user)
+
 
 @tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
