@@ -480,7 +480,8 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <p class="mb-1 fw-bold inline-block">Planlösning:</p>
-                                    <field name="floor_plan_image" widget="image" />
+                                    <field name="floor_plan_image" widget="image_viewer"
+                                        thumbnailSize="160" nolabel="1" />
                                 </div>
                             </div>
                         </div>
