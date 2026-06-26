@@ -177,8 +177,9 @@
                         </div>
                     </div>
                     <div>
-                        <p class="mb-1 fw-bold inline-block">Beskrivning:</p>
-                        <field name="description" readonly="1"></field>
+                        <p class="mb-1 fw-bold inline-block">Ärendebeskrivning:</p>
+                        <field name="description"
+                            readonly="user_is_external_contractor"></field>
                     </div>
 
                     <div class="d-flex w-100 justify-content-between justify-content-md-start"
@@ -712,26 +713,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <div
-                            class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3 d-md-none"
-                            groups="maintenance.group_equipment_manager">
-                            <h2 class="accordion-header">
-                                <button name="accordion-button-5"
-                                    class="accordion-button collapsed fs-3 fw-bold"
-                                    type="button" data-bs-toggle="collapse"
-                                    data-bs-target="#flush-collapse5" aria-expanded="false"
-                                    aria-controls="flush-collapse5">
-                                    Anteckningar
-                                </button>
-                            </h2>
-                            <div id="flush-collapse5" class="accordion-collapse collapse"
-                                data-bs-parent="#accordionFlush">
-                                <div class="accordion-body">
-                                    <field name='description' placeholder="Ärendebeskrivning" />
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </xpath>
 
@@ -748,13 +729,8 @@
                     <attribute name="invisible">1</attribute>
                 </xpath>
 
-                <xpath expr="//notebook" position="replace">
-                    <notebook class="d-none d-md-block" groups="maintenance.group_equipment_manager">
-                        <page string="Ärendebeskrivning">
-                            <field name='description' placeholder="Ärendebeskrivning" />
-                        </page>
-                    </notebook>
-                </xpath>
+                <!-- Description is now shown once at the top of the form -->
+                <xpath expr="//notebook" position="replace" />
             </field>
         </record>
 
