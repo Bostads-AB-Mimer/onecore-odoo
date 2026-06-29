@@ -459,31 +459,6 @@
                                 </div>
                             </div>
                         </div>
-                        <div
-                            class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3"
-                            invisible="not floor_plan_image">
-                            <h2 class="accordion-header">
-                                <button name="accordion-button-2"
-                                    class="accordion-button collapsed d-md-none fs-3 fw-bold"
-                                    type="button" data-bs-toggle="collapse"
-                                    data-bs-target="#flush-collapse2" aria-expanded="false"
-                                    aria-controls="flush-collapse2">
-                                    Bofaktablad
-                                </button>
-                                <!-- Show just as a header on desktop -->
-                                <div
-                                    class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
-                                    Bofaktablad
-                                </div>
-                            </h2>
-                            <div id="flush-collapse2" class="accordion-collapse collapse d-md-block"
-                                data-bs-parent="#accordionFlush">
-                                <div class="accordion-body">
-                                    <p class="mb-1 fw-bold inline-block">Planlösning:</p>
-                                    <field name="floor_plan_image" widget="image" />
-                                </div>
-                            </div>
-                        </div>
                         <!-- Block 2 -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
@@ -599,7 +574,7 @@
                             </div>
                         </div>
                         <!-- Block 3 -->
-                        <div class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3">
+                        <div class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-4"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
@@ -710,6 +685,34 @@
                                         class="btn btn-secondary mt-2 mb-2"
                                         help="Uppdatera eller lägg till komponent"
                                         invisible="space_caption != 'Lägenhet' or user_is_external_contractor or not id" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bofaktablad -->
+                        <div
+                            class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3"
+                            invisible="not floor_plan_image">
+                            <h2 class="accordion-header">
+                                <button name="accordion-button-2"
+                                    class="accordion-button collapsed d-md-none fs-3 fw-bold"
+                                    type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#flush-collapse2" aria-expanded="false"
+                                    aria-controls="flush-collapse2">
+                                    Bofaktablad
+                                </button>
+                                <!-- Show just as a header on desktop -->
+                                <div
+                                    class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
+                                    Bofaktablad
+                                </div>
+                            </h2>
+                            <div id="flush-collapse2" class="accordion-collapse collapse d-md-block"
+                                data-bs-parent="#accordionFlush">
+                                <div class="accordion-body">
+                                    <p class="mb-1 fw-bold inline-block">Planlösning:</p>
+                                    <field name="floor_plan_image" widget="image_viewer"
+                                        thumbnailSize="160" nolabel="1" />
                                 </div>
                             </div>
                         </div>
