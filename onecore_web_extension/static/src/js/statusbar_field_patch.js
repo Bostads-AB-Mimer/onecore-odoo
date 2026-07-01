@@ -85,35 +85,40 @@ patch(StatusBarField.prototype, {
       return super.selectItem(item);
     }
 
-    // Internal users on apartment ärenden: ask the component question
-    const isApartment =
-      record.data.space_caption === "Lägenhet" && !!record.resId;
-    let answer = null;
-
-    if (isApartment) {
-      answer = await askComponentQuestion(this.dialogService);
-      if (answer === "abort") {
-        return;
-      }
-    }
+    // Component question popup disabled: internal users moving an apartment
+    // ärende to Utförd no longer get the "Har du bytt ut eller ändrat..."
+    // prompt. The component wizard is still reachable via the
+    // "Uppdatera/lägg till Komponent" button on the ärende. To re-enable the
+    // popup, uncomment the two blocks below.
+    // // Internal users on apartment ärenden: ask the component question
+    // const isApartment =
+    //   record.data.space_caption === "Lägenhet" && !!record.resId;
+    // let answer = null;
+    //
+    // if (isApartment) {
+    //   answer = await askComponentQuestion(this.dialogService);
+    //   if (answer === "abort") {
+    //     return;
+    //   }
+    // }
 
     // Odoo 19's selectItem awaits record.update() + record.save(); awaiting
     // here guarantees the stage write committed before the wizard opens.
     await super.selectItem(item);
 
-    if (
-      answer === "yes" &&
-      record.resId &&
-      !record.dirty &&
-      record.data.stage_id?.id === item.value
-    ) {
-      await openComponentWizardDialog(
-        this.orm,
-        this.actionService,
-        this.notificationService,
-        record.resId,
-        this.uiService
-      );
-    }
+    // if (
+    //   answer === "yes" &&
+    //   record.resId &&
+    //   !record.dirty &&
+    //   record.data.stage_id?.id === item.value
+    // ) {
+    //   await openComponentWizardDialog(
+    //     this.orm,
+    //     this.actionService,
+    //     this.notificationService,
+    //     record.resId,
+    //     this.uiService
+    //   );
+    // }
   },
 });

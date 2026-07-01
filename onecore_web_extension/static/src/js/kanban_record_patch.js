@@ -16,8 +16,11 @@ import { openComponentWizardDialog } from "./open_component_wizard_dialog";
  * Module-level because the model hooks are reassigned per KanbanRecord
  * instance — per-instance state would be unsafe. Keyed by resId, value is
  * the target stage id (revalidated after save).
+ *
+ * Component question popup disabled — this Map is currently unused. Kept
+ * commented for easy re-enabling alongside the component question.
  */
-const pendingComponentWizard = new Map();
+// const pendingComponentWizard = new Map();
 
 /**
  * Shows a dialog asking if the loan product has been returned.
@@ -112,44 +115,53 @@ patch(KanbanRecord.prototype, {
           );
         }
 
-        // Internal users on apartment ärenden: ask the component question
-        if (record.data.space_caption === "Lägenhet" && record.resId) {
-          const answer = await askComponentQuestion(this.dialogService);
-          if (answer === "abort") {
-            return false;
-          }
-          if (answer === "yes") {
-            pendingComponentWizard.set(record.resId, changes.stage_id);
-          }
-          return true;
-        }
+        // Component question popup disabled: internal users moving an
+        // apartment ärende to Utförd no longer get the "Har du bytt ut eller
+        // ändrat..." prompt, so the stage change just commits. The component
+        // wizard is still reachable via the "Uppdatera/lägg till Komponent"
+        // button on the ärende. To re-enable, uncomment the block below (and
+        // the onRecordSaved wizard-opener further down).
+        // // Internal users on apartment ärenden: ask the component question
+        // if (record.data.space_caption === "Lägenhet" && record.resId) {
+        //   const answer = await askComponentQuestion(this.dialogService);
+        //   if (answer === "abort") {
+        //     return false;
+        //   }
+        //   if (answer === "yes") {
+        //     pendingComponentWizard.set(record.resId, changes.stage_id);
+        //   }
+        //   return true;
+        // }
       }
 
       return true;
     };
 
-    // Opens the component wizard AFTER the stage write committed. NOTE:
-    // model hooks are single-slot — another patch assigning onRecordSaved
-    // would clobber this (nothing else in the repo does today).
-    this.props.record.model.hooks.onRecordSaved = async (record) => {
-      if (!isMaintenanceRequest) {
-        return;
-      }
-      const targetStageId = pendingComponentWizard.get(record.resId);
-      if (targetStageId === undefined) {
-        return;
-      }
-      // Consume before opening — guards against double-fire
-      pendingComponentWizard.delete(record.resId);
-      if (record.data.stage_id?.id === targetStageId) {
-        await openComponentWizardDialog(
-          this.orm,
-          this.actionService,
-          this.notificationService,
-          record.resId,
-          this.uiService
-        );
-      }
-    };
+    // Component question popup disabled (see onWillSaveRecord above), so this
+    // wizard-opener is dead: pendingComponentWizard is never populated. Kept
+    // commented for easy re-enabling alongside the component question.
+    // // Opens the component wizard AFTER the stage write committed. NOTE:
+    // // model hooks are single-slot — another patch assigning onRecordSaved
+    // // would clobber this (nothing else in the repo does today).
+    // this.props.record.model.hooks.onRecordSaved = async (record) => {
+    //   if (!isMaintenanceRequest) {
+    //     return;
+    //   }
+    //   const targetStageId = pendingComponentWizard.get(record.resId);
+    //   if (targetStageId === undefined) {
+    //     return;
+    //   }
+    //   // Consume before opening — guards against double-fire
+    //   pendingComponentWizard.delete(record.resId);
+    //   if (record.data.stage_id?.id === targetStageId) {
+    //     await openComponentWizardDialog(
+    //       this.orm,
+    //       this.actionService,
+    //       this.notificationService,
+    //       record.resId,
+    //       this.uiService
+    //     );
+    //   }
+    // };
   },
 });
