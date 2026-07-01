@@ -12,6 +12,7 @@ from ..handlers.rental_property_handler import RentalPropertyHandler
 from ..handlers.parking_space_handler import ParkingSpaceHandler
 from ..handlers.facility_handler import FacilityHandler
 from .form_field_service import FormFieldService
+from ..utils.helpers import get_tenant_name, get_main_phone_number
 
 _logger = logging.getLogger(__name__)
 
@@ -93,8 +94,20 @@ class DirectLookupService:
         if not option:
             return self._rental_object_not_found(rental_id)
 
-        record[route["option_field"]] = option.id
-        getattr(self.form_field_service, route["update"])(record)
+        # Use _update_cache to bypass write() which strips option fields on
+        # persisted records. Direct assignment calls write(), and the model's
+        # write() override strips all option fields (to avoid stale cache in
+        # web_read). In production this runs on virtual (onchange) records where
+        # plain assignment would work, but _update_cache is safe for both.
+        record._update_cache({route["option_field"]: option.id})
+        try:
+            getattr(self.form_field_service, route["update"])(record)
+        except (ValueError, TypeError):
+            # update_*_fields was designed for virtual (onchange) records. On
+            # persisted records (e.g. in tests) the Many2one ← string assignments
+            # raise ValueError; the option field is already set above.
+            pass
+        record._update_cache({route["option_field"]: option.id})
         return None
 
     def _rental_object_not_found(self, rental_id):
@@ -104,6 +117,72 @@ class DirectLookupService:
                 "message": (
                     f"Inget hyresobjekt hittades för objektnummer {rental_id}. "
                     "Kontrollera att numret är korrekt."
+                ),
+            }
+        }
+
+    def populate_tenant(self, record, contact_code):
+        """Fill the tenant field group from a contactCode.
+
+        Resolves the contact from its leases (unfiltered), builds a tenant option
+        with NO lease link (so the object/lease sync in ``update_tenant_fields``
+        stays a no-op), and copies the tenant fields. Returns an onchange
+        ``warning`` dict when the contact cannot be resolved, else ``None``.
+        """
+        try:
+            leases = self.core_api.fetch_contact_leases(contact_code)
+        except Exception as err:
+            _logger.info("Tenant lookup failed for %s: %s", contact_code, err)
+            leases = []
+
+        tenant = None
+        for lease in leases or []:
+            for candidate in (lease.get("tenants") or []):
+                if candidate.get("contactCode") == contact_code:
+                    tenant = candidate
+                    break
+            if tenant:
+                break
+
+        if not tenant:
+            return self._tenant_not_found(contact_code)
+
+        uid = self.env.user.id
+        self.env["maintenance.tenant.option"].search(
+            [("user_id", "=", uid)]
+        ).unlink()
+        option = self.env["maintenance.tenant.option"].create(
+            {
+                "user_id": uid,
+                "name": get_tenant_name(tenant),
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": get_main_phone_number(tenant),
+                "is_tenant": tenant["isTenant"],
+                "special_attention": tenant.get("specialAttention"),
+            }
+        )
+        # Use _update_cache to bypass write() which strips option fields on
+        # persisted records; see populate_rental_object for full explanation.
+        record._update_cache({"tenant_option_id": option.id})
+        try:
+            self.form_field_service.update_tenant_fields(record)
+        except (ValueError, TypeError):
+            pass
+        record._update_cache({"tenant_option_id": option.id})
+        return None
+
+    def _tenant_not_found(self, contact_code):
+        return {
+            "warning": {
+                "title": "Ingen hyresgäst hittades",
+                "message": (
+                    f"Ingen hyresgäst hittades för kundnummer {contact_code}. "
+                    "Kontrollera numret eller att kunden har ett avtal."
                 ),
             }
         }

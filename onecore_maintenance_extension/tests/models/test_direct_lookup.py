@@ -59,3 +59,56 @@ class TestPopulateRentalObject(TransactionCase):
         result = self.service.populate_rental_object(request, "whatever")
         self.assertIsNone(result)
         self.core_api.fetch_residence.assert_not_called()
+
+
+CONTACT_LEASES = [
+    {
+        "tenants": [
+            {
+                "contactCode": "P123456",
+                "contactKey": "K1",
+                "firstName": "Anna",
+                "lastName": "Andersson",
+                "nationalRegistrationNumber": "199001011234",
+                "emailAddress": "anna@example.com",
+                "phoneNumbers": [{"phoneNumber": "0700000000", "isMainNumber": 1}],
+                "isTenant": True,
+                "specialAttention": False,
+            }
+        ]
+    }
+]
+
+
+@tagged("onecore")
+class TestPopulateTenant(TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.core_api = MagicMock()
+        self.service = DirectLookupService(self.env, self.core_api)
+
+    def test_contact_code_fills_tenant_option_only(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_contact_leases.return_value = CONTACT_LEASES
+
+        result = self.service.populate_tenant(request, "P123456")
+
+        self.assertIsNone(result)
+        self.core_api.fetch_contact_leases.assert_called_once_with("P123456")
+        option = request.tenant_option_id
+        self.assertTrue(option)
+        self.assertEqual(option.name, "Anna Andersson")
+        self.assertEqual(option.contact_code, "P123456")
+        self.assertEqual(option.phone_number, "0700000000")
+        # Strictly independent: object is untouched.
+        self.assertFalse(request.rental_property_option_id)
+
+    def test_unknown_contact_code_returns_warning(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_contact_leases.return_value = []
+
+        result = self.service.populate_tenant(request, "P999999")
+
+        self.assertIn("warning", result)
+        self.assertEqual(result["warning"]["title"], "Ingen hyresgäst hittades")
+        self.assertFalse(request.tenant_option_id)
