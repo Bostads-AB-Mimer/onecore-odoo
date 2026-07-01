@@ -11,7 +11,6 @@ import logging
 from ..handlers.rental_property_handler import RentalPropertyHandler
 from ..handlers.parking_space_handler import ParkingSpaceHandler
 from ..handlers.facility_handler import FacilityHandler
-from ..utils.helpers import get_tenant_name, get_main_phone_number
 from .form_field_service import FormFieldService
 
 _logger = logging.getLogger(__name__)

@@ -42,6 +42,7 @@ class TestPopulateRentalObject(TransactionCase):
         # Strictly independent: tenant is untouched.
         self.assertFalse(request.tenant_option_id)
         self.assertFalse(request.tenant_id)
+        self.assertFalse(request.lease_option_id)
 
     def test_missing_residence_returns_warning(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
