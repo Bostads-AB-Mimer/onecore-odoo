@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.LookupButtonField">
+        <div class="input-group">
+            <input
+                type="text"
+                class="form-control"
+                t-att-value="state.value"
+                t-att-placeholder="placeholder"
+                t-on-input="onInput"
+                t-on-keydown="onKeydown"
+                autocomplete="off"
+            />
+            <button
+                type="button"
+                class="btn btn-primary"
+                t-on-click="fetch"
+            >
+                <t t-esc="buttonLabel"/>
+            </button>
+        </div>
+    </t>
+
+</templates>
