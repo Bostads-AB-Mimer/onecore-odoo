@@ -174,12 +174,22 @@ class OneCoreMailMessage(models.Model):
     def get_core_api(self):
         return core_api.CoreApi(self.env)
 
-    def _send_email(self, to_email, subject, text, team_name=None):
+    def _send_email(
+        self,
+        to_email,
+        subject,
+        text,
+        team_name=None,
+        contact_code=None,
+        triggered_by_user=None,
+    ):
         data = {
             "to": to_email,
             "subject": subject,
             "text": text,
             "externalContractorName": team_name,
+            "contactCode": contact_code,
+            "triggeredByUser": triggered_by_user,
         }
 
         try:
@@ -194,11 +204,20 @@ class OneCoreMailMessage(models.Model):
             _logger.error(f"An error occurred: {err}")
         return None
 
-    def _send_sms(self, phone_number, text, team_name=None):
+    def _send_sms(
+        self,
+        phone_number,
+        text,
+        team_name=None,
+        contact_code=None,
+        triggered_by_user=None,
+    ):
         data = {
             "phoneNumber": phone_number,
             "text": text,
             "externalContractorName": team_name,
+            "contactCode": contact_code,
+            "triggeredByUser": triggered_by_user,
         }
 
         try:
@@ -231,12 +250,20 @@ class OneCoreMailMessage(models.Model):
                     else None
                 )
 
+                # Attach the dispatch to the tenant's timeline (contactCode) and
+                # record who triggered it, so OneCore can write a communication
+                # log entry for the outbound SMS/email.
+                contact_code = the_record.tenant_id.contact_code
+                triggered_by_user = self.env.user.name
+
                 # send by sms
                 if values["message_type"] == "tenant_sms":
                     send_sms_result = self._send_sms(
                         the_record.tenant_id.phone_number,
                         body,
                         team_name,
+                        contact_code,
+                        triggered_by_user,
                     )
 
                     if send_sms_result is None:
@@ -249,6 +276,8 @@ class OneCoreMailMessage(models.Model):
                         subject,
                         body,
                         team_name,
+                        contact_code,
+                        triggered_by_user,
                     )
 
                     if send_email_result is None:
@@ -257,10 +286,19 @@ class OneCoreMailMessage(models.Model):
                 # send by email and sms
                 if values["message_type"] == "tenant_mail_and_sms":
                     send_email_result = self._send_email(
-                        the_record.tenant_id.email_address, subject, body, team_name
+                        the_record.tenant_id.email_address,
+                        subject,
+                        body,
+                        team_name,
+                        contact_code,
+                        triggered_by_user,
                     )
                     send_sms_result = self._send_sms(
-                        the_record.tenant_id.phone_number, body, team_name
+                        the_record.tenant_id.phone_number,
+                        body,
+                        team_name,
+                        contact_code,
+                        triggered_by_user,
                     )
 
                     if send_email_result is None and send_sms_result is not None:
