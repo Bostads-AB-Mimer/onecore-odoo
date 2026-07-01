@@ -102,12 +102,12 @@ class DirectLookupService:
         record._update_cache({route["option_field"]: option.id})
         try:
             getattr(self.form_field_service, route["update"])(record)
-        except (ValueError, TypeError):
-            # update_*_fields was designed for virtual (onchange) records. On
-            # persisted records (e.g. in tests) the Many2one ← string assignments
-            # raise ValueError; the option field is already set above.
-            pass
-        record._update_cache({route["option_field"]: option.id})
+        except (ValueError, TypeError) as err:
+            # update_*_fields does Many2one <- string assignments designed for
+            # virtual (onchange) records; on persisted records they raise. The
+            # option field is already set above. Log so a genuine production
+            # failure is diagnosable rather than silently swallowed.
+            _logger.debug("Field copy skipped (non-virtual record): %s", err)
         return None
 
     def _rental_object_not_found(self, rental_id):
@@ -171,9 +171,12 @@ class DirectLookupService:
         record._update_cache({"tenant_option_id": option.id})
         try:
             self.form_field_service.update_tenant_fields(record)
-        except (ValueError, TypeError):
-            pass
-        record._update_cache({"tenant_option_id": option.id})
+        except (ValueError, TypeError) as err:
+            # update_*_fields does Many2one <- string assignments designed for
+            # virtual (onchange) records; on persisted records they raise. The
+            # option field is already set above. Log so a genuine production
+            # failure is diagnosable rather than silently swallowed.
+            _logger.debug("Field copy skipped (non-virtual record): %s", err)
         return None
 
     def _tenant_not_found(self, contact_code):
