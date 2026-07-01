@@ -174,6 +174,23 @@ class CoreApi:
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
 
+    def fetch_contact_leases(self, contact_code):
+        """Fetch all leases for a contact by contact code, WITHOUT location-type
+        filtering.
+
+        Used by the direct tenant lookup (MIM-1841): the contact must resolve
+        regardless of lease type, so this deliberately skips
+        ``filter_lease_on_location_type``. Returns a list of lease dicts (each
+        may carry a ``tenants`` list); empty list when there is no content.
+        """
+        content = self._get_json(
+            f"/leases/by-contact-code/{urllib.parse.quote(str(contact_code), safe='')}",
+            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
+        )
+        if content is None:
+            return []
+        return content if isinstance(content, list) else [content]
+
     def filter_lease_on_location_type(self, data, location_type):
         """
         Filter leases based on location type.
