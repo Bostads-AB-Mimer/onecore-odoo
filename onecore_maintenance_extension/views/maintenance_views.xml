@@ -241,12 +241,6 @@
                                             invisible="not staircase_accessible_by_elevator or space_caption != 'Uppgång'" />
 
                                         <!-- Rental property fields -->
-                                        <!-- MIM-1841: add missing rental object by pasting objektnummer -->
-                                        <field name="rental_object_lookup"
-                                            widget="lookup_button"
-                                            string="Objektnummer"
-                                            placeholder="Klistra in objektnummer"
-                                            invisible="rental_property_id or not create_date" />
                                         <field name="rental_property_option_id"
                                             string="Hyresobjekt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -406,11 +400,6 @@
                                         <field name="parking_space_option_id" string="Bilplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not parking_space_option_id or create_date" />
-                                        <field name="rental_object_lookup"
-                                            widget="lookup_button"
-                                            string="Objektnummer"
-                                            placeholder="Klistra in objektnummer"
-                                            invisible="parking_space_id or not create_date" />
                                         <field name="parking_space_id" string="Bilplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
@@ -436,11 +425,6 @@
                                             name="facility_option_id" string="Lokal"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="create_date != False" />
-                                        <field name="rental_object_lookup"
-                                            widget="lookup_button"
-                                            string="Objektnummer"
-                                            placeholder="Klistra in objektnummer"
-                                            invisible="facility_id or not create_date" />
                                         <field name="facility_id" string="Lokal"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
@@ -510,12 +494,6 @@
                                     <group>
                                         <field name="empty_tenant" invisible="1" />
                                         <field name="recently_added_tenant" invisible="1" />
-                                        <!-- MIM-1841: add missing tenant by pasting kundnummer -->
-                                        <field name="tenant_lookup"
-                                            widget="lookup_button"
-                                            nolabel="1"
-                                            placeholder="Klistra in kundnummer"
-                                            invisible="not empty_tenant or not create_date" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not lease_option_id or create_date"

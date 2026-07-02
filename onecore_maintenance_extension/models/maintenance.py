@@ -17,7 +17,6 @@ from .services import (
     FormFieldService,
     ExternalContractorService,
     MaintenanceStageManager,
-    DirectLookupService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -773,29 +772,6 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_facility_fields(record)
-
-    @api.onchange("rental_object_lookup")
-    def _onchange_rental_object_lookup(self):
-        if not self.rental_object_lookup:
-            return
-        value = self.rental_object_lookup.strip()
-        # Reset the transient input regardless of outcome.
-        self.rental_object_lookup = False
-        if not value:
-            return
-        service = DirectLookupService(self.env, self.get_core_api())
-        return service.populate_rental_object(self, value)
-
-    @api.onchange("tenant_lookup")
-    def _onchange_tenant_lookup(self):
-        if not self.tenant_lookup:
-            return
-        value = self.tenant_lookup.strip()
-        self.tenant_lookup = False
-        if not value:
-            return
-        service = DirectLookupService(self.env, self.get_core_api())
-        return service.populate_tenant(self, value)
 
     @api.onchange("user_id")
     def _onchange_user_id(self):

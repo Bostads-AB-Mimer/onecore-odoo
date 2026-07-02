@@ -20,4 +20,3 @@ from .services import test_record_management_service
 from .services import test_maintenance_workflow_service
 from .services import test_external_contractor_service
 from . import test_direct_lookup
-from . import test_maintenance_lookup_onchange

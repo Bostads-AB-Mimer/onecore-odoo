@@ -18,10 +18,6 @@ class SearchFieldsMixin(models.AbstractModel):
         store=True,
     )
 
-    # Paste-to-populate lookups (MIM-1841): transient inputs, never stored.
-    rental_object_lookup = fields.Char("Objektnummer", store=False)
-    tenant_lookup = fields.Char("Slå upp hyresgäst", store=False)
-
     # Search option fields (populated by handlers, transient - not stored)
     property_option_id = fields.Many2one(
         "maintenance.property.option",
