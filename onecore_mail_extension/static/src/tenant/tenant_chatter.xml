@@ -25,6 +25,18 @@
             Markera som läst
         </button>
     </xpath>
+
+    <!-- Pinned messages section ("Fästa") at the top of the chatter content -->
+    <xpath expr="//div[hasclass('o-mail-Chatter-content')]/t[1]" position="before">
+        <div class="o-mimer-PinnedMessages" t-if="pinnedMessages.length">
+            <div class="o-mimer-PinnedMessages-header">
+                <i class="fa fa-thumb-tack me-1"/>Fästa noteringar
+            </div>
+            <t t-foreach="pinnedMessages" t-as="msg" t-key="msg.id">
+                <Message message="msg" thread="state.thread"/>
+            </t>
+        </div>
+    </xpath>
 </t>
 
 <t t-name="onecore_mail_extension.TenantMessageNotification" t-inherit="mail.Message.notification" t-inherit-mode="extension">

@@ -1,9 +1,14 @@
 /** @odoo-module **/
 
 import { Chatter } from "@mail/chatter/web_portal/chatter";
+import { Message } from "@mail/core/common/message";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { patch } from "@web/core/utils/patch";
 import { _t } from "@web/core/l10n/translation";
+
+patch(Chatter, {
+  components: { ...Chatter.components, Message },
+});
 
 // Odoo's Chatter auto-saves the underlying record when Send message / Log note /
 // Activity is clicked on an unsaved record. For maintenance.request this triggers
@@ -13,6 +18,15 @@ patch(Chatter.prototype, {
   setup() {
     super.setup();
     this.dialogService = this.env.services.dialog;
+  },
+
+  get pinnedMessages() {
+    const thread = this.state.thread;
+    if (!thread?.messages) {
+      return [];
+    }
+    // id order ≈ chronological order (same order as the log).
+    return thread.messages.filter((m) => m.pinned_at).sort((a, b) => a.id - b.id);
   },
 
   _isUnsavedMaintenanceRequest() {

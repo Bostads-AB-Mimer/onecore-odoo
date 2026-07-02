@@ -77,3 +77,30 @@ $mimer-dialog-unread-border: #FFB74D;
         flex: 1 1 100%;
     }
 }
+
+// "Fästa" pinned-messages section rendered at the top of the chatter content.
+// Sticky so it stays visible while scrolling the log ("saker som inte får missas").
+.o-mimer-PinnedMessages {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 16px 12px;
+    padding: 8px;
+    border: 1px solid $mimer-dialog-unread-border;
+    border-radius: 4px;
+    background-color: #FFF6E9;
+
+    .o-mimer-PinnedMessages-header {
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    // Messages inside the section span full width (cancel the log's side margin).
+    .o-mail-Message {
+        margin: 0;
+    }
+
+    .o-mail-Message + .o-mail-Message {
+        margin-top: 8px;
+    }
+}
