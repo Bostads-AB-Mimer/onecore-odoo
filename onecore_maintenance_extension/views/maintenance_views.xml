@@ -244,7 +244,7 @@
                                         <button name="open_backfill_rental_object_wizard"
                                             type="object" string="Lägg till hyresobjekt"
                                             class="btn btn-link p-0"
-                                            invisible="rental_property_id or not create_date" />
+                                            invisible="rental_property_id or not create_date or user_is_external_contractor" />
                                         <field name="rental_property_option_id"
                                             string="Hyresobjekt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -407,7 +407,7 @@
                                         <button name="open_backfill_rental_object_wizard"
                                             type="object" string="Lägg till hyresobjekt"
                                             class="btn btn-link p-0"
-                                            invisible="parking_space_id or not create_date" />
+                                            invisible="parking_space_id or not create_date or user_is_external_contractor" />
                                         <field name="parking_space_id" string="Bilplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
@@ -436,7 +436,7 @@
                                         <button name="open_backfill_rental_object_wizard"
                                             type="object" string="Lägg till hyresobjekt"
                                             class="btn btn-link p-0"
-                                            invisible="facility_id or not create_date" />
+                                            invisible="facility_id or not create_date or user_is_external_contractor" />
                                         <field name="facility_id" string="Lokal"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
@@ -509,7 +509,7 @@
                                         <button name="open_backfill_tenant_wizard"
                                             type="object" string="Lägg till hyresgäst"
                                             class="btn btn-link p-0"
-                                            invisible="not empty_tenant or not create_date" />
+                                            invisible="not empty_tenant or not create_date or user_is_external_contractor" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not lease_option_id or create_date"

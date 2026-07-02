@@ -1,6 +1,6 @@
 import logging
 
-from odoo import models, fields, api, exceptions, _
+from odoo import models, fields, exceptions, _
 
 from .services.direct_lookup_service import DirectLookupService
 from .services.record_management_service import RecordManagementService
@@ -95,6 +95,11 @@ class MaintenanceBackfillWizard(models.TransientModel):
             route = DirectLookupService(
                 self.env, self._get_core_api()
             ).route_for(request.space_caption)
+            if not route:
+                raise exceptions.UserError(
+                    _("Det går inte att lägga till ett hyresobjekt för utrymmet \"%s\".")
+                    % request.space_caption
+                )
             getattr(record_service, route["save_method"])(
                 request, {route["option_field"]: option.id}
             )
