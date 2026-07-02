@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="maintenance_backfill_wizard_form" model="ir.ui.view">
+            <field name="name">maintenance.backfill.wizard.form</field>
+            <field name="model">maintenance.backfill.wizard</field>
+            <field name="arch" type="xml">
+                <form string="Lägg till">
+                    <sheet>
+                        <field name="maintenance_request_id" invisible="1" />
+                        <field name="lookup_kind" invisible="1" />
+                        <field name="state" invisible="1" />
+                        <field name="option_model" invisible="1" />
+                        <field name="option_res_id" invisible="1" />
+
+                        <group invisible="state != 'input'">
+                            <field name="lookup_value"
+                                string="Objektnummer"
+                                invisible="lookup_kind != 'rental_object'"
+                                placeholder="Klistra in objektnummer" />
+                            <field name="lookup_value"
+                                string="Kundnummer"
+                                invisible="lookup_kind != 'tenant'"
+                                placeholder="Klistra in kundnummer" />
+                        </group>
+
+                        <group invisible="state != 'preview'">
+                            <field name="preview_text" nolabel="1" readonly="1" />
+                        </group>
+                    </sheet>
+                    <footer>
+                        <button string="Sök" name="action_search" type="object"
+                            class="btn-primary" invisible="state != 'input'" />
+                        <button string="Lägg till" name="action_confirm" type="object"
+                            class="btn-primary" invisible="state != 'preview'" />
+                        <button string="Avbryt" class="btn-secondary" special="cancel" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+    </data>
+</odoo>

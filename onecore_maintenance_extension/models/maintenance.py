@@ -1172,3 +1172,25 @@ class OneCoreMaintenanceRequest(
             "target": "new",
             "context": {"dialog_size": "extra-large"},
         }
+
+    def open_backfill_rental_object_wizard(self):
+        return self._open_backfill_wizard("rental_object", "Lägg till hyresobjekt")
+
+    def open_backfill_tenant_wizard(self):
+        return self._open_backfill_wizard("tenant", "Lägg till hyresgäst")
+
+    def _open_backfill_wizard(self, kind, title):
+        self.ensure_one()
+        wizard = self.env["maintenance.backfill.wizard"].create(
+            {"maintenance_request_id": self.id, "lookup_kind": kind}
+        )
+        return {
+            "name": title,
+            "type": "ir.actions.act_window",
+            "res_model": "maintenance.backfill.wizard",
+            "res_id": wizard.id,
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": {"dialog_size": "medium"},
+        }
