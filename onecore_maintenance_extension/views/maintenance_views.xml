@@ -221,6 +221,7 @@
                                 <button name="open_backfill_rental_object_wizard"
                                     type="object"
                                     class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                    style="z-index: 5;"
                                     title="Lägg till / ändra hyresobjekt"
                                     invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
                                     <i class="fa fa-pencil" />
@@ -486,6 +487,7 @@
                                 <button name="open_backfill_tenant_wizard"
                                     type="object"
                                     class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3"
+                                    style="z-index: 5;"
                                     title="Lägg till / ändra hyresgäst"
                                     invisible="not create_date or user_is_external_contractor">
                                     <i class="fa fa-pencil" />
