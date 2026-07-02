@@ -100,6 +100,9 @@ class MaintenanceBackfillWizard(models.TransientModel):
         record_service = RecordManagementService(self.env)
         request = self.maintenance_request_id
         if self.lookup_kind == "tenant":
+            # Capture what we're about to replace so it can be cleaned up.
+            old_tenant = request.tenant_id
+            old_lease = request.lease_id
             # Attach the contract the user chose (defaults to the active one) so
             # the tenant's contract/phone/email block is unlocked, then the tenant.
             if self.lease_option_id and self.lease_option_id.exists():
@@ -107,6 +110,8 @@ class MaintenanceBackfillWizard(models.TransientModel):
                     request, {"lease_option_id": self.lease_option_id.id}
                 )
             record_service._save_tenant(request, {"tenant_option_id": option.id})
+            self._unlink_replaced(old_tenant, request.tenant_id)
+            self._unlink_replaced(old_lease, request.lease_id)
         else:
             route = DirectLookupService(
                 self.env, self._get_core_api()
@@ -116,13 +121,33 @@ class MaintenanceBackfillWizard(models.TransientModel):
                     _("Det går inte att lägga till ett hyresobjekt för utrymmet \"%s\".")
                     % request.space_caption
                 )
+            old_object = request[route["record_field"]]
             getattr(record_service, route["save_method"])(
                 request, {route["option_field"]: option.id}
             )
+            self._unlink_replaced(old_object, request[route["record_field"]])
         # Close the dialog AND reload the underlying request form so the newly
         # materialized tenant/object is shown immediately (act_window_close alone
         # leaves the stale form on screen until a manual refresh).
         return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def _unlink_replaced(self, old_record, new_record):
+        """Delete a permanent record that was just replaced by ``new_record``.
+
+        Best-effort: if the delete is blocked (e.g. a reference elsewhere), log
+        and leave the old record unreferenced rather than failing the confirm.
+        """
+        if not old_record or old_record == new_record or not old_record.exists():
+            return
+        try:
+            old_record.unlink()
+        except Exception as err:
+            _logger.warning(
+                "Could not delete replaced %s record %s: %s",
+                old_record._name,
+                old_record.id,
+                err,
+            )
 
     def _reopen(self):
         """Re-render the same wizard dialog (to show the preview state)."""

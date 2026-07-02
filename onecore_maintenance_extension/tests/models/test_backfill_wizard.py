@@ -18,6 +18,44 @@ RESIDENCE = {
     "building": {"code": "B-1", "name": "Byggnaden"},
 }
 
+RESIDENCE2 = {
+    "rentalInformation": {"rentalId": "999-888-777"},
+    "name": "Andra vägen 5",
+    "code": "RES-002",
+    "type": {"name": "Lägenhet"},
+    "areaSize": 72,
+    "entrance": "B",
+    "accessibility": {"elevator": False},
+    "property": {"code": "P-2", "name": "Andra fastigheten"},
+    "building": {"code": "B-2", "name": "Andra byggnaden"},
+}
+
+CONTACT_LEASES_OTHER = [
+    {
+        "leaseId": "700-111-22-3333/01",
+        "leaseNumber": "01",
+        "type": "Bostadskontrakt",
+        "status": "Current",
+        "leaseStartDate": "2023-05-01",
+        "lastDebitDate": False,
+        "contractDate": "2023-04-01",
+        "approvalDate": "2023-04-10",
+        "tenants": [
+            {
+                "contactCode": "P000999",
+                "contactKey": "K9",
+                "firstName": "Bengt",
+                "lastName": "Bengtsson",
+                "nationalRegistrationNumber": "196002026789",
+                "emailAddress": "bengt@example.com",
+                "phoneNumbers": [{"phoneNumber": "0730000000", "isMainNumber": 1}],
+                "isTenant": True,
+                "specialAttention": False,
+            }
+        ],
+    }
+]
+
 CONTACT_LEASES = [
     {
         "leaseId": "406-028-02-0101/08",
@@ -165,6 +203,63 @@ class TestBackfillWizard(TransactionCase):
         self.assertTrue(reloaded.lease_id)
         # The chosen (not the default active) contract was attached.
         self.assertIn("555-ENDED", reloaded.lease_name)
+
+    def test_tenant_replace_deletes_previous(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        # Attach a first tenant.
+        self.fake_api.fetch_contact_leases.return_value = CONTACT_LEASES
+        wiz1 = self._wizard(request, "tenant")
+        wiz1.lookup_value = "P123456"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        first_tenant_id = request.tenant_id.id
+        self.assertTrue(first_tenant_id)
+
+        # Change to a different tenant.
+        self.fake_api.fetch_contact_leases.return_value = CONTACT_LEASES_OTHER
+        wiz2 = self._wizard(request, "tenant")
+        wiz2.lookup_value = "P000999"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertEqual(reloaded.contact_code, "P000999")
+        # The previously linked tenant record was deleted.
+        self.assertFalse(
+            self.env["maintenance.tenant"].browse(first_tenant_id).exists()
+        )
+
+    def test_object_replace_deletes_previous(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_residence.return_value = RESIDENCE
+        wiz1 = self._wizard(request, "rental_object")
+        wiz1.lookup_value = "123-456-789"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        first_object_id = request.rental_property_id.id
+        self.assertTrue(first_object_id)
+
+        # Change to a different rental object.
+        self.fake_api.fetch_residence.return_value = RESIDENCE2
+        wiz2 = self._wizard(request, "rental_object")
+        wiz2.lookup_value = "999-888-777"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertEqual(
+            reloaded.rental_property_id.rental_property_id, "999-888-777"
+        )
+        # The previously linked rental-property record was deleted.
+        self.assertFalse(
+            self.env["maintenance.rental.property"].browse(first_object_id).exists()
+        )
 
     def test_object_not_found_raises(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")

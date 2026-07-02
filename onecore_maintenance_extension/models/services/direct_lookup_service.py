@@ -31,6 +31,7 @@ _OBJECT_ROUTES = {
         "option_field": "rental_property_option_id",
         "handler": RentalPropertyHandler,
         "save_method": "_save_rental_property",
+        "record_field": "rental_property_id",
     },
     "Bilplats": {
         "fetch": "fetch_parking_space",
@@ -39,6 +40,7 @@ _OBJECT_ROUTES = {
         "option_field": "parking_space_option_id",
         "handler": ParkingSpaceHandler,
         "save_method": "_save_parking_space",
+        "record_field": "parking_space_id",
     },
     "Lokal": {
         "fetch": "fetch_facility",
@@ -47,6 +49,7 @@ _OBJECT_ROUTES = {
         "option_field": "facility_option_id",
         "handler": FacilityHandler,
         "save_method": "_save_facility",
+        "record_field": "facility_id",
     },
 }
 
