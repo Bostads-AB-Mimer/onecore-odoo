@@ -30,7 +30,20 @@ patch(Message.prototype, {
       ...super.attClass,
       collapsed: this.isCollapsed,
       "mimer-dialog-unread": this.message.is_dialog_unread_for_side,
+      "mimer-pinned": Boolean(this.message.pinned_at),
     };
+  },
+  get canPin() {
+    return this.message.can_pin;
+  },
+  async togglePin() {
+    await this.env.services.orm.call("mail.message", "action_toggle_pin", [
+      [this.message.id],
+    ]);
+    // Re-fetch so pinned_at/can_pin re-serialize (mirrors onClickAcknowledgeDialog
+    // in tenant_chatter_patch.js). This updates the inline styling and lets the
+    // Chatter's pinnedMessages getter recompute the "Fästa" section.
+    await this.message.thread?.fetchMessages();
   },
   isSendFailure() {
     const type = this.message.message_type;

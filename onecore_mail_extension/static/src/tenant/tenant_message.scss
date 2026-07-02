@@ -25,6 +25,21 @@ $mimer-dialog-unread-border: #FFB74D;
     border-color: $mimer-dialog-unread-border;
 }
 
+// Mimer "pinned" highlight — reuse the dialog-unread tint for a consistent
+// "needs attention" look, with a distinct left accent.
+.o-mail-Message.mimer-pinned {
+    border-color: $mimer-dialog-unread-border;
+    border-left: 3px solid $mimer-dialog-unread-border;
+}
+
+.mimer-pin-toggle {
+    position: absolute;
+    top: 8px;
+    right: 32px; // sit left of the collapse .toggle button
+    border: none;
+    background-color: transparent;
+}
+
 .o-mail-Message + .o-mail-Message {
     margin-top: 8px;
 }
