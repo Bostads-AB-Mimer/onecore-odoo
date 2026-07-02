@@ -78,12 +78,11 @@ $mimer-dialog-unread-border: #FFB74D;
     }
 }
 
-// "Fästa" pinned-messages section rendered at the top of the chatter content.
-// Sticky so it stays visible while scrolling the log ("saker som inte får missas").
+// "Fästa" pinned-messages section rendered as a distinct block at the top of the
+// chatter log. NOT position:sticky — the base .o-mail-Chatter-top toolbar is already
+// sticky at top:0 with a higher z-index and opaque background, so a sticky pinned
+// section at top:0 would be painted over by it while scrolling.
 .o-mimer-PinnedMessages {
-    position: sticky;
-    top: 0;
-    z-index: 1;
     margin: 0 16px 12px;
     padding: 8px;
     border: 1px solid $mimer-dialog-unread-border;
