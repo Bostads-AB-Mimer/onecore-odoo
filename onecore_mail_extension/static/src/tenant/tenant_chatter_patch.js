@@ -25,8 +25,8 @@ patch(Chatter.prototype, {
     if (!thread?.messages) {
       return [];
     }
-    // id order ≈ chronological order (same order as the log).
-    return thread.messages.filter((m) => m.pinned_at).sort((a, b) => a.id - b.id);
+    // Newest first (descending id), matching the log's order="desc" display.
+    return thread.messages.filter((m) => m.pinned_at).sort((a, b) => b.id - a.id);
   },
 
   _isUnsavedMaintenanceRequest() {

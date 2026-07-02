@@ -34,6 +34,9 @@
             </div>
             <t t-foreach="pinnedMessages" t-as="msg" t-key="msg.id">
                 <Message message="msg" thread="state.thread"/>
+                <div t-if="msg.pinned_by_name" class="o-mimer-PinnedBy text-muted small">
+                    Fäst av <t t-esc="msg.pinned_by_name"/>
+                </div>
             </t>
         </div>
     </xpath>

@@ -102,4 +102,9 @@ $mimer-dialog-unread-border: #FFB74D;
     .o-mail-Message + .o-mail-Message {
         margin-top: 8px;
     }
+
+    // "Fäst av X" attribution caption under each pinned message.
+    .o-mimer-PinnedBy {
+        margin: 2px 0 8px;
+    }
 }
