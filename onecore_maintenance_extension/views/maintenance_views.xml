@@ -203,7 +203,7 @@
                         <!-- Block 1 -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
-                            <h2 class="accordion-header position-relative">
+                            <h2 class="accordion-header position-relative o-backfill-header">
                                 <!-- Accordion button on mobile -->
                                 <button name="accordion-button-1"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
@@ -220,8 +220,7 @@
                                 <!-- MIM-1841: add/change rental object (rentalId-bearing space types) -->
                                 <button name="open_backfill_rental_object_wizard"
                                     type="object"
-                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3"
-                                    style="z-index: 5;"
+                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3 o-section-edit-btn"
                                     title="Lägg till / ändra hyresobjekt"
                                     invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
                                     <i class="fa fa-pencil" />
@@ -471,7 +470,7 @@
                         <!-- Block 2 -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
-                            <h2 class="accordion-header position-relative">
+                            <h2 class="accordion-header position-relative o-backfill-header">
                                 <button name="accordion-button-3"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
                                     type="button" data-bs-toggle="collapse"
@@ -486,8 +485,7 @@
                                 <!-- MIM-1841: add/change tenant -->
                                 <button name="open_backfill_tenant_wizard"
                                     type="object"
-                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3"
-                                    style="z-index: 5;"
+                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3 o-section-edit-btn"
                                     title="Lägg till / ändra hyresgäst"
                                     invisible="not create_date or user_is_external_contractor">
                                     <i class="fa fa-pencil" />
