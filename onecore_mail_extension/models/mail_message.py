@@ -1,4 +1,5 @@
 from odoo import _, api, fields, models
+from odoo.exceptions import AccessError
 
 import logging
 import requests
@@ -19,6 +20,29 @@ class OneCoreMailMessage(models.Model):
     is_dialog_unread_for_side = fields.Boolean(
         string="Okvitterad dialognotering",
         compute="_compute_is_dialog_unread_for_side",
+        store=False,
+    )
+    pinned = fields.Boolean(
+        string="Fäst",
+        default=False,
+        index=True,
+        help="Fästa noteringar visas högst upp i loggen för alla som öppnar ärendet.",
+    )
+    pinned_by_id = fields.Many2one(
+        "res.users",
+        string="Fäst av",
+    )
+    pinned_at = fields.Datetime(
+        string="Fäst datum",
+    )
+    pinned_by_name = fields.Char(
+        string="Fäst av (namn)",
+        compute="_compute_pinned_by_name",
+        store=False,
+    )
+    can_pin = fields.Boolean(
+        string="Får fästa",
+        compute="_compute_can_pin",
         store=False,
     )
 
@@ -50,10 +74,63 @@ class OneCoreMailMessage(models.Model):
             if message.id in unread_ids:
                 message.is_dialog_unread_for_side = True
 
+    @api.depends("pinned_by_id")
+    def _compute_pinned_by_name(self):
+        for message in self:
+            message.pinned_by_name = message.pinned_by_id.name or ""
+
+    @api.depends_context("uid")
+    def _compute_can_pin(self):
+        # Internal handlers may pin; external contractors may not. Mirrors the
+        # group check already used in create(). has_group returns False when the
+        # maintenance module (and thus the group) is absent. depends_context("uid")
+        # is required so the cache is keyed per user — without it, Odoo caches the
+        # first-computed value and reuses it for every user in the same transaction.
+        is_external = self.env.user.has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        )
+        for message in self:
+            message.can_pin = not is_external
+
     def _to_store_defaults(self, target):
-        # Exposes is_dialog_unread_for_side to the OWL chatter so the Message
-        # component can toggle the orange-background CSS class.
-        return super()._to_store_defaults(target) + ["is_dialog_unread_for_side"]
+        # Exposes is_dialog_unread_for_side (dialog highlight) and the pin state
+        # (pinned/pinned_at/pinned_by_name/can_pin) to the OWL chatter store.
+        return super()._to_store_defaults(target) + [
+            "is_dialog_unread_for_side",
+            "pinned",
+            "pinned_at",
+            "pinned_by_name",
+            "can_pin",
+        ]
+
+    def action_toggle_pin(self):
+        # Shared pin toggle for the chatter "Fästa" section. Internal handlers
+        # only; external contractors are blocked here (the front-end also hides
+        # the button via can_pin). Writes with sudo because pinning is a
+        # cross-user action on messages the caller does not own, and mail.message
+        # write ACLs otherwise restrict edits to the author.
+        self.ensure_one()
+        if self.env.user.has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        ):
+            raise AccessError(_("Du har inte behörighet att fästa noteringar."))
+        if self.pinned:
+            self.sudo().write(
+                {"pinned": False, "pinned_by_id": False, "pinned_at": False}
+            )
+        else:
+            self.sudo().write(
+                {
+                    "pinned": True,
+                    "pinned_by_id": self.env.user.id,
+                    "pinned_at": fields.Datetime.now(),
+                }
+            )
+        return {
+            "pinned": self.pinned,
+            "pinned_at": self.pinned_at,
+            "pinned_by_name": self.pinned_by_name,
+        }
 
     message_type = fields.Selection(
         selection_add=[
