@@ -26,6 +26,11 @@
 
                         <group invisible="state != 'preview'">
                             <field name="preview_text" nolabel="1" readonly="1" />
+                            <field name="lease_option_id" string="Kontrakt"
+                                invisible="lookup_kind != 'tenant'"
+                                domain="[('user_id', '=', uid)]"
+                                options="{'no_create': True, 'no_create_edit': True, 'no_open': True}"
+                                help="Välj vilket kontrakt som ska kopplas till ärendet." />
                         </group>
                     </sheet>
                     <footer>

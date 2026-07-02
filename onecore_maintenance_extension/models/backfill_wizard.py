@@ -29,6 +29,11 @@ class MaintenanceBackfillWizard(models.TransientModel):
     # Reference to the fetched transient option, materialized on confirm.
     option_model = fields.Char(readonly=True)
     option_res_id = fields.Integer(readonly=True)
+    # Tenant path only: the contact's contracts (found by Sök) to pick from, and
+    # the chosen one attached on confirm. Defaults to the active contract.
+    lease_option_id = fields.Many2one(
+        "maintenance.lease.option", string="Kontrakt"
+    )
 
     def _get_core_api(self):
         return core_api.CoreApi(self.env)
@@ -69,14 +74,19 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 )
             preview = self._tenant_preview(option)
 
-        self.write(
-            {
-                "option_model": option._name,
-                "option_res_id": option.id,
-                "preview_text": preview,
-                "state": "preview",
-            }
-        )
+        vals = {
+            "option_model": option._name,
+            "option_res_id": option.id,
+            "preview_text": preview,
+            "state": "preview",
+        }
+        if self.lookup_kind == "tenant":
+            # Default the contract picker to the contact's active contract; the
+            # user can switch to another of the contact's contracts before Lägg till.
+            vals["lease_option_id"] = (
+                option.lease_option_id.id if option.lease_option_id else False
+            )
+        self.write(vals)
         return self._reopen()
 
     def action_confirm(self):
@@ -90,11 +100,11 @@ class MaintenanceBackfillWizard(models.TransientModel):
         record_service = RecordManagementService(self.env)
         request = self.maintenance_request_id
         if self.lookup_kind == "tenant":
-            # Attach the contact's active contract first (if any) so the tenant's
-            # contract/phone/email block is unlocked, then the tenant itself.
-            if option.lease_option_id:
+            # Attach the contract the user chose (defaults to the active one) so
+            # the tenant's contract/phone/email block is unlocked, then the tenant.
+            if self.lease_option_id and self.lease_option_id.exists():
                 record_service._save_lease(
-                    request, {"lease_option_id": option.lease_option_id.id}
+                    request, {"lease_option_id": self.lease_option_id.id}
                 )
             record_service._save_tenant(request, {"tenant_option_id": option.id})
         else:
@@ -162,7 +172,4 @@ class MaintenanceBackfillWizard(models.TransientModel):
             f"Telefon: {option.phone_number or ''}",
             f"E-post: {option.email_address or ''}",
         ]
-        if option.lease_option_id:
-            lines.append(f"Kontrakt: {option.lease_option_id.name or ''}")
-            lines.append(f"Kontraktstyp: {option.lease_option_id.lease_type or ''}")
         return "\n".join(line for line in lines if line.split(": ", 1)[1])

@@ -44,6 +44,44 @@ CONTACT_LEASES = [
     }
 ]
 
+# A contact holding two contracts (one current, one ended) for the picker test.
+_TENANT_MULTI = {
+    "contactCode": "P123456",
+    "contactKey": "K1",
+    "firstName": "Anna",
+    "lastName": "Andersson",
+    "nationalRegistrationNumber": "199001011234",
+    "emailAddress": "anna@example.com",
+    "phoneNumbers": [{"phoneNumber": "0700000000", "isMainNumber": 1}],
+    "isTenant": True,
+    "specialAttention": False,
+}
+
+CONTACT_LEASES_MULTI = [
+    {
+        "leaseId": "406-CURRENT",
+        "leaseNumber": "08",
+        "type": "Bostadskontrakt",
+        "status": "Current",
+        "leaseStartDate": "2024-10-01",
+        "lastDebitDate": False,
+        "contractDate": "2024-09-01",
+        "approvalDate": "2024-09-15",
+        "tenants": [_TENANT_MULTI],
+    },
+    {
+        "leaseId": "555-ENDED",
+        "leaseNumber": "03",
+        "type": "Bostadskontrakt",
+        "status": "Ended",
+        "leaseStartDate": "2018-01-01",
+        "lastDebitDate": "2020-01-01",
+        "contractDate": "2017-12-01",
+        "approvalDate": "2017-12-10",
+        "tenants": [_TENANT_MULTI],
+    },
+]
+
 
 @tagged("onecore")
 class TestBackfillWizard(TransactionCase):
@@ -87,8 +125,8 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
             self.assertEqual(wiz.state, "preview")
             self.assertIn("P123456", wiz.preview_text)
-            # The contact's contract is previewed too.
-            self.assertIn("Kontrakt", wiz.preview_text)
+            # The contract picker defaults to the contact's active contract.
+            self.assertTrue(wiz.lease_option_id)
             result = wiz.action_confirm()
 
         self.assertEqual(result, {"type": "ir.actions.client", "tag": "soft_reload"})
@@ -101,6 +139,32 @@ class TestBackfillWizard(TransactionCase):
         self.assertTrue(reloaded.lease_name)
         # Independence: tenant confirm did not create a rental object.
         self.assertFalse(reloaded.rental_property_id)
+
+    def test_tenant_pick_specific_contract(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_contact_leases.return_value = CONTACT_LEASES_MULTI
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P123456"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            options = self.env["maintenance.lease.option"].search(
+                [("user_id", "=", self.env.uid)]
+            )
+            # Both of the contact's contracts are offered.
+            self.assertEqual(len(options), 2)
+            # Default selection is the active (Gällande) contract.
+            self.assertIn("Gällande", wiz.lease_option_id.name)
+            # The user picks the other (ended) contract instead.
+            ended = options.filtered(lambda o: "555-ENDED" in o.name)
+            self.assertTrue(ended)
+            wiz.lease_option_id = ended.id
+            wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.lease_id)
+        # The chosen (not the default active) contract was attached.
+        self.assertIn("555-ENDED", reloaded.lease_name)
 
     def test_object_not_found_raises(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
