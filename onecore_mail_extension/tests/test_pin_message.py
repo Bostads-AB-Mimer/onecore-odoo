@@ -42,16 +42,14 @@ class TestPinMessage(TransactionCase):
     def test_toggle_pin_sets_and_clears(self):
         message = self.message.with_user(self.internal_user)
         result = message.action_toggle_pin()
-        self.assertTrue(message.pinned)
-        self.assertTrue(result["pinned"])
-        self.assertEqual(message.pinned_by_id, self.internal_user)
         self.assertTrue(message.pinned_at)
+        self.assertTrue(result["pinned_at"])
+        self.assertEqual(message.pinned_by_id, self.internal_user)
 
         result = message.action_toggle_pin()
-        self.assertFalse(message.pinned)
-        self.assertFalse(result["pinned"])
-        self.assertFalse(message.pinned_by_id)
         self.assertFalse(message.pinned_at)
+        self.assertFalse(result["pinned_at"])
+        self.assertFalse(message.pinned_by_id)
 
     def test_toggle_pin_records_author_name(self):
         message = self.message.with_user(self.internal_user)

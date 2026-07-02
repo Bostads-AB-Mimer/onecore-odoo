@@ -22,18 +22,13 @@ class OneCoreMailMessage(models.Model):
         compute="_compute_is_dialog_unread_for_side",
         store=False,
     )
-    pinned = fields.Boolean(
-        string="Fäst",
-        default=False,
-        index=True,
-        help="Fästa noteringar visas högst upp i loggen för alla som öppnar ärendet.",
-    )
+    # Pin state reuses the native mail.message.pinned_at field (truthiness =
+    # pinned). We add only attribution + the permission flag. Odoo's Discuss pin
+    # uses the same field but its UI is gated to discuss.channel, so it never
+    # touches maintenance/res.partner chatter.
     pinned_by_id = fields.Many2one(
         "res.users",
         string="Fäst av",
-    )
-    pinned_at = fields.Datetime(
-        string="Fäst datum",
     )
     pinned_by_name = fields.Char(
         string="Fäst av (namn)",
@@ -93,12 +88,11 @@ class OneCoreMailMessage(models.Model):
             message.can_pin = not is_external
 
     def _to_store_defaults(self, target):
-        # Exposes is_dialog_unread_for_side (dialog highlight) and the pin state
-        # (pinned/pinned_at/pinned_by_name/can_pin) to the OWL chatter store.
+        # Exposes is_dialog_unread_for_side (dialog highlight) plus the pin
+        # attribution/permission fields to the OWL chatter store. The pin state
+        # itself is the native pinned_at, already serialized by base Odoo.
         return super()._to_store_defaults(target) + [
             "is_dialog_unread_for_side",
-            "pinned",
-            "pinned_at",
             "pinned_by_name",
             "can_pin",
         ]
@@ -106,28 +100,25 @@ class OneCoreMailMessage(models.Model):
     def action_toggle_pin(self):
         # Shared pin toggle for the chatter "Fästa" section. Internal handlers
         # only; external contractors are blocked here (the front-end also hides
-        # the button via can_pin). Writes with sudo because pinning is a
-        # cross-user action on messages the caller does not own, and mail.message
-        # write ACLs otherwise restrict edits to the author.
+        # the button via can_pin). Pin state is the native pinned_at (truthiness).
+        # Writes with sudo because pinning is a cross-user action on messages the
+        # caller does not own, and mail.message write ACLs otherwise restrict
+        # edits to the author.
         self.ensure_one()
         if self.env.user.has_group(
             "onecore_maintenance_extension.group_external_contractor"
         ):
             raise AccessError(_("Du har inte behörighet att fästa noteringar."))
-        if self.pinned:
-            self.sudo().write(
-                {"pinned": False, "pinned_by_id": False, "pinned_at": False}
-            )
+        if self.pinned_at:
+            self.sudo().write({"pinned_at": False, "pinned_by_id": False})
         else:
             self.sudo().write(
                 {
-                    "pinned": True,
-                    "pinned_by_id": self.env.user.id,
                     "pinned_at": fields.Datetime.now(),
+                    "pinned_by_id": self.env.user.id,
                 }
             )
         return {
-            "pinned": self.pinned,
             "pinned_at": self.pinned_at,
             "pinned_by_name": self.pinned_by_name,
         }
