@@ -58,7 +58,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 )
             preview = self._rental_object_preview(option)
         else:
-            option = service.create_tenant_option(value)
+            option = service.create_tenant_option(self.maintenance_request_id, value)
             if not option:
                 raise exceptions.UserError(
                     _(
@@ -90,6 +90,12 @@ class MaintenanceBackfillWizard(models.TransientModel):
         record_service = RecordManagementService(self.env)
         request = self.maintenance_request_id
         if self.lookup_kind == "tenant":
+            # Attach the contact's active contract first (if any) so the tenant's
+            # contract/phone/email block is unlocked, then the tenant itself.
+            if option.lease_option_id:
+                record_service._save_lease(
+                    request, {"lease_option_id": option.lease_option_id.id}
+                )
             record_service._save_tenant(request, {"tenant_option_id": option.id})
         else:
             route = DirectLookupService(
@@ -103,7 +109,10 @@ class MaintenanceBackfillWizard(models.TransientModel):
             getattr(record_service, route["save_method"])(
                 request, {route["option_field"]: option.id}
             )
-        return {"type": "ir.actions.act_window_close"}
+        # Close the dialog AND reload the underlying request form so the newly
+        # materialized tenant/object is shown immediately (act_window_close alone
+        # leaves the stale form on screen until a manual refresh).
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
 
     def _reopen(self):
         """Re-render the same wizard dialog (to show the preview state)."""
@@ -153,4 +162,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
             f"Telefon: {option.phone_number or ''}",
             f"E-post: {option.email_address or ''}",
         ]
+        if option.lease_option_id:
+            lines.append(f"Kontrakt: {option.lease_option_id.name or ''}")
+            lines.append(f"Kontraktstyp: {option.lease_option_id.lease_type or ''}")
         return "\n".join(line for line in lines if line.split(": ", 1)[1])

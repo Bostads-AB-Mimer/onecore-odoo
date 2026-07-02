@@ -20,6 +20,14 @@ RESIDENCE = {
 
 CONTACT_LEASES = [
     {
+        "leaseId": "406-028-02-0101/08",
+        "leaseNumber": "08",
+        "type": "Bostadskontrakt",
+        "status": "Current",
+        "leaseStartDate": "2024-10-01",
+        "lastDebitDate": False,
+        "contractDate": "2024-09-01",
+        "approvalDate": "2024-09-15",
         "tenants": [
             {
                 "contactCode": "P123456",
@@ -59,8 +67,11 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
             self.assertEqual(wiz.state, "preview")
             self.assertIn("Testgatan 1", wiz.preview_text)
-            wiz.action_confirm()
+            result = wiz.action_confirm()
 
+        # Confirm closes the dialog AND reloads the parent form so the newly
+        # materialized object shows without a manual page refresh.
+        self.assertEqual(result, {"type": "ir.actions.client", "tag": "soft_reload"})
         reloaded = self.env["maintenance.request"].browse(request.id)
         reloaded.invalidate_recordset()
         self.assertTrue(reloaded.rental_property_id)
@@ -76,12 +87,18 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
             self.assertEqual(wiz.state, "preview")
             self.assertIn("P123456", wiz.preview_text)
-            wiz.action_confirm()
+            # The contact's contract is previewed too.
+            self.assertIn("Kontrakt", wiz.preview_text)
+            result = wiz.action_confirm()
 
+        self.assertEqual(result, {"type": "ir.actions.client", "tag": "soft_reload"})
         reloaded = self.env["maintenance.request"].browse(request.id)
         reloaded.invalidate_recordset()
         self.assertTrue(reloaded.tenant_id)
         self.assertEqual(reloaded.contact_code, "P123456")
+        # The contact's active contract is attached (unlocks the tenant block).
+        self.assertTrue(reloaded.lease_id)
+        self.assertTrue(reloaded.lease_name)
         # Independence: tenant confirm did not create a rental object.
         self.assertFalse(reloaded.rental_property_id)
 

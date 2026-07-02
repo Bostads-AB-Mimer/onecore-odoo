@@ -20,6 +20,14 @@ RESIDENCE = {
 
 CONTACT_LEASES = [
     {
+        "leaseId": "406-028-02-0101/08",
+        "leaseNumber": "08",
+        "type": "Bostadskontrakt",
+        "status": "Current",
+        "leaseStartDate": "2024-10-01",
+        "lastDebitDate": False,
+        "contractDate": "2024-09-01",
+        "approvalDate": "2024-09-15",
         "tenants": [
             {
                 "contactCode": "P123456",
@@ -76,15 +84,20 @@ class TestCreateTenantOption(TransactionCase):
         self.service = DirectLookupService(self.env, self.core_api)
 
     def test_contact_code_returns_option(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
         self.core_api.fetch_contact_leases.return_value = CONTACT_LEASES
-        option = self.service.create_tenant_option("P123456")
+        option = self.service.create_tenant_option(request, "P123456")
         self.core_api.fetch_contact_leases.assert_called_once_with("P123456")
         self.assertTrue(option)
         self.assertEqual(option._name, "maintenance.tenant.option")
         self.assertEqual(option.name, "Anna Andersson")
         self.assertEqual(option.contact_code, "P123456")
         self.assertEqual(option.phone_number, "0700000000")
+        # The contact's active contract is linked so confirm can attach it.
+        self.assertTrue(option.lease_option_id)
+        self.assertEqual(option.lease_option_id.lease_type, "Bostadskontrakt")
 
     def test_unknown_contact_code_returns_none(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
         self.core_api.fetch_contact_leases.return_value = []
-        self.assertIsNone(self.service.create_tenant_option("P999999"))
+        self.assertIsNone(self.service.create_tenant_option(request, "P999999"))

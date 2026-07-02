@@ -9,10 +9,15 @@ independent.
 
 import logging
 
+from ..handlers.base_handler import BaseMaintenanceHandler
 from ..handlers.rental_property_handler import RentalPropertyHandler
 from ..handlers.parking_space_handler import ParkingSpaceHandler
 from ..handlers.facility_handler import FacilityHandler
-from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ..utils.helpers import (
+    get_tenant_name,
+    get_main_phone_number,
+    select_active_lease,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -93,10 +98,17 @@ class DirectLookupService:
             [("user_id", "=", uid)], limit=1
         ) or None
 
-    def create_tenant_option(self, contact_code):
+    def create_tenant_option(self, request, contact_code):
         """Resolve a contact from its (unfiltered) leases and create a tenant option.
 
-        The option has NO lease link. Returns the option, or None if not found.
+        Also creates lease options for every lease the contact is a tenant on and
+        links the tenant option to the *active* one (same status-priority the
+        create-time search uses), so confirming the wizard attaches the contact's
+        current contract (unlocking the contract/phone/email/pet block in the
+        form). The associated rental object is intentionally NOT attached.
+
+        Returns the tenant option (with `lease_option_id` set when a lease was
+        found), or None if the contact could not be resolved.
         """
         try:
             leases = self.core_api.fetch_contact_leases(contact_code)
@@ -104,20 +116,36 @@ class DirectLookupService:
             _logger.warning("Tenant lookup failed for %s: %s", contact_code, err)
             leases = []
 
-        tenant = None
+        # Collect (lease, tenant) pairs for every lease the contact appears on.
+        matches = []
         for lease in leases or []:
             for candidate in (lease.get("tenants") or []):
                 if candidate.get("contactCode") == contact_code:
-                    tenant = candidate
+                    matches.append((lease, candidate))
                     break
-            if tenant:
-                break
 
-        if not tenant:
+        if not matches:
             return None
 
         uid = self.env.user.id
         self.env["maintenance.tenant.option"].search([("user_id", "=", uid)]).unlink()
+        self.env["maintenance.lease.option"].search([("user_id", "=", uid)]).unlink()
+
+        # Reuse the create-time lease-option builder (status normalization + name).
+        handler = BaseMaintenanceHandler(request, self.core_api)
+        lease_options = self.env["maintenance.lease.option"]
+        for lease, _candidate in matches:
+            try:
+                lease_options |= handler._create_lease_option(lease)
+            except Exception as err:
+                _logger.warning(
+                    "Could not build lease option for contact %s: %s",
+                    contact_code,
+                    err,
+                )
+
+        active_lease = select_active_lease(lease_options) if lease_options else False
+        tenant = matches[0][1]
         return self.env["maintenance.tenant.option"].create(
             {
                 "user_id": uid,
@@ -131,5 +159,6 @@ class DirectLookupService:
                 "phone_number": get_main_phone_number(tenant),
                 "is_tenant": tenant["isTenant"],
                 "special_attention": tenant.get("specialAttention"),
+                "lease_option_id": active_lease.id if active_lease else False,
             }
         )
