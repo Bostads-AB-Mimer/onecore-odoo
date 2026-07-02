@@ -1,9 +1,10 @@
-"""Direct paste-to-populate lookups for tenant and rental object (MIM-1841).
+"""Fetch + create transient option records for the backfill wizard (MIM-1841).
 
-Fills either the object field group OR the tenant field group of a maintenance
-request directly from ``core_api``, reusing the existing option-record and
-``FormFieldService`` machinery. The two fills are strictly independent — the
-object fill never touches tenant data and vice versa.
+Given a rentalId or contactCode, fetch from OneCore and create the matching
+transient *option* record, returning it for preview. Persisting the option onto
+the request (materializing the permanent record) is done by the wizard via
+``RecordManagementService._save_*`` — NOT here. Object and tenant paths are
+independent.
 """
 
 import logging
@@ -11,13 +12,12 @@ import logging
 from ..handlers.rental_property_handler import RentalPropertyHandler
 from ..handlers.parking_space_handler import ParkingSpaceHandler
 from ..handlers.facility_handler import FacilityHandler
-from .form_field_service import FormFieldService
 from ..utils.helpers import get_tenant_name, get_main_phone_number
 
 _logger = logging.getLogger(__name__)
 
-# space_caption -> how to fetch and where to put the result. Only rentalId-bearing
-# space types appear here; any other space_caption is a no-op for object lookup.
+# space_caption -> fetch method, option model, and the RecordManagementService
+# materializer the wizard calls on confirm. Only rentalId-bearing space types.
 _OBJECT_ROUTES = {
     "Lägenhet": {
         "fetch": "fetch_residence",
@@ -25,7 +25,7 @@ _OBJECT_ROUTES = {
         "option_model": "maintenance.rental.property.option",
         "option_field": "rental_property_option_id",
         "handler": RentalPropertyHandler,
-        "update": "update_rental_property_fields",
+        "save_method": "_save_rental_property",
     },
     "Bilplats": {
         "fetch": "fetch_parking_space",
@@ -33,7 +33,7 @@ _OBJECT_ROUTES = {
         "option_model": "maintenance.parking.space.option",
         "option_field": "parking_space_option_id",
         "handler": ParkingSpaceHandler,
-        "update": "update_parking_space_fields",
+        "save_method": "_save_parking_space",
     },
     "Lokal": {
         "fetch": "fetch_facility",
@@ -41,41 +41,42 @@ _OBJECT_ROUTES = {
         "option_model": "maintenance.facility.option",
         "option_field": "facility_option_id",
         "handler": FacilityHandler,
-        "update": "update_facility_fields",
+        "save_method": "_save_facility",
     },
 }
 
 
 class DirectLookupService:
-    """Fill the object or tenant field group directly from a pasted id."""
+    """Fetch OneCore data and create the matching transient option record."""
 
     def __init__(self, env, core_api):
         self.env = env
         self.core_api = core_api
-        self.form_field_service = FormFieldService(env)
 
-    def populate_rental_object(self, record, rental_id):
-        """Fill the object field group for ``record.space_caption`` from a rentalId.
+    def route_for(self, space_caption):
+        """Return the object route for a space_caption, or None if not rentalId-bearing."""
+        return _OBJECT_ROUTES.get(space_caption)
 
-        Returns an onchange ``warning`` dict when nothing is found, else ``None``.
-        No-op (``None``) when the space type has no rentalId.
+    def create_rental_object_option(self, request, rental_id):
+        """Fetch the object (routed by request.space_caption) and create its option.
+
+        Returns the created transient option record, or None if the space type has
+        no rentalId or nothing was found. Does not touch the request.
         """
-        route = _OBJECT_ROUTES.get(record.space_caption)
+        route = _OBJECT_ROUTES.get(request.space_caption)
         if not route:
             return None
 
         try:
             data = getattr(self.core_api, route["fetch"])(rental_id)
         except Exception as err:
-            _logger.info("Rental object lookup failed for %s: %s", rental_id, err)
+            _logger.warning("Rental object lookup failed for %s: %s", rental_id, err)
             data = None
 
         if not data:
-            return self._rental_object_not_found(rental_id)
+            return None
 
         uid = self.env.user.id
-        # Clear any leftover options of this type for the user, then let the
-        # handler create fresh ones. lease=None guarantees no tenant/lease options.
         self.env[route["option_model"]].search([("user_id", "=", uid)]).unlink()
 
         item = {
@@ -86,53 +87,21 @@ class DirectLookupService:
             "maintenance_units": [],
         }
         item[route["data_key"]] = data
-        route["handler"](record, self.core_api).update_form_options([item])
+        route["handler"](request, self.core_api).update_form_options([item])
 
-        option = self.env[route["option_model"]].search(
+        return self.env[route["option_model"]].search(
             [("user_id", "=", uid)], limit=1
-        )
-        if not option:
-            return self._rental_object_not_found(rental_id)
+        ) or None
 
-        # Use _update_cache to bypass write() which strips option fields on
-        # persisted records. Direct assignment calls write(), and the model's
-        # write() override strips all option fields (to avoid stale cache in
-        # web_read). In production this runs on virtual (onchange) records where
-        # plain assignment would work, but _update_cache is safe for both.
-        record._update_cache({route["option_field"]: option.id})
-        try:
-            getattr(self.form_field_service, route["update"])(record)
-        except (ValueError, TypeError) as err:
-            # update_*_fields does Many2one <- string assignments designed for
-            # virtual (onchange) records; on persisted records they raise. The
-            # option field is already set above. Log so a genuine production
-            # failure is diagnosable rather than silently swallowed.
-            _logger.debug("Field copy skipped (non-virtual record): %s", err)
-        return None
+    def create_tenant_option(self, contact_code):
+        """Resolve a contact from its (unfiltered) leases and create a tenant option.
 
-    def _rental_object_not_found(self, rental_id):
-        return {
-            "warning": {
-                "title": "Inget hyresobjekt hittades",
-                "message": (
-                    f"Inget hyresobjekt hittades för objektnummer {rental_id}. "
-                    "Kontrollera att numret är korrekt."
-                ),
-            }
-        }
-
-    def populate_tenant(self, record, contact_code):
-        """Fill the tenant field group from a contactCode.
-
-        Resolves the contact from its leases (unfiltered), builds a tenant option
-        with NO lease link (so the object/lease sync in ``update_tenant_fields``
-        stays a no-op), and copies the tenant fields. Returns an onchange
-        ``warning`` dict when the contact cannot be resolved, else ``None``.
+        The option has NO lease link. Returns the option, or None if not found.
         """
         try:
             leases = self.core_api.fetch_contact_leases(contact_code)
         except Exception as err:
-            _logger.info("Tenant lookup failed for %s: %s", contact_code, err)
+            _logger.warning("Tenant lookup failed for %s: %s", contact_code, err)
             leases = []
 
         tenant = None
@@ -145,13 +114,11 @@ class DirectLookupService:
                 break
 
         if not tenant:
-            return self._tenant_not_found(contact_code)
+            return None
 
         uid = self.env.user.id
-        self.env["maintenance.tenant.option"].search(
-            [("user_id", "=", uid)]
-        ).unlink()
-        option = self.env["maintenance.tenant.option"].create(
+        self.env["maintenance.tenant.option"].search([("user_id", "=", uid)]).unlink()
+        return self.env["maintenance.tenant.option"].create(
             {
                 "user_id": uid,
                 "name": get_tenant_name(tenant),
@@ -166,26 +133,3 @@ class DirectLookupService:
                 "special_attention": tenant.get("specialAttention"),
             }
         )
-        # Use _update_cache to bypass write() which strips option fields on
-        # persisted records; see populate_rental_object for full explanation.
-        record._update_cache({"tenant_option_id": option.id})
-        try:
-            self.form_field_service.update_tenant_fields(record)
-        except (ValueError, TypeError) as err:
-            # update_*_fields does Many2one <- string assignments designed for
-            # virtual (onchange) records; on persisted records they raise. The
-            # option field is already set above. Log so a genuine production
-            # failure is diagnosable rather than silently swallowed.
-            _logger.debug("Field copy skipped (non-virtual record): %s", err)
-        return None
-
-    def _tenant_not_found(self, contact_code):
-        return {
-            "warning": {
-                "title": "Ingen hyresgäst hittades",
-                "message": (
-                    f"Ingen hyresgäst hittades för kundnummer {contact_code}. "
-                    "Kontrollera numret eller att kunden har ett avtal."
-                ),
-            }
-        }

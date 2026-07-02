@@ -18,49 +18,6 @@ RESIDENCE = {
     "building": {"code": "B-1", "name": "Byggnaden"},
 }
 
-
-@tagged("onecore")
-class TestPopulateRentalObject(TransactionCase):
-    def setUp(self):
-        super().setUp()
-        self.core_api = MagicMock()
-        self.service = DirectLookupService(self.env, self.core_api)
-
-    def test_residence_fills_rental_property_option_only(self):
-        request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.core_api.fetch_residence.return_value = RESIDENCE
-
-        result = self.service.populate_rental_object(request, "123-456-789")
-
-        self.assertIsNone(result)
-        self.core_api.fetch_residence.assert_called_once_with("123-456-789")
-        option = request.rental_property_option_id
-        self.assertTrue(option)
-        self.assertEqual(option.code, "RES-001")
-        self.assertEqual(option.address, "Testgatan 1")
-        self.assertEqual(option.building, "Byggnaden")
-        # Strictly independent: tenant is untouched.
-        self.assertFalse(request.tenant_option_id)
-        self.assertFalse(request.tenant_id)
-        self.assertFalse(request.lease_option_id)
-
-    def test_missing_residence_returns_warning(self):
-        request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.core_api.fetch_residence.return_value = None
-
-        result = self.service.populate_rental_object(request, "000")
-
-        self.assertIn("warning", result)
-        self.assertEqual(result["warning"]["title"], "Inget hyresobjekt hittades")
-        self.assertFalse(request.rental_property_option_id)
-
-    def test_non_rentalid_space_type_is_noop(self):
-        request = create_maintenance_request(self.env, space_caption="Byggnad")
-        result = self.service.populate_rental_object(request, "whatever")
-        self.assertIsNone(result)
-        self.core_api.fetch_residence.assert_not_called()
-
-
 CONTACT_LEASES = [
     {
         "tenants": [
@@ -81,35 +38,53 @@ CONTACT_LEASES = [
 
 
 @tagged("onecore")
-class TestPopulateTenant(TransactionCase):
+class TestCreateRentalObjectOption(TransactionCase):
     def setUp(self):
         super().setUp()
         self.core_api = MagicMock()
         self.service = DirectLookupService(self.env, self.core_api)
 
-    def test_contact_code_fills_tenant_option_only(self):
+    def test_residence_returns_option(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.core_api.fetch_contact_leases.return_value = CONTACT_LEASES
+        self.core_api.fetch_residence.return_value = RESIDENCE
 
-        result = self.service.populate_tenant(request, "P123456")
+        option = self.service.create_rental_object_option(request, "123-456-789")
 
-        self.assertIsNone(result)
-        self.core_api.fetch_contact_leases.assert_called_once_with("P123456")
-        option = request.tenant_option_id
+        self.core_api.fetch_residence.assert_called_once_with("123-456-789")
         self.assertTrue(option)
+        self.assertEqual(option._name, "maintenance.rental.property.option")
+        self.assertEqual(option.code, "RES-001")
+        self.assertEqual(option.address, "Testgatan 1")
+        self.assertEqual(option.building, "Byggnaden")
+
+    def test_missing_residence_returns_none(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_residence.return_value = None
+        self.assertIsNone(self.service.create_rental_object_option(request, "000"))
+
+    def test_non_rentalid_space_returns_none(self):
+        request = create_maintenance_request(self.env, space_caption="Byggnad")
+        self.assertIsNone(self.service.create_rental_object_option(request, "x"))
+        self.core_api.fetch_residence.assert_not_called()
+
+
+@tagged("onecore")
+class TestCreateTenantOption(TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.core_api = MagicMock()
+        self.service = DirectLookupService(self.env, self.core_api)
+
+    def test_contact_code_returns_option(self):
+        self.core_api.fetch_contact_leases.return_value = CONTACT_LEASES
+        option = self.service.create_tenant_option("P123456")
+        self.core_api.fetch_contact_leases.assert_called_once_with("P123456")
+        self.assertTrue(option)
+        self.assertEqual(option._name, "maintenance.tenant.option")
         self.assertEqual(option.name, "Anna Andersson")
         self.assertEqual(option.contact_code, "P123456")
         self.assertEqual(option.phone_number, "0700000000")
-        # Strictly independent: object is untouched.
-        self.assertFalse(request.rental_property_option_id)
-        self.assertFalse(request.lease_option_id)
 
-    def test_unknown_contact_code_returns_warning(self):
-        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+    def test_unknown_contact_code_returns_none(self):
         self.core_api.fetch_contact_leases.return_value = []
-
-        result = self.service.populate_tenant(request, "P999999")
-
-        self.assertIn("warning", result)
-        self.assertEqual(result["warning"]["title"], "Ingen hyresgäst hittades")
-        self.assertFalse(request.tenant_option_id)
+        self.assertIsNone(self.service.create_tenant_option("P999999"))
