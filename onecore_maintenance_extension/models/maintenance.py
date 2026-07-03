@@ -147,11 +147,6 @@ class OneCoreMaintenanceRequest(
         compute="_compute_schedule_date_date",
         store=False,
     )
-    new_mimer_notification = fields.Boolean(
-        string="New Mimer Message",
-        compute="_compute_new_mimer_notification",
-        store=False,
-    )
     supplier_dialog_ack_at = fields.Datetime(
         string="Mimer har bekräftat att de läst meddelandet",
         help="Senaste tidpunkt en Mimer-handläggare kvitterade entreprenörens noteringar.",
@@ -327,34 +322,6 @@ class OneCoreMaintenanceRequest(
                     err,
                 )
                 record.requires_pest_control = False
-
-    @api.depends(
-        "message_ids.notification_ids.is_read",
-        "message_ids.notification_ids.notification_type",
-    )
-    def _compute_new_mimer_notification(self):
-        # Batched: one mail.notification search for the whole recordset.
-        # The previous per-record loop fired ~2 queries per card and
-        # dominated the kanban web_read_group cost.
-        if not self:
-            return
-        notifications = self.env["mail.notification"].search(
-            [
-                ("mail_message_id.model", "=", "maintenance.request"),
-                ("mail_message_id.res_id", "in", self.ids),
-                ("res_partner_id", "=", self.env.user.partner_id.id),
-                ("is_read", "!=", True),
-                ("notification_type", "=", "inbox"),
-                (
-                    "mail_message_id.author_id.user_ids.login",
-                    "=",
-                    "odoo@mimer.nu",
-                ),
-            ]
-        )
-        flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
-        for record in self:
-            record.new_mimer_notification = record.id in flagged_ids
 
     @api.depends(
         "message_ids.date",
