@@ -39,11 +39,20 @@ def _get_or_create_mimer_user(env):
     return user
 
 
-def _post_customer_info(request, mimer_user, body="Ny info från hyresgäst"):
-    """Post a comment authored by odoo@mimer.nu, as Mina sidor would."""
-    return request.with_user(mimer_user).message_post(
+def _post_customer_info(request, mimer_user, recipient, body="Ny info från hyresgäst"):
+    """Post a message authored by odoo@mimer.nu that generates an inbox
+    notification, as Mina sidor does."""
+    message = request.with_user(mimer_user).message_post(
         body=body, message_type="comment", subtype_xmlid="mail.mt_comment"
     )
+    request.env["mail.notification"].sudo().create(
+        {
+            "mail_message_id": message.id,
+            "res_partner_id": recipient.partner_id.id,
+            "notification_type": "inbox",
+        }
+    )
+    return message
 
 
 @tagged("onecore")
@@ -61,11 +70,11 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
         return record
 
     def test_internal_user_sees_unread_after_customer_message(self):
-        _post_customer_info(self.request, self.mimer_user)
+        _post_customer_info(self.request, self.mimer_user, self.internal_user)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
 
     def test_external_contractor_never_sees_it(self):
-        _post_customer_info(self.request, self.mimer_user)
+        _post_customer_info(self.request, self.mimer_user, self.internal_user)
         self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
 
     def test_no_customer_message_means_no_unread(self):
@@ -78,19 +87,32 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
     def test_reading_record_does_not_clear_flag(self):
         # Regression vs the old per-user inbox behaviour: merely opening/reading
         # the record must NOT clear the shared flag.
-        _post_customer_info(self.request, self.mimer_user)
+        _post_customer_info(self.request, self.mimer_user, self.internal_user)
         record = self._refresh(self.internal_user)
         _ = record.name  # simulate opening the form
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
 
     def test_new_message_after_ack_reappears(self):
-        first = _post_customer_info(self.request, self.mimer_user)
+        first = _post_customer_info(self.request, self.mimer_user, self.internal_user)
         self.request.new_customer_info_ack_at = first.date + timedelta(seconds=1)
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
 
-        later = _post_customer_info(self.request, self.mimer_user, body="Mer info")
+        later = _post_customer_info(
+            self.request, self.mimer_user, self.internal_user, body="Mer info"
+        )
         later.date = self.request.new_customer_info_ack_at + timedelta(seconds=1)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
+
+    def test_mimer_message_without_inbox_notification_ignored(self):
+        # Field-tracking / log notes authored by odoo@mimer.nu (e.g. automatic
+        # notes) do not generate an inbox notification and must not be
+        # mistaken for genuine Mina-sidor tenant communications.
+        self.request.with_user(self.mimer_user).message_post(
+            body="Interne notering",
+            message_type="notification",
+            subtype_xmlid="mail.mt_note",
+        )
+        self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
 
 
 @tagged("onecore")
@@ -101,7 +123,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         self.external_user = create_external_contractor_user(self.env)
         self.mimer_user = _get_or_create_mimer_user(self.env)
         self.request = create_maintenance_request(self.env)
-        _post_customer_info(self.request, self.mimer_user)
+        _post_customer_info(self.request, self.mimer_user, self.internal_user)
 
     def _refresh(self, user):
         record = self.request.with_user(user)

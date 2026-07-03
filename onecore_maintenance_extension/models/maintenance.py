@@ -484,7 +484,7 @@ class OneCoreMaintenanceRequest(
     @api.depends(
         "message_ids.date",
         "message_ids.author_id",
-        "message_ids.message_type",
+        "message_ids.notification_ids",
         "new_customer_info_ack_at",
         "recently_added_tenant",
     )
@@ -508,27 +508,31 @@ class OneCoreMaintenanceRequest(
             if record.recently_added_tenant:
                 record.has_unread_new_customer_info = True
 
-        # Mina-sidor communications appear as messages authored by the
-        # odoo@mimer.nu integration account. sudo() so classification does not
-        # depend on the reader's right to see that user's login.
-        mimer_user = (
-            self.env["res.users"]
+        # Mina-sidor communications are messages authored by the odoo@mimer.nu
+        # integration account that generated an inbox notification. This mirrors
+        # the former _compute_new_mimer_notification discriminator, but shared
+        # across all Mimer users via the ack timestamp instead of per-user
+        # mail.notification read state. sudo() because we now look across every
+        # recipient partner's inbox notifications, not just the current user's.
+        notifications = (
+            self.env["mail.notification"]
             .sudo()
-            .search([("login", "=", "odoo@mimer.nu")], limit=1)
-        )
-        if not mimer_user:
-            return
-
-        messages = self.env["mail.message"].search(
-            [
-                ("model", "=", "maintenance.request"),
-                ("res_id", "in", self.ids),
-                ("author_id", "=", mimer_user.partner_id.id),
-                ("message_type", "in", ["comment", "email"]),
-            ]
+            .search(
+                [
+                    ("mail_message_id.model", "=", "maintenance.request"),
+                    ("mail_message_id.res_id", "in", self.ids),
+                    ("notification_type", "=", "inbox"),
+                    (
+                        "mail_message_id.author_id.user_ids.login",
+                        "=",
+                        "odoo@mimer.nu",
+                    ),
+                ]
+            )
         )
         latest_by_request = {}
-        for message in messages:
+        for notif in notifications:
+            message = notif.mail_message_id
             if not message.date:
                 continue
             current = latest_by_request.get(message.res_id)
