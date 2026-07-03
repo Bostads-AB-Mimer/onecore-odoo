@@ -1,4 +1,3 @@
-from odoo.exceptions import AccessError
 from odoo.tests import TransactionCase, tagged
 
 
@@ -56,10 +55,15 @@ class TestPinMessage(TransactionCase):
         message.action_toggle_pin()
         self.assertEqual(message.pinned_by_name, self.internal_user.name)
 
-    def test_toggle_pin_denied_for_external_contractor(self):
-        with self.assertRaises(AccessError):
-            self.message.with_user(self.external_user).action_toggle_pin()
+    def test_external_contractor_can_pin(self):
+        # Everyone may pin now, including external contractors (see
+        # mail.message._user_can_pin — the single gate for this).
+        message = self.message.with_user(self.external_user)
+        result = message.action_toggle_pin()
+        self.assertTrue(message.pinned_at)
+        self.assertTrue(result["pinned_at"])
+        self.assertEqual(message.pinned_by_id, self.external_user)
 
-    def test_can_pin_flag(self):
+    def test_can_pin_flag_true_for_everyone(self):
         self.assertTrue(self.message.with_user(self.internal_user).can_pin)
-        self.assertFalse(self.message.with_user(self.external_user).can_pin)
+        self.assertTrue(self.message.with_user(self.external_user).can_pin)

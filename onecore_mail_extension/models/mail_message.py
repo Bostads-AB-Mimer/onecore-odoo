@@ -74,18 +74,21 @@ class OneCoreMailMessage(models.Model):
         for message in self:
             message.pinned_by_name = message.pinned_by_id.name or ""
 
+    def _user_can_pin(self):
+        # Central gate for who may pin chatter messages. Currently everyone
+        # (internal users AND external contractors) may pin. To restrict this
+        # later, change ONLY this method (e.g. return a group check) — both the
+        # can_pin field and the action_toggle_pin guard route through here.
+        return True
+
     @api.depends_context("uid")
     def _compute_can_pin(self):
-        # Internal handlers may pin; external contractors may not. Mirrors the
-        # group check already used in create(). has_group returns False when the
-        # maintenance module (and thus the group) is absent. depends_context("uid")
-        # is required so the cache is keyed per user — without it, Odoo caches the
-        # first-computed value and reuses it for every user in the same transaction.
-        is_external = self.env.user.has_group(
-            "onecore_maintenance_extension.group_external_contractor"
-        )
+        # depends_context("uid") keeps the cache keyed per user, so once
+        # _user_can_pin becomes user-dependent it takes effect without a stale
+        # value being shared across users in the same transaction.
+        can_pin = self._user_can_pin()
         for message in self:
-            message.can_pin = not is_external
+            message.can_pin = can_pin
 
     def _to_store_defaults(self, target):
         # Exposes is_dialog_unread_for_side (dialog highlight) plus the pin
@@ -98,16 +101,15 @@ class OneCoreMailMessage(models.Model):
         ]
 
     def action_toggle_pin(self):
-        # Shared pin toggle for the chatter "Fästa" section. Internal handlers
-        # only; external contractors are blocked here (the front-end also hides
-        # the button via can_pin). Pin state is the native pinned_at (truthiness).
-        # Writes with sudo because pinning is a cross-user action on messages the
-        # caller does not own, and mail.message write ACLs otherwise restrict
-        # edits to the author.
+        # Shared pin toggle for the chatter "Fästa" section. Anyone who passes
+        # _user_can_pin (currently everyone, incl. external contractors) may
+        # toggle. Pin state is the native pinned_at (truthiness). Writes with
+        # sudo because pinning is a cross-user action on messages the caller does
+        # not own, and mail.message write ACLs otherwise restrict edits to the
+        # author. Read access to the message is still enforced naturally by the
+        # self.pinned_at read below.
         self.ensure_one()
-        if self.env.user.has_group(
-            "onecore_maintenance_extension.group_external_contractor"
-        ):
+        if not self._user_can_pin():
             raise AccessError(_("Du har inte behörighet att fästa noteringar."))
         if self.pinned_at:
             self.sudo().write({"pinned_at": False, "pinned_by_id": False})
