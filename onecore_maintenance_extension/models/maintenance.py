@@ -623,6 +623,10 @@ class OneCoreMaintenanceRequest(
         tenant-onboarding flag is cleared too so the badge fully disappears.
         """
         self.ensure_one()
+        # Internal-Mimer only: external contractors must never clear the
+        # tenant customer-info flag (mirrors the compute's audience guard).
+        if ExternalContractorService(self.env).is_external_contractor():
+            return False
         self.new_customer_info_ack_at = fields.Datetime.now()
         if self.recently_added_tenant:
             self.recently_added_tenant = False

@@ -98,6 +98,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
     def setUp(self):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
+        self.external_user = create_external_contractor_user(self.env)
         self.mimer_user = _get_or_create_mimer_user(self.env)
         self.request = create_maintenance_request(self.env)
         _post_customer_info(self.request, self.mimer_user)
@@ -127,3 +128,16 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         self.assertTrue(record.has_unread_new_customer_info)
         record.action_acknowledge_new_customer_info()
         self.assertFalse(record.has_unread_new_customer_info)
+
+    def test_external_contractor_cannot_ack(self):
+        # Hard constraint: "Ny kundinfo" is internal-Mimer only. An external
+        # contractor must never be able to clear the shared flag for
+        # everyone on the Mimer side.
+        self.request.recently_added_tenant = True
+        record = self._refresh(self.external_user)
+
+        record.action_acknowledge_new_customer_info()
+
+        self.assertFalse(self.request.new_customer_info_ack_at)
+        self.assertTrue(self.request.recently_added_tenant)
+        self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
