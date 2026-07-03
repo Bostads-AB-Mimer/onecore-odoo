@@ -183,6 +183,16 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_master_key_change",
         store=False,
     )
+    new_customer_info_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad",
+        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ny kundinfo. "
+        "Delas av alla Mimer-användare som har tillgång till ärendet.",
+    )
+    has_unread_new_customer_info = fields.Boolean(
+        string="Okvitterad ny kundinfo",
+        compute="_compute_has_unread_new_customer_info",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -504,6 +514,68 @@ class OneCoreMaintenanceRequest(
                 not ack_at or record.master_key_changed_at > ack_at
             )
 
+    @api.depends(
+        "message_ids.date",
+        "message_ids.author_id",
+        "message_ids.message_type",
+        "new_customer_info_ack_at",
+        "recently_added_tenant",
+    )
+    def _compute_has_unread_new_customer_info(self):
+        # "Ny kundinfo" is the tenant -> Mimer channel (Mina sidor). Shared
+        # across all Mimer users via one ack timestamp, and internal-only:
+        # external contractors never see or clear tenant customer info.
+        for record in self:
+            record.has_unread_new_customer_info = False
+
+        if not self:
+            return
+
+        if ExternalContractorService(self.env).is_external_contractor():
+            return
+
+        # No strict separation: a freshly-added tenant also counts as new
+        # customer info. It contributes until acknowledged (the ack action
+        # clears recently_added_tenant), so no timestamp comparison is needed.
+        for record in self:
+            if record.recently_added_tenant:
+                record.has_unread_new_customer_info = True
+
+        # Mina-sidor communications appear as messages authored by the
+        # odoo@mimer.nu integration account. sudo() so classification does not
+        # depend on the reader's right to see that user's login.
+        mimer_user = (
+            self.env["res.users"]
+            .sudo()
+            .search([("login", "=", "odoo@mimer.nu")], limit=1)
+        )
+        if not mimer_user:
+            return
+
+        messages = self.env["mail.message"].search(
+            [
+                ("model", "=", "maintenance.request"),
+                ("res_id", "in", self.ids),
+                ("author_id", "=", mimer_user.partner_id.id),
+                ("message_type", "in", ["comment", "email"]),
+            ]
+        )
+        latest_by_request = {}
+        for message in messages:
+            if not message.date:
+                continue
+            current = latest_by_request.get(message.res_id)
+            if not current or message.date > current:
+                latest_by_request[message.res_id] = message.date
+
+        for record in self:
+            latest = latest_by_request.get(record.id)
+            if not latest:
+                continue
+            ack_at = record.new_customer_info_ack_at
+            if not ack_at or latest > ack_at:
+                record.has_unread_new_customer_info = True
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -540,6 +612,23 @@ class OneCoreMaintenanceRequest(
         # Non-stored computed field — force a recompute so the chatter button
         # and the kanban chip re-evaluate immediately.
         self.invalidate_recordset(["has_unread_master_key_change"])
+        return True
+
+    def action_acknowledge_new_customer_info(self):
+        """Mark "Ny kundinfo" read for every Mimer user of the request.
+
+        Acknowledgement is one shared timestamp on the request — the first
+        Mimer handler to click clears the badge for all Mimer users. External
+        contractors never see or call this. Per "no strict separation", the
+        tenant-onboarding flag is cleared too so the badge fully disappears.
+        """
+        self.ensure_one()
+        self.new_customer_info_ack_at = fields.Datetime.now()
+        if self.recently_added_tenant:
+            self.recently_added_tenant = False
+        # Non-stored computed field — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
+        self.invalidate_recordset(["has_unread_new_customer_info"])
         return True
 
     def _send_creation_sms(self):
