@@ -1174,10 +1174,12 @@ class OneCoreMaintenanceRequest(
         }
 
     def open_backfill_rental_object_wizard(self):
-        return self._open_backfill_wizard("rental_object", "Lägg till hyresobjekt")
+        return self._open_backfill_wizard(
+            "rental_object", "Lägg till / ändra hyresobjekt"
+        )
 
     def open_backfill_tenant_wizard(self):
-        return self._open_backfill_wizard("tenant", "Lägg till hyresgäst")
+        return self._open_backfill_wizard("tenant", "Lägg till / ändra hyresgäst")
 
     def _open_backfill_wizard(self, kind, title):
         self.ensure_one()

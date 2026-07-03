@@ -10,8 +10,8 @@
                         <field name="maintenance_request_id" invisible="1" />
                         <field name="lookup_kind" invisible="1" />
                         <field name="state" invisible="1" />
-                        <field name="option_model" invisible="1" />
-                        <field name="option_res_id" invisible="1" />
+                        <field name="object_model" invisible="1" />
+                        <field name="object_res_id" invisible="1" />
 
                         <group invisible="state != 'input'">
                             <field name="lookup_value"
@@ -24,14 +24,25 @@
                                 placeholder="Klistra in kundnummer" />
                         </group>
 
-                        <group invisible="state != 'preview'" col="1">
-                            <field name="preview_text" nolabel="1" readonly="1" />
-                        </group>
-                        <group invisible="state != 'preview' or lookup_kind != 'tenant'">
+                        <group invisible="state != 'preview' or not lease_option_id">
                             <field name="lease_option_id" string="Kontrakt"
                                 domain="[('user_id', '=', uid)]"
                                 options="{'no_create': True, 'no_create_edit': True, 'no_open': True}"
-                                help="Välj vilket kontrakt som ska kopplas till ärendet." />
+                                help="Välj vilket kontrakt som ska kopplas till ärendet (hyresobjekt och hyresgäst följer med)." />
+                        </group>
+                        <group string="Hyresobjekt"
+                            invisible="state != 'preview' or not prev_object_id">
+                            <field name="prev_object_id" />
+                            <field name="prev_object_address"
+                                invisible="not prev_object_address" />
+                            <field name="prev_object_property"
+                                invisible="not prev_object_property" />
+                        </group>
+                        <group string="Hyresgäst"
+                            invisible="state != 'preview' or not prev_tenant_name">
+                            <field name="prev_tenant_name" />
+                            <field name="prev_tenant_contact"
+                                invisible="not prev_tenant_contact" />
                         </group>
                     </sheet>
                     <footer>
