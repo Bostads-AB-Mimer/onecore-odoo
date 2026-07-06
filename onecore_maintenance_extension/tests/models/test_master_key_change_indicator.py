@@ -101,7 +101,14 @@ class TestAcknowledgeMasterKeyChange(TransactionCase):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
-        self.request = create_maintenance_request(self.env, master_key=False)
+        # The external-contractor record rule (security/maintenance.xml)
+        # only grants access to requests on the contractor's own team, same
+        # as tests/security/test_external_contractor.py.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, master_key=False, maintenance_team_id=self.team.id
+        )
         self.request.with_user(self.internal_user).write({"master_key": True})
 
     def _refresh(self, user):
