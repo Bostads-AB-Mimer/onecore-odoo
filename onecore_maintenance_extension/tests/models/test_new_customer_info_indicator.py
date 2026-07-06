@@ -163,3 +163,25 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         self.assertFalse(self.request.new_customer_info_ack_at)
         self.assertTrue(self.request.recently_added_tenant)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
+
+    def test_ack_posts_swedish_note_and_no_english_flag_note(self):
+        self.request.recently_added_tenant = True
+        # create_maintenance_request()/create() leaves `creating_records=True`
+        # on the returned recordset's context (see maintenance.py create()),
+        # which makes write() skip FieldChangeTracker entirely. Tests that
+        # assert on posted chatter notes must override it, same as
+        # test_maintenance_workflow_service.py does.
+        record = self._refresh(self.internal_user).with_context(
+            creating_records=False
+        )
+        before = set(record.message_ids.ids)
+        record.action_acknowledge_new_customer_info()
+        # message_ids is a plain relational field, not a compute — it was
+        # already fetched (and cached) by the `before` read above, so it
+        # must be explicitly invalidated to see the note just posted.
+        record.invalidate_recordset(["message_ids"])
+        bodies = " ".join(
+            record.message_ids.filtered(lambda m: m.id not in before).mapped("body")
+        )
+        self.assertIn("Ny kundinfo kvitterad", bodies)
+        self.assertNotIn("Recently added tenant", bodies)
