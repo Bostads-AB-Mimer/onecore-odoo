@@ -1,3 +1,4 @@
+from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 
@@ -67,3 +68,62 @@ class TestPinMessage(TransactionCase):
     def test_can_pin_flag_true_for_everyone(self):
         self.assertTrue(self.message.with_user(self.internal_user).can_pin)
         self.assertTrue(self.message.with_user(self.external_user).can_pin)
+
+    def test_fetch_pinned_messages_returns_all_regardless_of_recency(self):
+        # The chatter paginates on the 30 most recent messages (MIM-1301
+        # review). _fetch_pinned_messages queries by pinned_at with no limit so
+        # a note pinned before that window still surfaces in the "Fästa"
+        # section without the user scrolling to load it.
+        Message = self.env["mail.message"]
+        old_pinned = Message.create(
+            {
+                "model": "res.partner",
+                "res_id": self.partner.id,
+                "body": "Gammal fäst notering",
+                "message_type": "comment",
+                "pinned_at": fields.Datetime.now(),
+            }
+        )
+        # Bury it well past the chatter's 30-message pagination window.
+        for i in range(35):
+            Message.create(
+                {
+                    "model": "res.partner",
+                    "res_id": self.partner.id,
+                    "body": f"Notering {i}",
+                    "message_type": "comment",
+                }
+            )
+
+        pinned = Message._fetch_pinned_messages(self.partner)
+
+        self.assertIn(old_pinned, pinned)
+        self.assertTrue(all(m.pinned_at for m in pinned))
+
+    def test_fetch_pinned_messages_scoped_to_thread(self):
+        # Pinned messages on other records must not leak into this thread's
+        # "Fästa" section.
+        Message = self.env["mail.message"]
+        other_partner = self.env["res.partner"].create({"name": "Annan"})
+        Message.create(
+            {
+                "model": "res.partner",
+                "res_id": other_partner.id,
+                "body": "Fäst på annan post",
+                "message_type": "comment",
+                "pinned_at": fields.Datetime.now(),
+            }
+        )
+        this_pinned = Message.create(
+            {
+                "model": "res.partner",
+                "res_id": self.partner.id,
+                "body": "Fäst här",
+                "message_type": "comment",
+                "pinned_at": fields.Datetime.now(),
+            }
+        )
+
+        pinned = Message._fetch_pinned_messages(self.partner)
+
+        self.assertEqual(pinned, this_pinned)

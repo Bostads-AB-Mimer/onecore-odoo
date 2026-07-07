@@ -37,13 +37,21 @@ patch(Message.prototype, {
     return this.message.can_pin;
   },
   async togglePin() {
-    await this.env.services.orm.call("mail.message", "action_toggle_pin", [
-      [this.message.id],
-    ]);
-    // Re-fetch so pinned_at/can_pin re-serialize (mirrors onClickAcknowledgeDialog
-    // in tenant_chatter_patch.js). This updates the inline styling and lets the
-    // Chatter's pinnedMessages getter recompute the "Fästa" section.
-    await this.message.thread?.fetchMessages();
+    const result = await this.env.services.orm.call(
+      "mail.message",
+      "action_toggle_pin",
+      [[this.message.id]],
+    );
+    // Update the store record directly from the returned pin state. This
+    // reactively updates the inline styling and the Chatter's pinnedMessages
+    // getter. thread.fetchMessages() alone would not refresh a message pinned
+    // before the chatter's 30-message window, so unpinning such a message from
+    // the "Fästa" section would leave it stuck there until reload (MIM-1301).
+    this.message.store["mail.message"].insert({
+      id: this.message.id,
+      pinned_at: result.pinned_at,
+      pinned_by_name: result.pinned_by_name,
+    });
   },
   isSendFailure() {
     const type = this.message.message_type;

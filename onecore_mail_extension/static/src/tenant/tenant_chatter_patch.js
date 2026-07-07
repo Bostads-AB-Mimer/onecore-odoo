@@ -4,6 +4,7 @@ import { Chatter } from "@mail/chatter/web_portal/chatter";
 import { Message } from "@mail/core/common/message";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { patch } from "@web/core/utils/patch";
+import { rpc } from "@web/core/network/rpc";
 import { _t } from "@web/core/l10n/translation";
 
 patch(Chatter, {
@@ -22,11 +23,38 @@ patch(Chatter.prototype, {
 
   get pinnedMessages() {
     const thread = this.state.thread;
-    if (!thread?.messages) {
+    if (!thread?.allMessages) {
       return [];
     }
+    // Read allMessages (the full store-backed set), not the paginated
+    // thread.messages: the chatter only loads the 30 most recent messages, so a
+    // message pinned before that window is absent from thread.messages until
+    // scrolled into view. _fetchPinnedMessages loads every pinned message into
+    // the store so it is present in allMessages here (MIM-1301 review).
     // Newest first (descending id), matching the log's order="desc" display.
-    return thread.messages.filter((m) => m.pinned_at).sort((a, b) => b.id - a.id);
+    return thread.allMessages
+      .filter((m) => m.pinned_at)
+      .sort((a, b) => b.id - a.id);
+  },
+
+  async load(thread, requestList) {
+    await super.load(thread, requestList);
+    await this._fetchPinnedMessages(thread);
+  },
+
+  async _fetchPinnedMessages(thread) {
+    // Loads all pinned messages for the thread into the store, independent of
+    // the chatter's 30-message pagination, so pinnedMessages (reading
+    // allMessages) always renders the complete "Fästa" section on first paint.
+    // Mirrors the current-thread guard in the base Chatter.load.
+    if (!thread?.id || !this.state.thread?.eq(thread)) {
+      return;
+    }
+    const result = await rpc("/mail/thread/pinned_messages", {
+      thread_model: thread.model,
+      thread_id: thread.id,
+    });
+    this.store.insert(result.data);
   },
 
   _isUnsavedMaintenanceRequest() {

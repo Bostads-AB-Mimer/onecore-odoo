@@ -100,6 +100,18 @@ class OneCoreMailMessage(models.Model):
             "can_pin",
         ]
 
+    @api.model
+    def _fetch_pinned_messages(self, thread):
+        # Returns every pinned message on the thread, ignoring the chatter's
+        # 30-message pagination window. The web chatter only holds the most
+        # recent FETCH_LIMIT messages, so a note pinned before that window would
+        # otherwise never reach the "Fästa" section until the user scrolled it
+        # into view (MIM-1301 review). limit=None lifts that cap; passing the
+        # thread scopes the query to this record and excludes user_notification.
+        return self._message_fetch(
+            domain=[("pinned_at", "!=", False)], thread=thread, limit=None
+        )["messages"]
+
     def action_toggle_pin(self):
         # Shared pin toggle for the chatter "Fästa" section. Anyone who passes
         # _user_can_pin (currently everyone, incl. external contractors) may
