@@ -837,6 +837,19 @@ class OneCoreMaintenanceRequest(
         if space_caption:
             defaults["space_caption"] = space_caption
 
+        # Default new requests to the Kundcenter intake team. Base Odoo defaults
+        # the required maintenance_team_id to "Internal Maintenance"; in ONECore
+        # every request starts at intake, from where it is dispatched to a work
+        # team once a priority is set. An explicit team passed via context wins,
+        # and the base default is kept if the intake team can't be resolved so
+        # the required field is always satisfied.
+        if "maintenance_team_id" in fields_list and not self.env.context.get(
+            "default_maintenance_team_id"
+        ):
+            intake_team_id = MaintenanceStageManager(self.env)._intake_team_id()
+            if intake_team_id:
+                defaults["maintenance_team_id"] = intake_team_id
+
         return defaults
 
     @api.model_create_multi
