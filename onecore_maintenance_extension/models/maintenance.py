@@ -946,9 +946,12 @@ class OneCoreMaintenanceRequest(
 
         # Require a priority before a request is dispatched off the Kundcenter
         # intake team, so a contractor is never handed a request they can
-        # neither progress nor triage. Skipped during the create flow — create()
-        # validates the final team itself (see below).
-        if "maintenance_team_id" in vals and not skip_tracking:
+        # neither progress nor triage. Validated on every write (like the stage
+        # check above), not guarded by skip_tracking: create() returns records
+        # that still carry the creating_records context, so a guard would let a
+        # dispatch on a just-created record slip through. The initial team set by
+        # create() never routes through write(); create() validates it directly.
+        if "maintenance_team_id" in vals:
             stage_manager.validate_team_priority(
                 self, vals["maintenance_team_id"], vals
             )
