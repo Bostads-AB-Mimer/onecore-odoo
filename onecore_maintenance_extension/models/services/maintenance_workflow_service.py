@@ -11,6 +11,14 @@ class MaintenanceStageManager:
 
     PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad")
 
+    # Intake team every request lands on first (internal and external sources
+    # such as Mimer.nu). Identified by its module data record
+    # (maintenance.team.csv, id=7) rather than its name, so renaming the team in
+    # the UI (e.g. to "Kundcenter - Inkomna serviceanmälningar") does not
+    # silently disable the priority gate. Priority is not required while a
+    # request sits here.
+    INTAKE_TEAM_XMLID = "onecore_maintenance_extension.7"
+
     def __init__(self, env):
         self.env = env
 
@@ -76,6 +84,45 @@ class MaintenanceStageManager:
                 _("Prioritet måste anges innan ärendet flyttas till '%s'.")
                 % new_stage.name
             )
+
+    def _intake_team_id(self):
+        """Id of the Kundcenter intake team.
+
+        Resolved by its module data record so a UI rename of the team does not
+        disable the priority gate. Falls back to a name-prefix match only if the
+        data record is missing (e.g. a hand-created replacement team).
+        """
+        team = self.env.ref(self.INTAKE_TEAM_XMLID, raise_if_not_found=False)
+        if not team:
+            team = self.env["maintenance.team"].search(
+                [("name", "=ilike", "Kundcenter%")], limit=1
+            )
+        return team.id if team else False
+
+    def validate_team_priority(self, records, new_team_id, vals=None):
+        """Require a priority before a request leaves the Kundcenter intake team.
+
+        Every request is created on the Kundcenter intake team (internal and
+        external sources such as Mimer.nu). It may only move to a work team once
+        a priority is set — otherwise an external contractor can be handed a
+        request they can neither progress (a stage change needs a priority, see
+        ``_validate_priority_set``) nor triage (priority is read-only for them),
+        leaving it permanently stuck. Assigning the intake team or clearing the
+        team is always allowed. A priority set in the same write counts.
+        """
+        if not new_team_id:
+            return
+        if new_team_id == self._intake_team_id():
+            return
+        vals = vals or {}
+        team = self.env["maintenance.team"].browse(new_team_id)
+        for record in records:
+            has_priority = vals.get("priority_expanded", record.priority_expanded)
+            if not has_priority:
+                raise exceptions.UserError(
+                    _("Prioritet måste anges innan ärendet tilldelas teamet '%s'.")
+                    % team.name
+                )
 
     def handle_initial_user_assignment(self, request):
         """Handle stage transition when user is assigned during request creation."""
