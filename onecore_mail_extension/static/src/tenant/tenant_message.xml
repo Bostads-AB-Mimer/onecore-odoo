@@ -23,7 +23,8 @@
             </button>
         </xpath>
 
-        <!-- Pin/unpin button (internal users only) -->
+        <!-- Pin/unpin button — shown to everyone who may pin (incl. external
+             contractors); gated by can_pin via mail.message._user_can_pin -->
         <xpath expr="//div[hasclass('o-mail-Message')]" position="inside">
             <button t-if="canPin" class="mimer-pin-toggle"
                     t-att-title="message.pinned_at ? 'Ta bort fäst' : 'Fäst'"
