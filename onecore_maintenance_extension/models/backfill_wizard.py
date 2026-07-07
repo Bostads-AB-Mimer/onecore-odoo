@@ -38,6 +38,8 @@ class MaintenanceBackfillWizard(models.TransientModel):
     # Vacant-object case (object found but no contract): the object option to attach.
     object_model = fields.Char(readonly=True)
     object_res_id = fields.Integer(readonly=True)
+    # True when the search resolved an object with no contract → attached as vacant.
+    is_vacant = fields.Boolean(readonly=True)
     # Read-only preview of what will be attached (kept in sync with the contract).
     prev_object_id = fields.Char(string="Hyresobjekt", readonly=True)
     prev_object_address = fields.Char(string="Adress", readonly=True)
@@ -72,6 +74,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
             "lease_option_id": False,
             "object_model": False,
             "object_res_id": False,
+            "is_vacant": False,
         }
         lease_options = result.get("lease_options")
         if lease_options:
@@ -85,6 +88,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
             obj = result["object_option"]
             vals["object_model"] = obj._name
             vals["object_res_id"] = obj.id
+            vals["is_vacant"] = True
             vals.update(self._preview_vals(obj, None))
         self.write(vals)
         return self._reopen()
@@ -160,19 +164,24 @@ class MaintenanceBackfillWizard(models.TransientModel):
             getattr(record_service, route["save_method"])(
                 request, {route["option_field"]: object_option.id}
             )
+
         if lease_option:
             record_service._save_lease(request, {"lease_option_id": lease_option.id})
-            tenant_option = self.env["maintenance.tenant.option"].search(
-                [
-                    ("lease_option_id", "=", lease_option.id),
-                    ("user_id", "=", self.env.uid),
-                ],
-                limit=1,
-            )
+            tenant_option = self._tenant_of(lease_option)
             if tenant_option:
                 record_service._save_tenant(
                     request, {"tenant_option_id": tenant_option.id}
                 )
+            else:
+                # Contract with no tenant → don't keep the previously attached one.
+                request.tenant_id = False
+            request.manually_vacated = False
+        else:
+            # Vacant object: leave it genuinely vacant — drop the old contract and
+            # tenant, and flag it so the empty-tenant compute won't silently refetch.
+            request.lease_id = False
+            request.tenant_id = False
+            request.manually_vacated = True
 
         # Clear stale object fields of other types, then delete every replaced record.
         for r in all_routes():
@@ -180,9 +189,10 @@ class MaintenanceBackfillWizard(models.TransientModel):
             if field != route["record_field"] and request[field]:
                 request[field] = False
             self._unlink_replaced(old_objects[field], request[field])
-        if lease_option:
-            self._unlink_replaced(old_lease, request.lease_id)
-            self._unlink_replaced(old_tenant, request.tenant_id)
+        # Always reconcile lease/tenant: covers replace, vacant clear, and empty-tenant
+        # contract (no-op when the record is unchanged or was never set).
+        self._unlink_replaced(old_lease, request.lease_id)
+        self._unlink_replaced(old_tenant, request.tenant_id)
 
     def _unlink_replaced(self, old_record, new_record):
         """Delete a permanent record that was just replaced by ``new_record``.
@@ -229,13 +239,24 @@ class MaintenanceBackfillWizard(models.TransientModel):
         )
 
     def _tenant_of(self, lease_option):
-        return self.env["maintenance.tenant.option"].search(
-            [
-                ("lease_option_id", "=", lease_option.id),
-                ("user_id", "=", self.env.uid),
-            ],
-            limit=1,
-        )
+        """The tenant to attach for a contract.
+
+        On the kundnummer path a co-signed lease has several tenants; return the one
+        whose contact_code matches the searched number (a bare ``limit=1`` would pick
+        the primary tenant regardless of who was searched). Falls back to the first.
+        """
+        Tenant = self.env["maintenance.tenant.option"]
+        domain = [
+            ("lease_option_id", "=", lease_option.id),
+            ("user_id", "=", self.env.uid),
+        ]
+        if self.lookup_kind == "tenant" and self.lookup_value:
+            match = Tenant.search(
+                domain + [("contact_code", "=", self.lookup_value.strip())], limit=1
+            )
+            if match:
+                return match
+        return Tenant.search(domain, limit=1)
 
     def _preview_vals(self, object_option, tenant_option):
         """Values for the read-only preview fields (object identity + tenant)."""

@@ -12,6 +12,14 @@
                         <field name="state" invisible="1" />
                         <field name="object_model" invisible="1" />
                         <field name="object_res_id" invisible="1" />
+                        <field name="is_vacant" invisible="1" />
+
+                        <div class="alert alert-warning" role="alert"
+                            invisible="state != 'preview' or not is_vacant">
+                            <i class="fa fa-exclamation-triangle me-2" />
+                            Hyresobjektet saknar aktivt kontrakt. Det kopplas till
+                            ärendet utan hyresgäst (tomställt).
+                        </div>
 
                         <group invisible="state != 'input'">
                             <field name="lookup_value"

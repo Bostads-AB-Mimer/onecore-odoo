@@ -23,3 +23,7 @@ class TenantFieldsMixin(models.AbstractModel):
     # Additional tenant-related fields
     recently_added_tenant = fields.Boolean(string="Recently added tenant", store=True, default=False)
     empty_tenant = fields.Boolean(string="No tenant", store=False, compute="_compute_empty_tenant")
+    # Set when the user deliberately attaches a rental object with no contract via
+    # the backfill wizard. Suppresses the empty-tenant auto-fetch so the object
+    # stays genuinely vacant (MIM-1841).
+    manually_vacated = fields.Boolean(string="Manuellt tomställd", store=True, default=False)

@@ -97,6 +97,17 @@ WORK_ORDER_OTHER = [
 ]
 VACANT = [_item(None, residence=_residence("216-034-03-0101", "RES-001"))]
 
+# A co-signed lease: two tenants in payload order (primary first).
+CO_SIGNED_LEASE = dict(
+    RES_LEASE,
+    tenants=[_tenant("P005468", "Sven Olofsson"), _tenant("P009999", "Anna Andersson")],
+)
+# A contract with no tenants (should never occur in real data, but must be handled).
+TENANTLESS_LEASE = dict(OTHER_RES_LEASE, tenants=[])
+TENANTLESS_WORK_ORDER = [
+    _item(TENANTLESS_LEASE, residence=_residence("700-111-22-3333", "RES-OTHER"))
+]
+
 
 @tagged("onecore")
 class TestBackfillWizard(TransactionCase):
@@ -122,6 +133,7 @@ class TestBackfillWizard(TransactionCase):
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
             wiz.action_search()
             self.assertTrue(wiz.lease_option_id)
+            self.assertFalse(wiz.is_vacant)  # a contract was found
             result = wiz.action_confirm()
 
         self.assertEqual(result, SOFT_RELOAD)
@@ -159,12 +171,116 @@ class TestBackfillWizard(TransactionCase):
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
             wiz.action_search()
             self.assertFalse(wiz.lease_option_id)
+            self.assertTrue(wiz.is_vacant)  # flagged for the wizard banner
             wiz.action_confirm()
 
         reloaded = self.env["maintenance.request"].browse(request.id)
         reloaded.invalidate_recordset()
         self.assertTrue(reloaded.rental_property_id)
         self.assertFalse(reloaded.tenant_id)
+
+    def test_vacant_object_over_contract_clears_stale_lease_tenant(self):
+        # Regression: attaching a vacant object on top of an existing contract must
+        # not leave the old lease + tenant dangling (they mismatch the new object).
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        wiz1 = self._wizard(request, "rental_object")
+        wiz1.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        old_lease_id = request.lease_id.id
+        old_tenant_id = request.tenant_id.id
+        self.assertTrue(old_lease_id)
+        self.assertTrue(old_tenant_id)
+
+        self.fake_api.fetch_form_data.return_value = VACANT
+        wiz2 = self._wizard(request, "rental_object")
+        wiz2.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            self.assertFalse(wiz2.lease_option_id)
+            wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.rental_property_id)
+        self.assertFalse(reloaded.lease_id)
+        self.assertFalse(reloaded.tenant_id)
+        self.assertTrue(reloaded.manually_vacated)
+        self.assertFalse(self.env["maintenance.lease"].browse(old_lease_id).exists())
+        self.assertFalse(self.env["maintenance.tenant"].browse(old_tenant_id).exists())
+
+    def test_vacant_object_does_not_refetch_on_render(self):
+        # Regression: a deliberately vacant object must not trigger the empty-tenant
+        # auto-fetch on every form render (which would re-create the tenant/lease).
+        from ...models.services.record_management_service import (
+            RecordManagementService,
+        )
+
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_form_data.return_value = VACANT
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        with patch.object(
+            RecordManagementService, "_create_missing_lease_and_tenant"
+        ) as refetch:
+            _ = reloaded.empty_tenant  # triggers _compute_empty_tenant
+            refetch.assert_not_called()
+
+    def test_cosigned_lease_attaches_searched_tenant(self):
+        # Regression: searching the co-signer's kundnummer must attach that person,
+        # not the lease's primary tenant.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_contact_leases.return_value = [CO_SIGNED_LEASE]
+        self.fake_api.fetch_residence.return_value = _residence(
+            "216-034-03-0101", "RES-001"
+        )
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P009999"  # the co-signer, not the primary tenant
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            self.assertEqual(wiz.prev_tenant_contact, "P009999")
+            wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertEqual(reloaded.contact_code, "P009999")
+
+    def test_contract_without_tenant_clears_previous_tenant(self):
+        # Regression: switching to a contract that has no tenants must clear the old
+        # tenant rather than leaving it attached.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        wiz1 = self._wizard(request, "rental_object")
+        wiz1.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        old_tenant_id = request.tenant_id.id
+        self.assertTrue(old_tenant_id)
+
+        self.fake_api.fetch_form_data.return_value = TENANTLESS_WORK_ORDER
+        wiz2 = self._wizard(request, "rental_object")
+        wiz2.lookup_value = "700-111-22-3333"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            self.assertTrue(wiz2.lease_option_id)  # a contract IS attached...
+            wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.lease_id)
+        self.assertFalse(reloaded.tenant_id)  # ...but no stale tenant
+        self.assertFalse(
+            self.env["maintenance.tenant"].browse(old_tenant_id).exists()
+        )
 
     def test_kundnummer_shows_all_types_and_switching_realigns_space(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")

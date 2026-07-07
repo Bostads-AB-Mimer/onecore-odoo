@@ -286,7 +286,11 @@ class RecordManagementService:
         else:
             record.recently_added_tenant = False
 
-        if record.rental_property_id and not record.lease_id:  # Empty tenant / lease
+        if (
+            record.rental_property_id
+            and not record.lease_id
+            and not record.manually_vacated  # user deliberately left it vacant
+        ):  # Empty tenant / lease
             self._create_missing_lease_and_tenant(record)
 
     def _create_missing_lease_and_tenant(self, record):
