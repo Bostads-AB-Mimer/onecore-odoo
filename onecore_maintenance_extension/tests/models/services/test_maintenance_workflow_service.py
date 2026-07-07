@@ -316,10 +316,11 @@ class TestMaintenanceTeamPriority(StageTestMixin, TransactionCase):
         )
         self.assertEqual(request.maintenance_team_id, self.kundcenter)
 
-    def test_create_without_team_without_priority_allowed(self):
-        """A teamless request may be created without a priority."""
+    def test_create_defaults_to_intake_team_without_priority(self):
+        """A request created without a team defaults to Kundcenter (intake), so
+        no priority is required."""
         request = create_maintenance_request(self.env, priority_expanded=False)
-        self.assertFalse(request.maintenance_team_id)
+        self.assertEqual(request.maintenance_team_id, self.kundcenter)
 
     def test_create_on_work_team_with_priority_allowed(self):
         """A fully triaged request may be created directly on a work team."""
