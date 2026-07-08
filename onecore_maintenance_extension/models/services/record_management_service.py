@@ -299,6 +299,28 @@ class RecordManagementService:
         ):  # Empty tenant / lease
             self._create_missing_lease_and_tenant(record)
 
+    def unlink_record(self, record):
+        """Best-effort delete of a permanent record being removed or replaced.
+
+        If the delete is blocked (e.g. a reference elsewhere), log a warning and
+        leave the record unreferenced rather than failing the caller.
+
+        A blocked delete is a foreign-key violation, which aborts the transaction,
+        so the savepoint is what keeps "best-effort" honest: without it the caught
+        exception would still take down whatever the caller does next — the
+        remaining unlinks and the chatter note — rolling back the change the user
+        just confirmed.
+        """
+        if not record or not record.exists():
+            return
+        try:
+            with self.env.cr.savepoint():
+                record.unlink()
+        except Exception as err:
+            _logger.warning(
+                "Could not delete %s record %s: %s", record._name, record.id, err
+            )
+
     def _create_missing_lease_and_tenant(self, record):
         """Create missing lease and tenant data from API."""
         api = core_api.CoreApi(self.env)

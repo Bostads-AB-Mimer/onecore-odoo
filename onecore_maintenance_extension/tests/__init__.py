@@ -41,3 +41,4 @@ from .utils import test_helpers
 from . import test_registration
 from .models import test_direct_lookup
 from .models import test_backfill_wizard
+from .models import test_remove
