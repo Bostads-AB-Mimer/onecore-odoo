@@ -25,21 +25,6 @@ $mimer-dialog-unread-border: #FFB74D;
     border-color: $mimer-dialog-unread-border;
 }
 
-// Mimer "pinned" highlight — reuse the dialog-unread tint for a consistent
-// "needs attention" look, with a distinct left accent.
-.o-mail-Message.mimer-pinned {
-    border-color: $mimer-dialog-unread-border;
-    border-left: 3px solid $mimer-dialog-unread-border;
-}
-
-.mimer-pin-toggle {
-    position: absolute;
-    top: 8px;
-    right: 32px; // sit left of the collapse .toggle button
-    border: none;
-    background-color: transparent;
-}
-
 .o-mail-Message + .o-mail-Message {
     margin-top: 8px;
 }
@@ -75,36 +60,5 @@ $mimer-dialog-unread-border: #FFB74D;
 
     .o-mail-Chatter-topbar > button {
         flex: 1 1 100%;
-    }
-}
-
-// "Fästa" pinned-messages section rendered as a distinct block at the top of the
-// chatter log. NOT position:sticky — the base .o-mail-Chatter-top toolbar is already
-// sticky at top:0 with a higher z-index and opaque background, so a sticky pinned
-// section at top:0 would be painted over by it while scrolling.
-.o-mimer-PinnedMessages {
-    margin: 0 16px 12px;
-    padding: 8px;
-    border: 1px solid $mimer-dialog-unread-border;
-    border-radius: 4px;
-    background-color: #FFF6E9;
-
-    .o-mimer-PinnedMessages-header {
-        font-weight: 600;
-        margin-bottom: 8px;
-    }
-
-    // Messages inside the section span full width (cancel the log's side margin).
-    .o-mail-Message {
-        margin: 0;
-    }
-
-    .o-mail-Message + .o-mail-Message {
-        margin-top: 8px;
-    }
-
-    // "Fäst av X" attribution caption under each pinned message.
-    .o-mimer-PinnedBy {
-        margin: 2px 0 8px;
     }
 }

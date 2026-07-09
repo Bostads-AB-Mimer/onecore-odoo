@@ -1,5 +1,4 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError
 
 import logging
 import requests
@@ -20,24 +19,6 @@ class OneCoreMailMessage(models.Model):
     is_dialog_unread_for_side = fields.Boolean(
         string="Okvitterad dialognotering",
         compute="_compute_is_dialog_unread_for_side",
-        store=False,
-    )
-    # Pin state reuses the native mail.message.pinned_at field (truthiness =
-    # pinned). We add only attribution + the permission flag. Odoo's Discuss pin
-    # uses the same field but its UI is gated to discuss.channel, so it never
-    # touches maintenance/res.partner chatter.
-    pinned_by_id = fields.Many2one(
-        "res.users",
-        string="Fäst av",
-    )
-    pinned_by_name = fields.Char(
-        string="Fäst av (namn)",
-        compute="_compute_pinned_by_name",
-        store=False,
-    )
-    can_pin = fields.Boolean(
-        string="Får fästa",
-        compute="_compute_can_pin",
         store=False,
     )
 
@@ -69,73 +50,10 @@ class OneCoreMailMessage(models.Model):
             if message.id in unread_ids:
                 message.is_dialog_unread_for_side = True
 
-    @api.depends("pinned_by_id")
-    def _compute_pinned_by_name(self):
-        for message in self:
-            message.pinned_by_name = message.pinned_by_id.name or ""
-
-    def _user_can_pin(self):
-        # Central gate for who may pin chatter messages. Currently everyone
-        # (internal users AND external contractors) may pin. To restrict this
-        # later, change ONLY this method (e.g. return a group check) — both the
-        # can_pin field and the action_toggle_pin guard route through here.
-        return True
-
-    @api.depends_context("uid")
-    def _compute_can_pin(self):
-        # depends_context("uid") keeps the cache keyed per user, so once
-        # _user_can_pin becomes user-dependent it takes effect without a stale
-        # value being shared across users in the same transaction.
-        can_pin = self._user_can_pin()
-        for message in self:
-            message.can_pin = can_pin
-
     def _to_store_defaults(self, target):
-        # Exposes is_dialog_unread_for_side (dialog highlight) plus the pin
-        # attribution/permission fields to the OWL chatter store. The pin state
-        # itself is the native pinned_at, already serialized by base Odoo.
-        return super()._to_store_defaults(target) + [
-            "is_dialog_unread_for_side",
-            "pinned_by_name",
-            "can_pin",
-        ]
-
-    @api.model
-    def _fetch_pinned_messages(self, thread):
-        # Returns every pinned message on the thread, ignoring the chatter's
-        # 30-message pagination window. The web chatter only holds the most
-        # recent FETCH_LIMIT messages, so a note pinned before that window would
-        # otherwise never reach the "Fästa" section until the user scrolled it
-        # into view (MIM-1301 review). limit=None lifts that cap; passing the
-        # thread scopes the query to this record and excludes user_notification.
-        return self._message_fetch(
-            domain=[("pinned_at", "!=", False)], thread=thread, limit=None
-        )["messages"]
-
-    def action_toggle_pin(self):
-        # Shared pin toggle for the chatter "Fästa" section. Anyone who passes
-        # _user_can_pin (currently everyone, incl. external contractors) may
-        # toggle. Pin state is the native pinned_at (truthiness). Writes with
-        # sudo because pinning is a cross-user action on messages the caller does
-        # not own, and mail.message write ACLs otherwise restrict edits to the
-        # author. Read access to the message is still enforced naturally by the
-        # self.pinned_at read below.
-        self.ensure_one()
-        if not self._user_can_pin():
-            raise AccessError(_("Du har inte behörighet att fästa noteringar."))
-        if self.pinned_at:
-            self.sudo().write({"pinned_at": False, "pinned_by_id": False})
-        else:
-            self.sudo().write(
-                {
-                    "pinned_at": fields.Datetime.now(),
-                    "pinned_by_id": self.env.user.id,
-                }
-            )
-        return {
-            "pinned_at": self.pinned_at,
-            "pinned_by_name": self.pinned_by_name,
-        }
+        # Exposes is_dialog_unread_for_side to the OWL chatter so the Message
+        # component can toggle the orange-background CSS class.
+        return super()._to_store_defaults(target) + ["is_dialog_unread_for_side"]
 
     message_type = fields.Selection(
         selection_add=[
