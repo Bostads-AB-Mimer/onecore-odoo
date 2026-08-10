@@ -854,24 +854,19 @@ class OneCoreMaintenanceRequest(
         # MIM-486: the Återsänd kanban column is folded only while it is empty.
         # web_read_group folds groups based on the __fold flag stamped here.
         if groupby and groupby[0] == "stage_id":
-            atersand = self.env.ref(
-                "onecore_maintenance_extension.stage_atersand",
-                raise_if_not_found=False,
-            )
+            atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
             if atersand:
                 for dict_group in result:
+                    # The m2o groupby value is (id, display_name) or False
                     value = dict_group.get("stage_id")
-                    value_id = (
-                        value[0]
-                        if isinstance(value, (tuple, list))
-                        else getattr(value, "id", None)
-                    )
                     if (
-                        value_id == atersand.id
+                        value
+                        and value[0] == atersand.id
                         and "__fold" in dict_group
                         and "__count" in dict_group
                     ):
                         dict_group["__fold"] = not dict_group["__count"]
+                        break
         return result
 
     @api.model_create_multi
@@ -963,14 +958,17 @@ class OneCoreMaintenanceRequest(
             vals.update(stage_updates)
 
         # MIM-486: entering Återsänd clears the assigned resource and hands the
-        # request back to the orderer's team. The team switch is deferred to
-        # after super().write() + notifications (see below), since the write
-        # may be performed by an external contractor whose record-rule access
-        # depends on the team.
-        entering_atersand = "stage_id" in vals and stage_manager.is_atersand_stage(
-            vals["stage_id"]
+        # request back to the orderer's team. The team switch happens after
+        # super().write() + notifications (see below), since the write may be
+        # performed by an external contractor whose record-rule access depends
+        # on the team.
+        # Guarded on an actual stage change: a redundant write of the same
+        # stage must not wipe a newly assigned resource or re-run the handback
+        entering_atersand = (
+            "stage_id" in vals
+            and stage_manager.is_atersand_stage(vals["stage_id"])
+            and any(record.stage_id.id != vals["stage_id"] for record in self)
         )
-        deferred_team_by_record = {}
         if entering_atersand:
             vals["user_id"] = False
             if external_contractor_service.is_external_contractor():
@@ -981,10 +979,6 @@ class OneCoreMaintenanceRequest(
                 self.sudo().message_subscribe(
                     partner_ids=self.env.user.partner_id.ids
                 )
-            for record in self:
-                team = stage_manager.resolve_return_team(record)
-                if team and record.maintenance_team_id != team:
-                    deferred_team_by_record[record.id] = team.id
 
         # Handle resource assignment workflow (always run, even during creation).
         # Skipped when entering Återsänd: the injected user_id=False would
@@ -1045,13 +1039,23 @@ class OneCoreMaintenanceRequest(
             self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
 
-        # MIM-486: hand returned requests back to the orderer's team. sudo()
-        # keeps env.uid (chatter author stays the returning user) but bypasses
-        # the contractor record rule, which would otherwise reject the
+        # MIM-486: hand returned requests back to the orderer's team. Resolved
+        # here, after super().write(), so a write that changes owner_user_id
+        # and the stage together uses the new orderer. sudo() keeps env.uid
+        # (chatter author stays the returning user) but bypasses the
+        # contractor record rule, which would otherwise reject the
         # contractor's own write once the team no longer includes them. Must
         # run last: after this the contractor may not see the record at all.
-        for record_id, team_id in deferred_team_by_record.items():
-            self.browse(record_id).sudo().write({"maintenance_team_id": team_id})
+        if entering_atersand:
+            team_to_record_ids = {}
+            for record in self:
+                team = stage_manager.resolve_return_team(record)
+                if team and record.maintenance_team_id != team:
+                    team_to_record_ids.setdefault(team.id, []).append(record.id)
+            for team_id, record_ids in team_to_record_ids.items():
+                self.browse(record_ids).sudo().write(
+                    {"maintenance_team_id": team_id}
+                )
 
         return result
 

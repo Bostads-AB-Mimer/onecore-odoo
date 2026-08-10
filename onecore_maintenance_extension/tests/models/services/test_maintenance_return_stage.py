@@ -246,6 +246,48 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
                 {"stage_id": self.stage_avslutad.id}
             )
 
+    def test_owner_change_in_same_write_uses_new_orderer_team(self):
+        """The team is resolved after super().write(): changing owner and
+        stage in one write hands the request to the NEW orderer's team"""
+        second_team = self.env["maintenance.team"].create(
+            {"name": "Second Owner Team", "member_ids": [(4, self.teamless_user.id)]}
+        )
+        request = self._create_returnable_request()
+
+        request.write(
+            {
+                "owner_user_id": self.teamless_user.id,
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+        self.assertEqual(request.maintenance_team_id, second_team)
+
+    def test_redundant_same_stage_write_does_not_rerun_return(self):
+        """Writing stage_id=Återsänd on a request already in Återsänd must not
+        wipe an assigned resource or re-stamp returned_date"""
+        request = self._create_returnable_request()
+        request.write({"stage_id": self.stage_atersand.id})
+        original_returned_date = request.returned_date
+
+        request.with_user(self.internal_user).write(
+            {"user_id": self.internal_user.id}
+        )
+        request.with_user(self.internal_user).write(
+            {"stage_id": self.stage_atersand.id, "description": "uppdaterad"}
+        )
+        self.assertEqual(request.user_id, self.internal_user)
+        self.assertEqual(request.returned_date, original_returned_date)
+
+    def test_returned_request_is_restricted_for_contractor(self):
+        """restricted_external is True in Återsänd, like Utförd/Avslutad"""
+        request = self._create_returnable_request()
+        request.with_user(self.external_user).write(
+            {"stage_id": self.stage_atersand.id}
+        )
+        self.assertTrue(
+            request.with_user(self.external_user).restricted_external
+        )
+
     def test_contractor_blocked_from_moving_out_of_atersand(self):
         """A contractor cannot un-return a request (same block as Utförd/Avslutad)"""
         request = self._create_returnable_request()

@@ -22,17 +22,9 @@ class ExternalContractorService:
             return  # Not applicable
         
         # Cannot move FROM these stages
-        if record.stage_id.name == "Utförd":
+        if record.stage_id.name in ("Utförd", "Avslutad", "Återsänd"):
             raise exceptions.UserError(
-                "Du har inte behörighet att flytta detta ärende från Utförd"
-            )
-        if record.stage_id.name == "Avslutad":
-            raise exceptions.UserError(
-                "Du har inte behörighet att flytta detta ärende från Avslutad"
-            )
-        if record.stage_id.name == "Återsänd":
-            raise exceptions.UserError(
-                "Du har inte behörighet att flytta detta ärende från Återsänd"
+                f"Du har inte behörighet att flytta detta ärende från {record.stage_id.name}"
             )
 
         # Cannot move TO restricted stages
@@ -50,7 +42,7 @@ class ExternalContractorService:
             return False
             
         restricted_stage_ids = self.env["maintenance.stage"].search(
-            [("name", "in", ["Utförd", "Avslutad"])]
+            [("name", "in", ["Utförd", "Avslutad", "Återsänd"])]
         )
         return record.stage_id in restricted_stage_ids
     

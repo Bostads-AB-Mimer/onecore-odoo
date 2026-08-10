@@ -45,7 +45,8 @@ class MaintenanceStageManager:
             updates["closed_date"] = False
 
         if self.is_atersand_stage(new_stage_id):
-            updates["returned_date"] = fields.Datetime.now()
+            # Keep the original timestamp on a redundant same-stage write
+            updates["returned_date"] = record[:1].returned_date or fields.Datetime.now()
         else:
             updates["returned_date"] = False
 
@@ -106,9 +107,15 @@ class MaintenanceStageManager:
         )
 
     def _get_atersand_stage(self):
-        """Resolve the "Återsänd" stage by xml-id (name is translatable)."""
-        stage = self.env.ref(self.ATERSAND_STAGE_XML_ID, raise_if_not_found=False)
-        return stage or self._get_stage_by_name("Återsänd")
+        """Resolve the "Återsänd" stage by xml-id (name is translatable).
+
+        Memoized per manager instance: an xml-id miss is not ormcached by
+        env.ref, so without this every call would re-query ir.model.data
+        plus the name fallback."""
+        if not hasattr(self, "_atersand_stage"):
+            stage = self.env.ref(self.ATERSAND_STAGE_XML_ID, raise_if_not_found=False)
+            self._atersand_stage = stage or self._get_stage_by_name("Återsänd")
+        return self._atersand_stage
 
     def is_atersand_stage(self, stage_id):
         """Check whether stage_id is the "Återsänd" stage."""
