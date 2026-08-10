@@ -1,15 +1,22 @@
 """Service for managing maintenance request workflow, stages and field changes."""
 
+import logging
+
 from datetime import datetime
 
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
+_logger = logging.getLogger(__name__)
+
 
 class MaintenanceStageManager:
     """Service for managing maintenance request workflow and stage transitions."""
 
-    PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad")
+    PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad", "Återsänd")
+
+    ATERSAND_STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
+    KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
     def __init__(self, env):
         self.env = env
@@ -37,6 +44,11 @@ class MaintenanceStageManager:
         else:
             updates["closed_date"] = False
 
+        if self.is_atersand_stage(new_stage_id):
+            updates["returned_date"] = fields.Datetime.now()
+        else:
+            updates["returned_date"] = False
+
         return updates
 
     def handle_resource_assignment(self, record, new_user_id):
@@ -48,7 +60,10 @@ class MaintenanceStageManager:
                 self._validate_priority_set(record, resource_allocated_stage.id)
                 return {"stage_id": resource_allocated_stage.id}
 
-        elif new_user_id is False and record.stage_id.name != "Avslutad":
+        elif new_user_id is False and record.stage_id.name not in (
+            "Avslutad",
+            "Återsänd",
+        ):
             # Auto-transition back to "Väntar på handläggning" when user is unassigned
             initial_stage = self._get_stage_by_name("Väntar på handläggning")
             if initial_stage:
@@ -59,7 +74,7 @@ class MaintenanceStageManager:
     def _validate_unassigned_resource(self, new_stage_id):
         """Validate stage change when no resource is assigned."""
         allowed_stages = self.env["maintenance.stage"].search(
-            [("name", "in", ["Väntar på handläggning", "Avslutad"])]
+            [("name", "in", ["Väntar på handläggning", "Avslutad", "Återsänd"])]
         )
         if new_stage_id not in allowed_stages.ids:
             raise exceptions.UserError(
@@ -89,6 +104,39 @@ class MaintenanceStageManager:
         return self.env["maintenance.stage"].search(
             [("name", "=", stage_name)], limit=1
         )
+
+    def _get_atersand_stage(self):
+        """Resolve the "Återsänd" stage by xml-id (name is translatable)."""
+        stage = self.env.ref(self.ATERSAND_STAGE_XML_ID, raise_if_not_found=False)
+        return stage or self._get_stage_by_name("Återsänd")
+
+    def is_atersand_stage(self, stage_id):
+        """Check whether stage_id is the "Återsänd" stage."""
+        atersand = self._get_atersand_stage()
+        return bool(atersand) and stage_id == atersand.id
+
+    def resolve_return_team(self, record):
+        """Team to hand a returned (Återsänd) request back to: the orderer's
+        first team, falling back to Kundcenter (MIM-486). Returns an empty
+        recordset if neither resolves; the caller then leaves the team
+        unchanged."""
+        orderer = record.owner_user_id or record.create_uid
+        team = (
+            self.env["maintenance.team"]
+            .sudo()
+            .search([("member_ids", "in", [orderer.id])], limit=1)
+        )
+        if not team:
+            # MIM-1916: resolve by xml-id, never by (translatable) name
+            team = self.env.ref(self.KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
+            if not team:
+                _logger.warning(
+                    "MIM-486: Kundcenter team (%s) not found; leaving "
+                    "maintenance_team_id unchanged for request %s",
+                    self.KUNDCENTER_TEAM_XML_ID,
+                    record.id,
+                )
+        return team or self.env["maintenance.team"]
 
 
 class FieldChangeTracker:

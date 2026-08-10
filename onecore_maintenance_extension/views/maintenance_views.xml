@@ -614,6 +614,11 @@
                                             options="{'show_time': false}"
                                             help="Datum då ärendet markerades som avslutat"
                                             readonly="1" />
+                                        <field name="returned_date"
+                                            options="{'show_time': false}"
+                                            help="Datum då ärendet återsändes till beställaren"
+                                            readonly="1"
+                                            invisible="not returned_date" />
                                         <field
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
@@ -813,6 +818,7 @@
                         <field name="due_date" optional="show" />
                         <field name="performed_date" options="{'show_time': false}" optional="hide" />
                         <field name="closed_date" options="{'show_time': false}" optional="hide" />
+                        <field name="returned_date" options="{'show_time': false}" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
                         <field name="priority_expanded" optional="hide" />
                         <field name="creation_origin" optional="hide" />

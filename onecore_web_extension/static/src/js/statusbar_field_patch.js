@@ -35,11 +35,15 @@ patch(StatusBarField.prototype, {
         isSelected: Boolean(currentValue && option.id === currentValue.id),
         isDisabled:
           (currentStageName === "Väntar på handläggning" &&
-            !record.data.user_id) ||
+            !record.data.user_id &&
+            // MIM-486: returning a request must not require an assigned
+            // resource
+            option.display_name !== "Återsänd") ||
           (this.userIsExternalContractor &&
             (option.display_name === "Avslutad" ||
               currentStageName === "Avslutad" ||
-              currentStageName === "Utförd")),
+              currentStageName === "Utförd" ||
+              currentStageName === "Återsänd")),
       }));
     } else {
       // Selection
@@ -66,6 +70,22 @@ patch(StatusBarField.prototype, {
       record.model.config.resModel === "maintenance.request";
     const goingToUtford =
       isMaintenanceRequest && item.label === "Utförd" && !item.isSelected;
+    const goingToAtersand =
+      isMaintenanceRequest && item.label === "Återsänd" && !item.isSelected;
+
+    // MIM-486: all users confirm before returning a request — the move
+    // hands the request back to the orderer's team.
+    if (goingToAtersand) {
+      const confirmed = await ConfirmDialog(
+        this.dialogService,
+        "Bekräfta återsändning",
+        "Är du säker på att du vill återsända ärendet?"
+      );
+      if (!confirmed) {
+        return;
+      }
+      return super.selectItem(item);
+    }
 
     if (!goingToUtford) {
       return super.selectItem(item);

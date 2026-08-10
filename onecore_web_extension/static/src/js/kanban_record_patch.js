@@ -97,6 +97,16 @@ patch(KanbanRecord.prototype, {
         return false;
       }
 
+      // MIM-486: all users confirm before returning a request — the move
+      // hands the request back to the orderer's team.
+      if (targetStageName === "Återsänd") {
+        return await ConfirmDialog(
+          this.dialogService,
+          "Bekräfta återsändning",
+          "Är du säker på att du vill återsända ärendet?"
+        );
+      }
+
       if (targetStageName === "Utförd") {
         // user.hasGroup returns a Promise and MUST be awaited — the previous
         // unawaited call was always truthy, so the confirm fired for all
