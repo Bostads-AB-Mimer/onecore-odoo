@@ -1,51 +1,48 @@
 """Migration for MIM-486 — add the "Återsänd" maintenance stage.
 
-External contractors need to be able to return/reject a request (e.g. cannot
-reach the tenant). Fresh installs get the stage from the post_init_hook in
-onecore_maintenance_extension/hooks/__init__.py; this migration creates it in
-already-installed databases.
+Fresh installs get the stage from the post_init_hook; this migration brings
+already-installed databases to the same state by calling the same
+_update_maintenance_stages() the hook uses (idempotent, keyed on xml-id, and
+it re-asserts canonical values and sv_SE names on the existing stages).
 
-Idempotent: safe to re-run, and safe if a stage named "Återsänd" was already
-created by hand (it then gets the xml-id and canonical values instead of a
-duplicate).
+The only extra step is an adoption guard: if an "Återsänd" stage was created
+by hand before this release it has no xml-id, and the hook would create a
+duplicate — so we attach the xml-id to the existing record first.
 """
 import logging
 
 _logger = logging.getLogger(__name__)
 
 STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
-STAGE_VALUES = {"name": "Återsänd", "fold": True, "done": False, "sequence": 7}
 
 
 def migrate(cr, version):
     from odoo import api, SUPERUSER_ID
+    from odoo.addons.onecore_maintenance_extension.hooks import (
+        _update_maintenance_stages,
+    )
 
     env = api.Environment(cr, SUPERUSER_ID, {})
 
-    stage = env.ref(STAGE_XML_ID, raise_if_not_found=False)
-    if not stage:
-        stage = env["maintenance.stage"].search(
-            [("name", "=", STAGE_VALUES["name"])], limit=1
+    if not env.ref(STAGE_XML_ID, raise_if_not_found=False):
+        hand_made = env["maintenance.stage"].search(
+            [("name", "=", "Återsänd")], limit=1
         )
-        if not stage:
-            stage = env["maintenance.stage"].create(STAGE_VALUES)
-        module, name = STAGE_XML_ID.split(".", 1)
-        env["ir.model.data"].create(
-            {
-                "name": name,
-                "module": module,
-                "model": "maintenance.stage",
-                "res_id": stage.id,
-                # Without noupdate, ir.model.data._process_end deletes the
-                # xml-id and its record on the next upgrade of the module.
-                "noupdate": True,
-            }
-        )
+        if hand_made:
+            module, name = STAGE_XML_ID.split(".", 1)
+            env["ir.model.data"].create(
+                {
+                    "name": name,
+                    "module": module,
+                    "model": "maintenance.stage",
+                    "res_id": hand_made.id,
+                    "noupdate": True,
+                }
+            )
 
-    stage.write(STAGE_VALUES)
-    if env["res.lang"]._get_data(code="sv_SE"):
-        stage.with_context(lang="sv_SE").write({"name": STAGE_VALUES["name"]})
+    _update_maintenance_stages(env)
 
+    stage = env.ref(STAGE_XML_ID)
     _logger.info(
         "MIM-486 migration complete: 'Återsänd' stage id=%s (%s)",
         stage.id,
