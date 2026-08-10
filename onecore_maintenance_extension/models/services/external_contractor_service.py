@@ -30,6 +30,10 @@ class ExternalContractorService:
             raise exceptions.UserError(
                 "Du har inte behörighet att flytta detta ärende från Avslutad"
             )
+        if record.stage_id.name == "Återsänd":
+            raise exceptions.UserError(
+                "Du har inte behörighet att flytta detta ärende från Återsänd"
+            )
 
         # Cannot move TO restricted stages
         restricted_stages = self.env["maintenance.stage"].search(
