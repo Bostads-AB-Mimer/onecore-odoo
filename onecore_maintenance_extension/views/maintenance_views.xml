@@ -743,8 +743,13 @@
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_kanban" />
             <field name="arch" type="xml">
 
+                <!-- Column add is hidden for everyone. Column edit/delete are also
+                     stripped globally by onecore_web_extension/static/src/js/kanban_header_patch.js;
+                     group_delete here is defense in depth should that patch ever be removed. -->
                 <xpath expr="//kanban" position="attributes">
                     <attribute name="limit">30</attribute>
+                    <attribute name="group_create">false</attribute>
+                    <attribute name="group_delete">false</attribute>
                 </xpath>
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="stage_id" />
@@ -792,7 +797,10 @@
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_tree" />
             <field name="arch" type="xml">
                 <xpath expr="//list" position="replace">
-                    <list string="maintenance Request" multi_edit="1" sample="1">
+                    <!-- group_* attributes: stages/teams must not be manageable from
+                         grouped list headers, mirroring the kanban restrictions -->
+                    <list string="maintenance Request" multi_edit="1" sample="1"
+                        group_create="false" group_edit="false" group_delete="false">
                         <field name="message_needaction" column_invisible="True" />
                         <field name="id" optional="show" />
                         <field name="name" />

@@ -58,7 +58,7 @@ def _update_maintenance_stages(env):
                 "name": xml_id,
                 "model": "maintenance.stage",
                 "module": "maintenance",
-                "res_id": stage.id,
+                "res_id": new_stage.id,
             }
         )
         if sv_installed:
