@@ -143,6 +143,21 @@ class TestLoadObjectContracts(TransactionCase):
         result = self.service.load_object_contracts(request, "216-704-00-0034")
         self.assertEqual(result["object_option"].code, "0034")
 
+    def test_unmappable_contract_type_still_offers_the_object_as_vacant(self):
+        # A contract whose type we cannot map to an object kind is not evidence
+        # that the objektnummer is wrong — the object itself may well exist, and
+        # telling the user to check the number would be a dead end.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_leases_unfiltered.return_value = [
+            dict(RES_LEASE, type="Korttidskontrakt")
+        ]
+        self.core_api.fetch_residence.return_value = RESIDENCE
+
+        result = self.service.load_object_contracts(request, "216-034-03-0101")
+
+        self.assertFalse(result["lease_options"])
+        self.assertEqual(result["object_option"].code, "RES-001")
+
     def test_not_found_returns_none(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
         self.core_api.fetch_leases_unfiltered.return_value = []
@@ -257,6 +272,25 @@ class TestLoadContactContracts(TransactionCase):
             for l in leases
         }
         self.assertEqual(kinds, {"residence", "parking"})
+
+    def test_renewed_contract_reuses_one_object_option(self):
+        # A renewed contract is two leases on the same object (both returned,
+        # because upcoming leases are included). The object must appear once in
+        # the dropdown, not once per contract.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        renewed = dict(PARK_LEASE, leaseId="216-704-00-0034/02", status="Upcoming")
+        self.core_api.fetch_leases_unfiltered.return_value = [PARK_LEASE, renewed]
+        self.core_api.fetch_parking_space.return_value = PARKING
+
+        result = self.service.load_contact_contracts(request, "P005468")
+
+        self.assertEqual(len(result["lease_options"]), 2)
+        options = self.env["maintenance.parking.space.option"].search(
+            [("user_id", "=", self.env.user.id)]
+        )
+        self.assertEqual(len(options), 1)
+        # Both contracts point at that single object option.
+        self.assertEqual(result["lease_options"].parking_space_option_id, options)
 
     def test_unknown_contact_returns_none(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")

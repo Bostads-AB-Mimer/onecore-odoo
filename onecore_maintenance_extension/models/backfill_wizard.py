@@ -243,10 +243,16 @@ class MaintenanceBackfillWizard(models.TransientModel):
         self._post_attach_note(request, before)
 
     def _attached_labels(self, request):
-        """Display names of the three things this wizard attaches."""
+        """Display names of what this wizard attaches, plus the space type.
+
+        The space type is in here because the attach realigns it (a Lägenhet
+        request can end up a Bilplats) under ``skip_change_tracking``, so this
+        summary note is the only place that change is recorded.
+        """
         objects = [request[r["record_field"]] for r in all_routes()]
         current = next((o for o in objects if o), None)
         return {
+            "Utrymme": request.space_caption,
             "Hyresobjekt": current.display_name if current else None,
             "Kontrakt": request.lease_id.display_name if request.lease_id else None,
             "Hyresgäst": request.tenant_id.display_name if request.tenant_id else None,

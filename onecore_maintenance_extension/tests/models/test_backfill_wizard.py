@@ -199,6 +199,24 @@ class TestBackfillWizard(TransactionCase):
         self.assertFalse(self.env["maintenance.lease"].browse(old_lease_id).exists())
         self.assertFalse(self.env["maintenance.tenant"].browse(old_tenant_id).exists())
 
+    def test_space_type_change_is_recorded_in_the_chatter(self):
+        # Realigning the request from Lägenhet to Bilplats is exactly the kind of
+        # change a handler needs to see afterwards. Change tracking is suppressed
+        # during the attach, so the summary note has to carry it.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([PARK_LEASE], parking=PARKING)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-704-00-0034"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+
+        self.assertEqual(request.space_caption, "Bilplats")
+        note = request.message_ids[0].body
+        self.assertIn("Utrymme", note)
+        self.assertIn("Lägenhet", note)
+        self.assertIn("Bilplats", note)
+
     def test_blocked_unlink_does_not_roll_back_the_attach(self):
         # Deleting a replaced record can be blocked at the DB level (a foreign key
         # still referencing it). That aborts the transaction, so merely logging the

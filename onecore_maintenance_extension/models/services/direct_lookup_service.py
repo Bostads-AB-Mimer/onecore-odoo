@@ -112,7 +112,9 @@ class DirectLookupService:
             lease_options = self._build_options(request, leases)
             if lease_options:
                 return {"lease_options": lease_options, "object_option": None}
-            return None
+        # No usable contract — either none at all, or none of a type we can map to
+        # an object kind. Neither means the objektnummer is wrong, so still try to
+        # resolve the object itself and offer it as vacant.
         return self._load_vacant_object(request, rental_id)
 
     def load_contact_contracts(self, request, contact_code):
