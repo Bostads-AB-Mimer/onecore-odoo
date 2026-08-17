@@ -14,6 +14,51 @@ _PARALLEL_GET_MAX_WORKERS = 8
 # OneCore call would block its worker thread and stall the whole wave.
 _PARALLEL_GET_TIMEOUT = (5, 30)
 
+# Endpoints that answer "which leases match this identifier".
+LEASE_PATHS = {
+    "leaseId": "/leases",
+    "rentalObjectId": "/leases/by-rental-property-id",
+    "contactCode": "/leases/by-contact-code",
+    "pnr": "/leases/by-pnr",
+}
+
+# Which kind of rental object a contract points at. Single source of truth, also
+# used by the direct lookups in onecore_maintenance_extension.
+LEASE_TYPE_TO_OBJECT_KIND = {
+    "Bostadskontrakt": "residence",
+    "Kooperativ hyresrätt": "residence",
+    "P-Platskontrakt": "parking",
+    "Garagekontrakt": "parking",
+    "Lokalkontrakt": "facility",
+}
+
+# The CoreApi method that fetches each object kind by rental id.
+OBJECT_KIND_FETCHERS = {
+    "residence": "fetch_residence",
+    "parking": "fetch_parking_space",
+    "facility": "fetch_facility",
+}
+
+# Object kinds that can carry maintenance units (laundry rooms, playgrounds, ...).
+MAINTENANCE_UNIT_KINDS = ("residence", "facility")
+
+MAINTENANCE_UNIT_TYPES = ["Tvättstuga", "Miljöbod", "Lekplats"]
+
+
+def build_form_item(lease, kind, obj, maintenance_units=None):
+    """The per-contract payload shape the space-type handlers consume.
+
+    ``kind`` is one of :data:`OBJECT_KIND_FETCHERS`; ``lease`` may be None for a
+    vacant object.
+    """
+    return {
+        "lease": lease,
+        "rental_property": obj if kind == "residence" else None,
+        "parking_space": obj if kind == "parking" else None,
+        "facility": obj if kind == "facility" else None,
+        "maintenance_units": maintenance_units or [],
+    }
+
 
 class CoreApi:
     def __init__(self, env):
@@ -133,25 +178,31 @@ class CoreApi:
                 results.append(None)
         return results
 
-    def fetch_leases(self, identifier, value, location_type):
-        paths = {
-            "leaseId": "/leases",
-            "rentalObjectId": "/leases/by-rental-property-id",
-            "contactCode": "/leases/by-contact-code",
-            "pnr": "/leases/by-pnr",
-        }
+    def fetch_leases_unfiltered(self, identifier, value):
+        """Leases for an identifier WITHOUT location-type filtering.
 
-        if identifier not in paths:
+        Used by the direct lookups (MIM-1841): there the object/contact must
+        resolve regardless of contract type, so this deliberately skips
+        ``filter_lease_on_location_type``. Each lease dict may carry a ``tenants``
+        list; returns an empty list when there is no content.
+        """
+        if identifier not in LEASE_PATHS:
             raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
+        content = self._get_json(
+            f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
+            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
+        )
+        if content is None:
+            return []
+        return content if isinstance(content, list) else [content]
+
+    def fetch_leases(self, identifier, value, location_type):
         try:
-            content = self._get_json(
-                f"{paths[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-                params={"includeContacts": "true", "includeUpcomingLeases": "true"},
-            )
+            content = self.fetch_leases_unfiltered(identifier, value)
 
             # If no content returned, return empty list.
-            if content is None:
+            if not content:
                 return []
 
             # Filter response on space caption if needed
@@ -173,23 +224,6 @@ class CoreApi:
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )
-
-    def fetch_contact_leases(self, contact_code):
-        """Fetch all leases for a contact by contact code, WITHOUT location-type
-        filtering.
-
-        Used by the direct tenant lookup (MIM-1841): the contact must resolve
-        regardless of lease type, so this deliberately skips
-        ``filter_lease_on_location_type``. Returns a list of lease dicts (each
-        may carry a ``tenants`` list); empty list when there is no content.
-        """
-        content = self._get_json(
-            f"/leases/by-contact-code/{urllib.parse.quote(str(contact_code), safe='')}",
-            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
-        )
-        if content is None:
-            return []
-        return content if isinstance(content, list) else [content]
 
     def filter_lease_on_location_type(self, data, location_type):
         """
@@ -505,20 +539,6 @@ class CoreApi:
         return response.json() if response.text else []
 
     def fetch_form_data(self, identifier, value, location_type):
-        fetch_fns = {
-            "Bostadskontrakt": lambda id: self.fetch_residence(id),
-            "Kooperativ hyresrätt": lambda id: self.fetch_residence(id),
-            "P-Platskontrakt": lambda id: self.fetch_parking_space(id),
-            "Garagekontrakt": lambda id: self.fetch_parking_space(id),
-            "Lokalkontrakt": lambda id: self.fetch_facility(id),
-        }
-        lease_types_with_maintenance_units = [
-            "Bostadskontrakt",
-            "Kooperativ hyresrätt",
-            "Lokalkontrakt",
-        ]
-
-        maintenance_unit_types = ["Tvättstuga", "Miljöbod", "Lekplats"]
         try:
             leases = self.fetch_leases(identifier, value, location_type)
 
@@ -531,9 +551,10 @@ class CoreApi:
                         continue
 
                     lease_type = lease["type"].strip()
-                    if lease_type in fetch_fns:
+                    kind = LEASE_TYPE_TO_OBJECT_KIND.get(lease_type)
+                    if kind:
                         try:
-                            fetched_data = fetch_fns[lease_type](
+                            fetched_data = getattr(self, OBJECT_KIND_FETCHERS[kind])(
                                 lease["rentalPropertyId"]
                             )
                         except Exception:
@@ -545,38 +566,19 @@ class CoreApi:
                             )
                             continue
 
-                        rental_property = (
-                            fetched_data
-                            if lease_type == "Bostadskontrakt"
-                            or lease_type == "Kooperativ hyresrätt"
-                            else None
-                        )
-                        parking_space = (
-                            fetched_data
-                            if lease_type in ("P-Platskontrakt", "Garagekontrakt")
-                            else None
-                        )
-                        facility = (
-                            fetched_data if lease_type == "Lokalkontrakt" else None
-                        )
-
                         maintenance_units = (
                             self.fetch_maintenance_units(
                                 fetched_data["property"]["code"], location_type
                             )
-                            if lease_type in lease_types_with_maintenance_units
-                            and location_type in maintenance_unit_types
+                            if kind in MAINTENANCE_UNIT_KINDS
+                            and location_type in MAINTENANCE_UNIT_TYPES
                             else []
                         )
 
                         data.append(
-                            {
-                                "lease": lease,
-                                "rental_property": rental_property,
-                                "parking_space": parking_space,
-                                "facility": facility,
-                                "maintenance_units": maintenance_units,
-                            }
+                            build_form_item(
+                                lease, kind, fetched_data, maintenance_units
+                            )
                         )
                 return data
 
@@ -591,15 +593,7 @@ class CoreApi:
                         # Fetch parking space
                         parking_space = self.fetch_parking_space(value)
                         if parking_space:
-                            data.append(
-                                {
-                                    "lease": None,
-                                    "rental_property": None,
-                                    "parking_space": parking_space,
-                                    "facility": None,
-                                    "maintenance_units": [],
-                                }
-                            )
+                            data.append(build_form_item(None, "parking", parking_space))
                             return data
                     elif location_type == "Lokal":
                         # Fetch facility
@@ -609,18 +603,14 @@ class CoreApi:
                                 self.fetch_maintenance_units(
                                     facility["property"]["code"], location_type
                                 )
-                                if location_type in maintenance_unit_types
+                                if location_type in MAINTENANCE_UNIT_TYPES
                                 else []
                             )
 
                             data.append(
-                                {
-                                    "lease": None,
-                                    "rental_property": None,
-                                    "parking_space": None,
-                                    "facility": facility,
-                                    "maintenance_units": maintenance_units,
-                                }
+                                build_form_item(
+                                    None, "facility", facility, maintenance_units
+                                )
                             )
                             return data
                     else:
@@ -631,18 +621,17 @@ class CoreApi:
                                 self.fetch_maintenance_units(
                                     rental_property["property"]["code"], location_type
                                 )
-                                if location_type in maintenance_unit_types
+                                if location_type in MAINTENANCE_UNIT_TYPES
                                 else []
                             )
 
                             data.append(
-                                {
-                                    "lease": None,
-                                    "rental_property": rental_property,
-                                    "parking_space": None,
-                                    "facility": None,
-                                    "maintenance_units": maintenance_units,
-                                }
+                                build_form_item(
+                                    None,
+                                    "residence",
+                                    rental_property,
+                                    maintenance_units,
+                                )
                             )
                             return data
                 except Exception:

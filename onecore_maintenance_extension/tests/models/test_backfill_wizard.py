@@ -71,16 +71,6 @@ def _lease(lease_id, rental_id, lease_type, contact_code, name):
     }
 
 
-def _item(lease, residence=None, parking=None):
-    return {
-        "lease": lease,
-        "rental_property": residence,
-        "parking_space": parking,
-        "facility": None,
-        "maintenance_units": [],
-    }
-
-
 RES_LEASE = _lease(
     "216-034-03-0101/01", "216-034-03-0101", "Bostadskontrakt", "P005468", "Sven Olofsson"
 )
@@ -91,11 +81,9 @@ OTHER_RES_LEASE = _lease(
     "700-111-22-3333/01", "700-111-22-3333", "Bostadskontrakt", "P000999", "Bengt Bengtsson"
 )
 
-WORK_ORDER = [_item(RES_LEASE, residence=_residence("216-034-03-0101", "RES-001"))]
-WORK_ORDER_OTHER = [
-    _item(OTHER_RES_LEASE, residence=_residence("700-111-22-3333", "RES-OTHER"))
-]
-VACANT = [_item(None, residence=_residence("216-034-03-0101", "RES-001"))]
+RESIDENCE = _residence("216-034-03-0101", "RES-001")
+OTHER_RESIDENCE = _residence("700-111-22-3333", "RES-OTHER")
+PARKING = _parking("216-704-00-0034", "0034")
 
 # A co-signed lease: two tenants in payload order (primary first).
 CO_SIGNED_LEASE = dict(
@@ -104,9 +92,6 @@ CO_SIGNED_LEASE = dict(
 )
 # A contract with no tenants (should never occur in real data, but must be handled).
 TENANTLESS_LEASE = dict(OTHER_RES_LEASE, tenants=[])
-TENANTLESS_WORK_ORDER = [
-    _item(TENANTLESS_LEASE, residence=_residence("700-111-22-3333", "RES-OTHER"))
-]
 
 
 @tagged("onecore")
@@ -120,6 +105,12 @@ class TestBackfillWizard(TransactionCase):
             {"maintenance_request_id": request.id, "lookup_kind": kind}
         )
 
+    def _onecore_returns(self, leases, residence=None, parking=None):
+        """Stub the two calls a lookup makes: the leases, then their object."""
+        self.fake_api.fetch_leases_unfiltered.return_value = leases
+        self.fake_api.fetch_residence.return_value = residence
+        self.fake_api.fetch_parking_space.return_value = parking
+
     def _lease_options(self):
         return self.env["maintenance.lease.option"].search(
             [("user_id", "=", self.env.uid)]
@@ -127,7 +118,7 @@ class TestBackfillWizard(TransactionCase):
 
     def test_object_lookup_attaches_object_lease_tenant(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -145,10 +136,7 @@ class TestBackfillWizard(TransactionCase):
 
     def test_tenant_lookup_attaches_object_lease_tenant(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_contact_leases.return_value = [RES_LEASE]
-        self.fake_api.fetch_residence.return_value = _residence(
-            "216-034-03-0101", "RES-001"
-        )
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz = self._wizard(request, "tenant")
         wiz.lookup_value = "P005468"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -165,7 +153,7 @@ class TestBackfillWizard(TransactionCase):
 
     def test_vacant_object_attaches_object_only(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = VACANT
+        self._onecore_returns([], residence=RESIDENCE)
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -183,7 +171,7 @@ class TestBackfillWizard(TransactionCase):
         # Regression: attaching a vacant object on top of an existing contract must
         # not leave the old lease + tenant dangling (they mismatch the new object).
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz1 = self._wizard(request, "rental_object")
         wiz1.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
@@ -194,7 +182,7 @@ class TestBackfillWizard(TransactionCase):
         self.assertTrue(old_lease_id)
         self.assertTrue(old_tenant_id)
 
-        self.fake_api.fetch_form_data.return_value = VACANT
+        self._onecore_returns([], residence=RESIDENCE)
         wiz2 = self._wizard(request, "rental_object")
         wiz2.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
@@ -219,7 +207,7 @@ class TestBackfillWizard(TransactionCase):
         )
 
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = VACANT
+        self._onecore_returns([], residence=RESIDENCE)
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -238,10 +226,7 @@ class TestBackfillWizard(TransactionCase):
         # Regression: searching the co-signer's kundnummer must attach that person,
         # not the lease's primary tenant.
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_contact_leases.return_value = [CO_SIGNED_LEASE]
-        self.fake_api.fetch_residence.return_value = _residence(
-            "216-034-03-0101", "RES-001"
-        )
+        self._onecore_returns([CO_SIGNED_LEASE], residence=RESIDENCE)
         wiz = self._wizard(request, "tenant")
         wiz.lookup_value = "P009999"  # the co-signer, not the primary tenant
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -257,7 +242,7 @@ class TestBackfillWizard(TransactionCase):
         # Regression: switching to a contract that has no tenants must clear the old
         # tenant rather than leaving it attached.
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz1 = self._wizard(request, "rental_object")
         wiz1.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
@@ -266,7 +251,7 @@ class TestBackfillWizard(TransactionCase):
         old_tenant_id = request.tenant_id.id
         self.assertTrue(old_tenant_id)
 
-        self.fake_api.fetch_form_data.return_value = TENANTLESS_WORK_ORDER
+        self._onecore_returns([TENANTLESS_LEASE], residence=OTHER_RESIDENCE)
         wiz2 = self._wizard(request, "rental_object")
         wiz2.lookup_value = "700-111-22-3333"
         with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
@@ -284,12 +269,8 @@ class TestBackfillWizard(TransactionCase):
 
     def test_kundnummer_shows_all_types_and_switching_realigns_space(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_contact_leases.return_value = [RES_LEASE, PARK_LEASE]
-        self.fake_api.fetch_residence.return_value = _residence(
-            "216-034-03-0101", "RES-001"
-        )
-        self.fake_api.fetch_parking_space.return_value = _parking(
-            "216-704-00-0034", "0034"
+        self._onecore_returns(
+            [RES_LEASE, PARK_LEASE], residence=RESIDENCE, parking=PARKING
         )
 
         # First attach the residence contract.
@@ -331,11 +312,7 @@ class TestBackfillWizard(TransactionCase):
         # Request is a Bilplats, but the pasted objektnummer is a residence: it
         # should resolve as a residence and realign the request to Lägenhet.
         request = create_maintenance_request(self.env, space_caption="Bilplats")
-
-        def fake(identifier, value, space):
-            return WORK_ORDER if space == "Lägenhet" else None
-
-        self.fake_api.fetch_form_data.side_effect = fake
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
@@ -350,7 +327,7 @@ class TestBackfillWizard(TransactionCase):
 
     def test_replace_deletes_previous(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = WORK_ORDER
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz1 = self._wizard(request, "rental_object")
         wiz1.lookup_value = "216-034-03-0101"
         with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
@@ -359,7 +336,7 @@ class TestBackfillWizard(TransactionCase):
         first_object_id = request.rental_property_id.id
         first_tenant_id = request.tenant_id.id
 
-        self.fake_api.fetch_form_data.return_value = WORK_ORDER_OTHER
+        self._onecore_returns([OTHER_RES_LEASE], residence=OTHER_RESIDENCE)
         wiz2 = self._wizard(request, "rental_object")
         wiz2.lookup_value = "700-111-22-3333"
         with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
@@ -378,12 +355,44 @@ class TestBackfillWizard(TransactionCase):
 
     def test_not_found_raises(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.fake_api.fetch_form_data.return_value = None
+        self.fake_api.fetch_leases_unfiltered.return_value = []
+        self.fake_api.fetch_residence.return_value = None
+        self.fake_api.fetch_parking_space.return_value = None
+        self.fake_api.fetch_facility.return_value = None
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "000"
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
-            with self.assertRaises(UserError):
+            with self.assertRaises(UserError) as caught:
                 wiz.action_search()
+        self.assertIn("Inget hyresobjekt hittades", str(caught.exception))
+
+    def test_failed_lookup_reports_outage_not_wrong_number(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.fake_api.fetch_leases_unfiltered.side_effect = ConnectionError("boom")
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            with self.assertRaises(UserError) as caught:
+                wiz.action_search()
+        self.assertIn("misslyckades", str(caught.exception))
+
+    def test_attach_posts_one_summary_note(self):
+        # The attach writes half a dozen fields; the user should get a single
+        # chatter entry for it, not one per write.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        before = len(request.message_ids)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+
+        posted = request.message_ids[: len(request.message_ids) - before]
+        self.assertEqual(len(posted), 1)
+        body = posted.body
+        self.assertIn("Hyresobjekt", body)
+        self.assertIn("Hyresgäst", body)
 
     def test_empty_value_raises(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")

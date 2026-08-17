@@ -911,8 +911,12 @@ class OneCoreMaintenanceRequest(
         return maintenance_requests
 
     def write(self, vals):
-        # Check if we're in the initial creation phase
-        skip_tracking = self.env.context.get("creating_records")
+        # Check if we're in the initial creation phase, or if the caller writes a
+        # group of fields as one logical change and posts its own summary note
+        # (the backfill wizard) — one message_post per write is slow and noisy.
+        skip_tracking = self.env.context.get("creating_records") or self.env.context.get(
+            "skip_change_tracking"
+        )
 
         stage_manager = MaintenanceStageManager(self.env)
         external_contractor_service = ExternalContractorService(self.env)
@@ -1174,25 +1178,15 @@ class OneCoreMaintenanceRequest(
         }
 
     def open_backfill_rental_object_wizard(self):
-        return self._open_backfill_wizard(
-            "rental_object", "Lägg till / ändra hyresobjekt"
-        )
+        return self._open_backfill_wizard("rental_object")
 
     def open_backfill_tenant_wizard(self):
-        return self._open_backfill_wizard("tenant", "Lägg till / ändra hyresgäst")
+        return self._open_backfill_wizard("tenant")
 
-    def _open_backfill_wizard(self, kind, title):
+    def _open_backfill_wizard(self, kind):
         self.ensure_one()
         wizard = self.env["maintenance.backfill.wizard"].create(
             {"maintenance_request_id": self.id, "lookup_kind": kind}
         )
-        return {
-            "name": title,
-            "type": "ir.actions.act_window",
-            "res_model": "maintenance.backfill.wizard",
-            "res_id": wizard.id,
-            "view_mode": "form",
-            "views": [(False, "form")],
-            "target": "new",
-            "context": {"dialog_size": "medium"},
-        }
+        # The wizard owns its dialog title/window (it re-renders itself on search).
+        return wizard.action_window()

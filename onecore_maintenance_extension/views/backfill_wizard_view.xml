@@ -10,8 +10,7 @@
                         <field name="maintenance_request_id" invisible="1" />
                         <field name="lookup_kind" invisible="1" />
                         <field name="state" invisible="1" />
-                        <field name="object_model" invisible="1" />
-                        <field name="object_res_id" invisible="1" />
+                        <field name="object_option_ref" invisible="1" />
                         <field name="is_vacant" invisible="1" />
 
                         <div class="alert alert-warning" role="alert"
