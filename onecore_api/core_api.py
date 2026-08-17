@@ -39,9 +39,10 @@ OBJECT_KIND_FETCHERS = {
     "facility": "fetch_facility",
 }
 
-# Object kinds that can carry maintenance units (laundry rooms, playgrounds, ...).
-MAINTENANCE_UNIT_KINDS = ("residence", "facility")
+# Object kinds whose objects can HAVE maintenance units attached.
+KINDS_WITH_MAINTENANCE_UNITS = ("residence", "facility")
 
+# Space captions that ARE maintenance units (what the user picked as utrymme).
 MAINTENANCE_UNIT_TYPES = ["Tvättstuga", "Miljöbod", "Lekplats"]
 
 
@@ -570,7 +571,7 @@ class CoreApi:
                             self.fetch_maintenance_units(
                                 fetched_data["property"]["code"], location_type
                             )
-                            if kind in MAINTENANCE_UNIT_KINDS
+                            if kind in KINDS_WITH_MAINTENANCE_UNITS
                             and location_type in MAINTENANCE_UNIT_TYPES
                             else []
                         )
