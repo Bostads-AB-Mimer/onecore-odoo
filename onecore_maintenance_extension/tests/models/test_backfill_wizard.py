@@ -199,6 +199,44 @@ class TestBackfillWizard(TransactionCase):
         self.assertFalse(self.env["maintenance.lease"].browse(old_lease_id).exists())
         self.assertFalse(self.env["maintenance.tenant"].browse(old_tenant_id).exists())
 
+    def test_blocked_unlink_does_not_roll_back_the_attach(self):
+        # Deleting a replaced record can be blocked at the DB level (a foreign key
+        # still referencing it). That aborts the transaction, so merely logging the
+        # error is not enough: the rest of the confirm — reconciling the remaining
+        # records and posting the chatter note — must still go through.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz1 = self._wizard(request, "rental_object")
+        wiz1.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        self.assertTrue(request.lease_id)
+
+        def _blocked_unlink(*args, **kwargs):
+            # Fails the way a foreign-key violation does: the statement errors and
+            # leaves the transaction aborted.
+            self.env.cr.execute("SELECT id FROM maintenance_lease WHERE id = 'x'")
+
+        self._onecore_returns([], residence=RESIDENCE)
+        wiz2 = self._wizard(request, "rental_object")
+        wiz2.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            with patch.object(
+                type(self.env["maintenance.lease"]),
+                "unlink",
+                side_effect=_blocked_unlink,
+            ):
+                wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.rental_property_id)
+        self.assertFalse(reloaded.lease_id)
+        self.assertFalse(reloaded.tenant_id)
+        self.assertTrue(reloaded.manually_vacated)
+
     def test_vacant_object_does_not_refetch_on_render(self):
         # Regression: a deliberately vacant object must not trigger the empty-tenant
         # auto-fetch on every form render (which would re-create the tenant/lease).

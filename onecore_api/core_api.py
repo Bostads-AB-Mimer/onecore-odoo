@@ -179,6 +179,21 @@ class CoreApi:
                 results.append(None)
         return results
 
+    def _fetch_leases_raw(self, identifier, value):
+        """The lease payload exactly as OneCore returns it.
+
+        The search endpoints answer with a list, but ``/leases/{leaseId}`` answers
+        with a single lease object. Callers that care about that distinction — see
+        ``fetch_leases`` — need the raw shape.
+        """
+        if identifier not in LEASE_PATHS:
+            raise OneCoreException(f"Ogiltig söktyp: {identifier}")
+
+        return self._get_json(
+            f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
+            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
+        )
+
     def fetch_leases_unfiltered(self, identifier, value):
         """Leases for an identifier WITHOUT location-type filtering.
 
@@ -187,20 +202,18 @@ class CoreApi:
         ``filter_lease_on_location_type``. Each lease dict may carry a ``tenants``
         list; returns an empty list when there is no content.
         """
-        if identifier not in LEASE_PATHS:
-            raise OneCoreException(f"Ogiltig söktyp: {identifier}")
-
-        content = self._get_json(
-            f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
-        )
+        content = self._fetch_leases_raw(identifier, value)
         if content is None:
             return []
         return content if isinstance(content, list) else [content]
 
     def fetch_leases(self, identifier, value, location_type):
         try:
-            content = self.fetch_leases_unfiltered(identifier, value)
+            # Deliberately the raw payload, not fetch_leases_unfiltered: a single
+            # lease object (from /leases/{leaseId}) must reach the filter unwrapped
+            # so it passes through untouched. Wrapping it in a list first would let
+            # the filter drop every contract type but Bostadskontrakt.
+            content = self._fetch_leases_raw(identifier, value)
 
             # If no content returned, return empty list.
             if not content:

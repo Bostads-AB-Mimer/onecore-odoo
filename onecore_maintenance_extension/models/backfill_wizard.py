@@ -274,11 +274,17 @@ class MaintenanceBackfillWizard(models.TransientModel):
 
         Best-effort: if the delete is blocked (e.g. a reference elsewhere), log and
         leave the old record unreferenced rather than failing the confirm.
+
+        A blocked delete is a foreign-key violation, which aborts the transaction,
+        so the savepoint is what keeps "best-effort" honest: without it the caught
+        exception would still take down the remaining unlinks and the chatter note,
+        rolling back the attach the user just confirmed.
         """
         if not old_record or old_record == new_record or not old_record.exists():
             return
         try:
-            old_record.unlink()
+            with self.env.cr.savepoint():
+                old_record.unlink()
         except Exception as err:
             _logger.warning(
                 "Could not delete replaced %s record %s: %s",

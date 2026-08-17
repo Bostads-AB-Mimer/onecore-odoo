@@ -1,10 +1,11 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import requests
 
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
+from ...models.handlers.rental_property_handler import RentalPropertyHandler
 from ...models.services.direct_lookup_service import (
     DirectLookupService,
     LookupFailed,
@@ -183,6 +184,36 @@ class TestLoadObjectContracts(TransactionCase):
         self.core_api.fetch_residence.return_value = {"code": "RES-001"}  # partial
         with self.assertRaises(LookupFailed):
             self.service.load_object_contracts(request, "216-034-03-0101")
+
+    def test_payload_failing_at_the_db_leaves_the_transaction_usable(self):
+        # The option fields are ``required=True``, which Odoo enforces as NOT NULL:
+        # a partial payload therefore fails *after* the INSERT was issued, leaving
+        # the transaction aborted. Swallowing that exception is not enough — every
+        # later query would raise InFailedSqlTransaction instead of the plain
+        # Swedish message the guard exists to produce.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_leases_unfiltered.return_value = [RES_LEASE]
+        self.core_api.fetch_residence.return_value = RESIDENCE
+
+        def _create_without_required_fields(items):
+            self.env["maintenance.rental.property.option"].create(
+                {"user_id": self.env.uid}
+            )
+
+        with patch.object(
+            RentalPropertyHandler,
+            "update_form_options",
+            side_effect=_create_without_required_fields,
+        ):
+            with self.assertRaises(LookupFailed):
+                self.service.load_object_contracts(request, "216-034-03-0101")
+
+        # Still usable: the caller has to be able to report the failure and go on.
+        self.assertFalse(
+            self.env["maintenance.lease.option"].search(
+                [("user_id", "=", self.env.user.id)]
+            )
+        )
 
     def test_resolves_object_of_a_different_kind(self):
         # On a Lägenhet request, entering a parking objektnummer still resolves

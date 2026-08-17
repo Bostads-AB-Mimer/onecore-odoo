@@ -406,6 +406,21 @@ class TestFetchLeases:
         assert len(result) == 1
 
     @patch.object(CoreApi, '_get_json')
+    def test_keeps_single_object_lease_of_any_type(self, mock_get_json, api):
+        """/leases/{leaseId} answers with one lease object, not a list.
+
+        That single object must reach the caller untouched: the user searched an
+        exact contract number, so filtering it by the request's location type would
+        drop every non-residential contract.
+        """
+        lease = {"type": "P-Platskontrakt", "leaseId": "216-704-00-0034/01"}
+        mock_get_json.return_value = lease
+
+        result = api.fetch_leases("leaseId", "216-704-00-0034/01", "Byggnad")
+
+        assert result == [lease]
+
+    @patch.object(CoreApi, '_get_json')
     def test_raises_onecore_exception_on_http_error(self, mock_get_json, api):
         """Should raise OneCoreException on HTTPError."""
         mock_get_json.side_effect = requests.HTTPError()

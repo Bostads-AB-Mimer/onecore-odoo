@@ -232,9 +232,16 @@ class DirectLookupService:
         Guarded: an unexpected/partial payload would otherwise surface as a 500
         after ``_delete_options()`` has already wiped the form's dropdowns.
         Returns False (logged) instead, so the caller can report a plain message.
+
+        The savepoint is what makes that guard work. A partial payload typically
+        fails on a required field, which Odoo enforces as NOT NULL — i.e. the
+        INSERT has already been sent and the transaction is aborted. Without
+        rolling back to a savepoint, catching the exception buys nothing: the next
+        query raises InFailedSqlTransaction and the user gets a 500 anyway.
         """
         try:
-            route["handler"](request, self.core_api).update_form_options([item])
+            with self.env.cr.savepoint():
+                route["handler"](request, self.core_api).update_form_options([item])
             return True
         except Exception as err:
             _logger.warning(
