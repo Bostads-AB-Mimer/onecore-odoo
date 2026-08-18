@@ -837,6 +837,19 @@ class OneCoreMaintenanceRequest(
         if space_caption:
             defaults["space_caption"] = space_caption
 
+        # Default new requests to the Kundcenter intake team. Base Odoo defaults
+        # the required maintenance_team_id to "Internal Maintenance"; in ONECore
+        # every request starts at intake, from where it is dispatched to a work
+        # team once a priority is set. An explicit team passed via context wins,
+        # and the base default is kept if the intake team can't be resolved so
+        # the required field is always satisfied.
+        if "maintenance_team_id" in fields_list and not self.env.context.get(
+            "default_maintenance_team_id"
+        ):
+            intake_team_id = MaintenanceStageManager(self.env)._intake_team_id()
+            if intake_team_id:
+                defaults["maintenance_team_id"] = intake_team_id
+
         return defaults
 
     @api.model_create_multi
@@ -893,6 +906,16 @@ class OneCoreMaintenanceRequest(
                 request._add_followers()
 
             create_service.setup_team_assignment(request)
+
+            # A request may only be created on a work team if it already has a
+            # priority; intake tickets (Kundcenter) and teamless requests are
+            # exempt. Validated after setup_team_assignment so an equipment-
+            # derived team is included, and before _send_creation_sms so an
+            # invalid request rolls back without side effects.
+            stage_manager.validate_team_priority(
+                request, request.maintenance_team_id.id
+            )
+
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -933,6 +956,18 @@ class OneCoreMaintenanceRequest(
                 self, vals.get("user_id")
             )
             vals.update(workflow_updates)
+
+        # Require a priority before a request is dispatched off the Kundcenter
+        # intake team, so a contractor is never handed a request they can
+        # neither progress nor triage. Validated on every write (like the stage
+        # check above), not guarded by skip_tracking: create() returns records
+        # that still carry the creating_records context, so a guard would let a
+        # dispatch on a just-created record slip through. The initial team set by
+        # create() never routes through write(); create() validates it directly.
+        if "maintenance_team_id" in vals:
+            stage_manager.validate_team_priority(
+                self, vals["maintenance_team_id"], vals
+            )
 
         # Custom loan product tracking
         loan_product_messages = (

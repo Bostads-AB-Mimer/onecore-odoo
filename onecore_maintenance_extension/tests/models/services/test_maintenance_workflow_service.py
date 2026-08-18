@@ -253,6 +253,146 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
 
 
 @tagged("onecore")
+class TestMaintenanceTeamPriority(StageTestMixin, TransactionCase):
+    """Priority must be set before a request leaves the Kundcenter intake team.
+
+    Every request — internal or from an external source such as Mimer.nu — is
+    created on the Kundcenter intake team. A request may only move to a work
+    team once a priority is set. Without this guard an external contractor can
+    be handed a request they can neither progress (every non-intake stage
+    requires a priority, MIM-1873) nor triage (priority is read-only for them),
+    which leaves the request permanently stuck.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.internal_user = create_internal_user(self.env)
+        # The fresh test DB loads the intake team unmodified, so a name lookup is
+        # reliable here; production renames are covered by
+        # test_intake_team_exempt_after_rename below.
+        self.kundcenter = self.env["maintenance.team"].search(
+            [("name", "=", "Kundcenter")], limit=1
+        )
+        self.work_team = self.env["maintenance.team"].create(
+            {"name": "Distrikt Väst (test)"}
+        )
+
+    def test_intake_team_data_record_resolves(self):
+        """The priority gate depends on this data record resolving."""
+        team = self.env.ref(
+            "onecore_maintenance_extension.7", raise_if_not_found=False
+        )
+        self.assertTrue(team, "intake team data record is missing")
+
+    def test_intake_team_exempt_after_rename(self):
+        """Renaming the intake team must not re-enable the priority gate for it.
+
+        Regression: the team was renamed to 'Kundcenter - Inkomna
+        serviceanmälningar', which broke the original name-based exemption.
+        """
+        self.kundcenter.name = "Kundcenter - Inkomna serviceanmälningar"
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.kundcenter.id,
+            priority_expanded=False,
+        )
+        self.assertEqual(request.maintenance_team_id, self.kundcenter)
+
+    def test_create_on_work_team_without_priority_raises(self):
+        """Creating a request directly on a work team without priority is blocked."""
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            create_maintenance_request(
+                self.env,
+                maintenance_team_id=self.work_team.id,
+                priority_expanded=False,
+            )
+
+    def test_create_on_kundcenter_without_priority_allowed(self):
+        """Intake tickets land on Kundcenter without a priority (Mimer.nu path)."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.kundcenter.id,
+            priority_expanded=False,
+        )
+        self.assertEqual(request.maintenance_team_id, self.kundcenter)
+
+    def test_create_defaults_to_intake_team_without_priority(self):
+        """A request created without a team defaults to Kundcenter (intake), so
+        no priority is required."""
+        request = create_maintenance_request(self.env, priority_expanded=False)
+        self.assertEqual(request.maintenance_team_id, self.kundcenter)
+
+    def test_create_on_work_team_with_priority_allowed(self):
+        """A fully triaged request may be created directly on a work team."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.work_team.id,
+            priority_expanded="7",
+        )
+        self.assertEqual(request.maintenance_team_id, self.work_team)
+
+    def test_dispatch_to_work_team_without_priority_raises(self):
+        """Dispatching a priority-less Kundcenter ticket to a work team is blocked."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.kundcenter.id,
+            priority_expanded=False,
+        )
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.with_user(self.internal_user).write(
+                {"maintenance_team_id": self.work_team.id}
+            )
+
+    def test_dispatch_to_work_team_setting_priority_same_write_succeeds(self):
+        """Setting the priority in the same write as the dispatch is allowed."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.kundcenter.id,
+            priority_expanded=False,
+        )
+        request.with_user(self.internal_user).write(
+            {"maintenance_team_id": self.work_team.id, "priority_expanded": "7"}
+        )
+        self.assertEqual(request.maintenance_team_id, self.work_team)
+
+    def test_dispatch_to_work_team_with_existing_priority_succeeds(self):
+        """Dispatching a request that already has a priority is allowed."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.kundcenter.id,
+            priority_expanded="7",
+        )
+        request.with_user(self.internal_user).write(
+            {"maintenance_team_id": self.work_team.id}
+        )
+        self.assertEqual(request.maintenance_team_id, self.work_team)
+
+    def test_move_back_to_kundcenter_without_priority_allowed(self):
+        """Returning a request to the intake team never requires a priority."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.work_team.id,
+            priority_expanded="7",
+        )
+        request.with_user(self.internal_user).write(
+            {"maintenance_team_id": self.kundcenter.id, "priority_expanded": False}
+        )
+        self.assertEqual(request.maintenance_team_id, self.kundcenter)
+
+    def test_clearing_team_without_priority_allowed(self):
+        """Unassigning the team never requires a priority."""
+        request = create_maintenance_request(
+            self.env,
+            maintenance_team_id=self.work_team.id,
+            priority_expanded="7",
+        )
+        request.with_user(self.internal_user).write(
+            {"maintenance_team_id": False, "priority_expanded": False}
+        )
+        self.assertFalse(request.maintenance_team_id)
+
+
+@tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
     def setUp(self):
         super().setUp()
