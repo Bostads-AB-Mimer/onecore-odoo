@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, MagicMock, patch, call
 import requests
-from core_api import CoreApi, OneCoreException
+from core_api import DEFAULT_TIMEOUT, CoreApi, OneCoreException
 
 
 @pytest.fixture
@@ -192,7 +192,8 @@ class TestTokenManagement:
         assert api._get_persisted_token() == "fresh_token"
         mock_post.assert_called_once_with(
             "https://api.example.com/auth/generateToken",
-            json={"username": "test_user", "password": "test_pass"}
+            json={"username": "test_user", "password": "test_pass"},
+            timeout=DEFAULT_TIMEOUT
         )
 
     @patch('core_api.requests.post')
@@ -261,7 +262,8 @@ class TestRequest:
         mock_request.assert_called_once_with(
             "GET",
             "https://api.example.com/test",
-            headers={"Authorization": "Bearer existing_token"}
+            headers={"Authorization": "Bearer existing_token"},
+            timeout=DEFAULT_TIMEOUT
         )
 
     @patch('core_api.requests.request')
