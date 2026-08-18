@@ -113,6 +113,7 @@
                     <field name="has_unread_supplier_dialog" invisible="1" />
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
+                    <field name="has_unread_new_customer_info" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -778,7 +779,7 @@
                     <field name="create_date" />
                     <field name="master_key" />
                     <field name="hidden_from_my_pages" />
-                    <field name="new_mimer_notification" />
+                    <field name="has_unread_new_customer_info" />
                     <field name="recently_added_tenant" />
                     <field name="special_attention" />
                     <field name="has_unread_supplier_dialog" />

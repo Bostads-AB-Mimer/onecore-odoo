@@ -27,5 +27,8 @@ from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
 from .models import test_maintenance_floor_plan
 from .models import test_maintenance_pest_control
+from .models import test_new_customer_info_indicator
+from .models import test_dialog_indicator
+from .models import test_master_key_change_indicator
 from .utils import test_component_utils
 from .utils import test_helpers

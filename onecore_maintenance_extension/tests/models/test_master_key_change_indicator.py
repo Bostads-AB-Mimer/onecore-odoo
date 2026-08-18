@@ -101,7 +101,14 @@ class TestAcknowledgeMasterKeyChange(TransactionCase):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
-        self.request = create_maintenance_request(self.env, master_key=False)
+        # The external-contractor record rule (security/maintenance.xml)
+        # only grants access to requests on the contractor's own team, same
+        # as tests/security/test_external_contractor.py.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, master_key=False, maintenance_team_id=self.team.id
+        )
         self.request.with_user(self.internal_user).write({"master_key": True})
 
     def _refresh(self, user):
@@ -135,3 +142,22 @@ class TestAcknowledgeMasterKeyChange(TransactionCase):
 
         record.action_acknowledge_master_key_change()
         self.assertFalse(record.has_unread_master_key_change)
+
+    def test_ack_posts_audit_note(self):
+        # create_maintenance_request()/create() leaves `creating_records=True`
+        # on the returned recordset's context (see maintenance.py create()),
+        # which makes write() skip FieldChangeTracker entirely. Tests that
+        # assert on posted chatter notes must override it, same as
+        # test_maintenance_workflow_service.py does.
+        record = self._refresh(self.internal_user).with_context(
+            creating_records=False
+        )
+        before = set(record.message_ids.ids)
+        record.action_acknowledge_master_key_change()
+        # message_ids is a plain relational field, not a compute — it was
+        # already fetched (and cached) by the `before` read above, so it
+        # must be explicitly invalidated to see the note just posted.
+        record.invalidate_recordset(["message_ids"])
+        new_msgs = record.message_ids.filtered(lambda m: m.id not in before)
+        self.assertTrue(new_msgs)
+        self.assertIn("Huvudnyckeländring kvitterad", " ".join(new_msgs.mapped("body")))

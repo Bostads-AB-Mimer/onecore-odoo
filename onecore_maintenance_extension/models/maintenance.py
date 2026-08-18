@@ -147,11 +147,6 @@ class OneCoreMaintenanceRequest(
         compute="_compute_schedule_date_date",
         store=False,
     )
-    new_mimer_notification = fields.Boolean(
-        string="New Mimer Message",
-        compute="_compute_new_mimer_notification",
-        store=False,
-    )
     supplier_dialog_ack_at = fields.Datetime(
         string="Mimer har bekräftat att de läst meddelandet",
         help="Senaste tidpunkt en Mimer-handläggare kvitterade entreprenörens noteringar.",
@@ -181,6 +176,22 @@ class OneCoreMaintenanceRequest(
     has_unread_master_key_change = fields.Boolean(
         string="Okvitterad huvudnyckeländring",
         compute="_compute_has_unread_master_key_change",
+        store=False,
+    )
+    new_customer_info_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad",
+        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ny kundinfo. "
+        "Delas av alla Mimer-användare som har tillgång till ärendet.",
+    )
+    new_customer_info_external_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad av entreprenör",
+        help="Senaste tidpunkt en extern entreprenör kvitterade ny kundinfo. "
+        "Delas av alla entreprenörer som har tillgång till ärendet, och påverkar "
+        "aldrig Mimers egen kvittering.",
+    )
+    has_unread_new_customer_info = fields.Boolean(
+        string="Okvitterad ny kundinfo",
+        compute="_compute_has_unread_new_customer_info",
         store=False,
     )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
@@ -317,34 +328,6 @@ class OneCoreMaintenanceRequest(
                     err,
                 )
                 record.requires_pest_control = False
-
-    @api.depends(
-        "message_ids.notification_ids.is_read",
-        "message_ids.notification_ids.notification_type",
-    )
-    def _compute_new_mimer_notification(self):
-        # Batched: one mail.notification search for the whole recordset.
-        # The previous per-record loop fired ~2 queries per card and
-        # dominated the kanban web_read_group cost.
-        if not self:
-            return
-        notifications = self.env["mail.notification"].search(
-            [
-                ("mail_message_id.model", "=", "maintenance.request"),
-                ("mail_message_id.res_id", "in", self.ids),
-                ("res_partner_id", "=", self.env.user.partner_id.id),
-                ("is_read", "!=", True),
-                ("notification_type", "=", "inbox"),
-                (
-                    "mail_message_id.author_id.user_ids.login",
-                    "=",
-                    "odoo@mimer.nu",
-                ),
-            ]
-        )
-        flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
-        for record in self:
-            record.new_mimer_notification = record.id in flagged_ids
 
     @api.depends(
         "message_ids.date",
@@ -504,6 +487,86 @@ class OneCoreMaintenanceRequest(
                 not ack_at or record.master_key_changed_at > ack_at
             )
 
+    @api.depends(
+        "message_ids.date",
+        "message_ids.author_id",
+        "message_ids.notification_ids",
+        "new_customer_info_ack_at",
+        "new_customer_info_external_ack_at",
+        "recently_added_tenant",
+    )
+    @api.depends_context("uid")
+    def _compute_has_unread_new_customer_info(self):
+        # "Ny kundinfo" is the tenant -> case channel (Mina sidor). Both
+        # audiences see it — an external contractor reads the tenant's message
+        # in the same chatter — but each side acknowledges separately via its
+        # own timestamp, mirroring the audience split in
+        # _compute_dialog_indicators. A contractor's ack must never suppress
+        # the tenant's message for Mimer. depends_context("uid") keeps the
+        # cache keyed per user so the two sides cannot read each other's value.
+        for record in self:
+            record.has_unread_new_customer_info = False
+
+        if not self:
+            return
+
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        ack_field = (
+            "new_customer_info_external_ack_at"
+            if is_external
+            else "new_customer_info_ack_at"
+        )
+
+        # No strict separation on the Mimer side: a freshly-added tenant also
+        # counts as new customer info. It contributes until acknowledged (the
+        # internal ack clears recently_added_tenant), so no timestamp
+        # comparison is needed. It is a Mimer-internal data-quality flag —
+        # tenant back-filled from the OneCore API, not tenant communication —
+        # so it never raises the badge for external contractors.
+        if not is_external:
+            for record in self:
+                if record.recently_added_tenant:
+                    record.has_unread_new_customer_info = True
+
+        # Mina-sidor communications are messages authored by the odoo@mimer.nu
+        # integration account that generated an inbox notification. This mirrors
+        # the former _compute_new_mimer_notification discriminator, but keyed on
+        # the acking side's ack timestamp instead of per-user
+        # mail.notification read state. sudo() because we now look across every
+        # recipient partner's inbox notifications, not just the current user's.
+        notifications = (
+            self.env["mail.notification"]
+            .sudo()
+            .search(
+                [
+                    ("mail_message_id.model", "=", "maintenance.request"),
+                    ("mail_message_id.res_id", "in", self.ids),
+                    ("notification_type", "=", "inbox"),
+                    (
+                        "mail_message_id.author_id.user_ids.login",
+                        "=",
+                        "odoo@mimer.nu",
+                    ),
+                ]
+            )
+        )
+        latest_by_request = {}
+        for notif in notifications:
+            message = notif.mail_message_id
+            if not message.date:
+                continue
+            current = latest_by_request.get(message.res_id)
+            if not current or message.date > current:
+                latest_by_request[message.res_id] = message.date
+
+        for record in self:
+            latest = latest_by_request.get(record.id)
+            if not latest:
+                continue
+            ack_at = record[ack_field]
+            if not ack_at or latest > ack_at:
+                record.has_unread_new_customer_info = True
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -540,6 +603,31 @@ class OneCoreMaintenanceRequest(
         # Non-stored computed field — force a recompute so the chatter button
         # and the kanban chip re-evaluate immediately.
         self.invalidate_recordset(["has_unread_master_key_change"])
+        return True
+
+    def action_acknowledge_new_customer_info(self):
+        """Mark "Ny kundinfo" read for the acking user's whole side.
+
+        Acknowledgement is one shared timestamp per side, like
+        action_acknowledge_dialog: the first Mimer handler to click clears the
+        badge for all Mimer users, and the first external contractor to click
+        clears it for all contractors. The sides are independent — a
+        contractor's ack must never suppress the tenant's message for Mimer.
+        """
+        self.ensure_one()
+        now = fields.Datetime.now()
+        if ExternalContractorService(self.env).is_external_contractor():
+            self.new_customer_info_external_ack_at = now
+        else:
+            self.new_customer_info_ack_at = now
+            # Per "no strict separation", the tenant-onboarding flag is cleared
+            # too so the badge fully disappears. Internal side only: it is a
+            # Mimer data-quality flag and it drives _order for everyone.
+            if self.recently_added_tenant:
+                self.recently_added_tenant = False
+        # Non-stored computed field — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
+        self.invalidate_recordset(["has_unread_new_customer_info"])
         return True
 
     def _send_creation_sms(self):

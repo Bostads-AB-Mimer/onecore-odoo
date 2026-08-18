@@ -18,7 +18,14 @@ class TestDialogIndicator(TransactionCase):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
-        self.request = create_maintenance_request(self.env)
+        # The external-contractor record rule (security/maintenance.xml)
+        # only grants access to requests on the contractor's own team, same
+        # as tests/security/test_external_contractor.py.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, maintenance_team_id=self.team.id
+        )
 
     def _post_log_note(self, user, body="hej", inform=True):
         return self.request.with_user(user).message_post(
@@ -155,7 +162,13 @@ class TestMailMessageDialogUnread(TransactionCase):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
-        self.request = create_maintenance_request(self.env)
+        # See TestDialogIndicator.setUp: the external contractor needs team
+        # membership to read/write the request under the record rule.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, maintenance_team_id=self.team.id
+        )
 
     def _post_log_note(self, user, body="hej", inform=True):
         return self.request.with_user(user).message_post(
