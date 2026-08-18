@@ -14,11 +14,8 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
 
             # Reuse existing rental property option if one already exists for this property
             property_code = property_data["code"]
-            rental_property_option = self.env[
-                "maintenance.rental.property.option"
-            ].search(
-                [("user_id", "=", self.env.user.id), ("code", "=", property_code)],
-                limit=1,
+            rental_property_option = self._existing_option(
+                "maintenance.rental.property.option", property_code
             )
 
             if not rental_property_option:

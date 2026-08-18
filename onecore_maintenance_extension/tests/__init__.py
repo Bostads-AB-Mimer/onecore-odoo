@@ -26,3 +26,5 @@ from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
 from .utils import test_component_utils
 from .utils import test_helpers
+from .models import test_direct_lookup
+from .models import test_backfill_wizard

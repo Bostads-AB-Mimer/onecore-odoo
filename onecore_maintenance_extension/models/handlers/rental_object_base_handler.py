@@ -42,6 +42,20 @@ class RentalObjectBaseHandler(BaseMaintenanceHandler):
                     tenant_records, search_type, search_value
                 ).id
 
+    def _existing_option(self, model_name, code):
+        """An object option already created for ``code``, if any.
+
+        Several contracts can point at the same object (a renewed contract is two
+        leases on one object, both returned because upcoming leases are included).
+        Reusing the option keeps the object listed once in the form's dropdown.
+        Codeless payloads are never matched — every one of them would look alike.
+        """
+        if not code:
+            return self.env[model_name].browse()
+        return self.env[model_name].search(
+            [("user_id", "=", self.env.user.id), ("code", "=", code)], limit=1
+        )
+
     def _clear_lease_and_tenant_options(self):
         """Clear existing lease and tenant options when no lease data is available."""
         self.env["maintenance.lease.option"].search(
