@@ -1,4 +1,8 @@
-"""Tests for the "Ny kundinfo" shared notification (MIM-1844)."""
+"""Tests for the "Ny kundinfo" notification (MIM-1844).
+
+Acknowledgement is shared within each audience and split between them:
+one timestamp for Mimer, one for external contractors.
+"""
 from datetime import timedelta
 
 from odoo import fields
@@ -62,7 +66,14 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
         self.mimer_user = _get_or_create_mimer_user(self.env)
-        self.request = create_maintenance_request(self.env)
+        # The external-contractor record rule (security/maintenance.xml) only
+        # grants access to requests on the contractor's own team, same as
+        # test_dialog_indicator.py.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, maintenance_team_id=self.team.id
+        )
 
     def _refresh(self, user):
         record = self.request.with_user(user)
@@ -73,8 +84,16 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
         _post_customer_info(self.request, self.mimer_user, self.internal_user)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
 
-    def test_external_contractor_never_sees_it(self):
+    def test_external_contractor_sees_tenant_message(self):
+        # The contractor reads the tenant's Mina-sidor message in the same
+        # chatter, so the badge is actionable for them too (MIM-1844 review).
         _post_customer_info(self.request, self.mimer_user, self.internal_user)
+        self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
+
+    def test_external_contractor_does_not_see_recently_added_tenant(self):
+        # recently_added_tenant is a Mimer-internal data-quality flag (tenant
+        # back-filled from the OneCore API) — not tenant communication.
+        self.request.recently_added_tenant = True
         self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
 
     def test_no_customer_message_means_no_unread(self):
@@ -122,7 +141,14 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         self.internal_user = create_internal_user(self.env)
         self.external_user = create_external_contractor_user(self.env)
         self.mimer_user = _get_or_create_mimer_user(self.env)
-        self.request = create_maintenance_request(self.env)
+        # The external-contractor record rule (security/maintenance.xml) only
+        # grants access to requests on the contractor's own team, same as
+        # test_dialog_indicator.py.
+        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
+        self.team.write({"member_ids": [(4, self.external_user.id)]})
+        self.request = create_maintenance_request(
+            self.env, maintenance_team_id=self.team.id
+        )
         _post_customer_info(self.request, self.mimer_user, self.internal_user)
 
     def _refresh(self, user):
@@ -151,18 +177,54 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         record.action_acknowledge_new_customer_info()
         self.assertFalse(record.has_unread_new_customer_info)
 
-    def test_external_contractor_cannot_ack(self):
-        # Hard constraint: "Ny kundinfo" is internal-Mimer only. An external
-        # contractor must never be able to clear the shared flag for
-        # everyone on the Mimer side.
+    def test_external_ack_clears_own_side_only(self):
+        # Audience split: a contractor acks their own side and must never
+        # suppress the tenant's message for Mimer.
         self.request.recently_added_tenant = True
         record = self._refresh(self.external_user)
+        self.assertTrue(record.has_unread_new_customer_info)
 
         record.action_acknowledge_new_customer_info()
 
+        self.assertTrue(self.request.new_customer_info_external_ack_at)
         self.assertFalse(self.request.new_customer_info_ack_at)
         self.assertTrue(self.request.recently_added_tenant)
+        self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
+
+    def test_internal_ack_clears_own_side_only(self):
+        record = self._refresh(self.internal_user)
+        record.action_acknowledge_new_customer_info()
+
+        self.assertTrue(self.request.new_customer_info_ack_at)
+        self.assertFalse(self.request.new_customer_info_external_ack_at)
+        self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
+        self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
+
+    def test_new_message_after_external_ack_reappears(self):
+        record = self._refresh(self.external_user)
+        record.action_acknowledge_new_customer_info()
+        self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
+
+        later = _post_customer_info(
+            self.request, self.mimer_user, self.internal_user, body="Mer info"
+        )
+        later.date = self.request.new_customer_info_external_ack_at + timedelta(
+            seconds=1
+        )
+        self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
+
+    def test_external_ack_posts_swedish_note(self):
+        record = self._refresh(self.external_user).with_context(
+            creating_records=False
+        )
+        before = set(record.message_ids.ids)
+        record.action_acknowledge_new_customer_info()
+        record.invalidate_recordset(["message_ids"])
+        bodies = " ".join(
+            record.message_ids.filtered(lambda m: m.id not in before).mapped("body")
+        )
+        self.assertIn("Ny kundinfo kvitterad av entreprenör", bodies)
 
     def test_ack_posts_swedish_note_and_no_english_flag_note(self):
         self.request.recently_added_tenant = True

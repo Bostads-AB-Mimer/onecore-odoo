@@ -183,6 +183,12 @@ class OneCoreMaintenanceRequest(
         help="Senaste tidpunkt någon Mimer-handläggare kvitterade ny kundinfo. "
         "Delas av alla Mimer-användare som har tillgång till ärendet.",
     )
+    new_customer_info_external_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad av entreprenör",
+        help="Senaste tidpunkt en extern entreprenör kvitterade ny kundinfo. "
+        "Delas av alla entreprenörer som har tillgång till ärendet, och påverkar "
+        "aldrig Mimers egen kvittering.",
+    )
     has_unread_new_customer_info = fields.Boolean(
         string="Okvitterad ny kundinfo",
         compute="_compute_has_unread_new_customer_info",
@@ -486,32 +492,46 @@ class OneCoreMaintenanceRequest(
         "message_ids.author_id",
         "message_ids.notification_ids",
         "new_customer_info_ack_at",
+        "new_customer_info_external_ack_at",
         "recently_added_tenant",
     )
+    @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
-        # "Ny kundinfo" is the tenant -> Mimer channel (Mina sidor). Shared
-        # across all Mimer users via one ack timestamp, and internal-only:
-        # external contractors never see or clear tenant customer info.
+        # "Ny kundinfo" is the tenant -> case channel (Mina sidor). Both
+        # audiences see it — an external contractor reads the tenant's message
+        # in the same chatter — but each side acknowledges separately via its
+        # own timestamp, mirroring the audience split in
+        # _compute_dialog_indicators. A contractor's ack must never suppress
+        # the tenant's message for Mimer. depends_context("uid") keeps the
+        # cache keyed per user so the two sides cannot read each other's value.
         for record in self:
             record.has_unread_new_customer_info = False
 
         if not self:
             return
 
-        if ExternalContractorService(self.env).is_external_contractor():
-            return
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        ack_field = (
+            "new_customer_info_external_ack_at"
+            if is_external
+            else "new_customer_info_ack_at"
+        )
 
-        # No strict separation: a freshly-added tenant also counts as new
-        # customer info. It contributes until acknowledged (the ack action
-        # clears recently_added_tenant), so no timestamp comparison is needed.
-        for record in self:
-            if record.recently_added_tenant:
-                record.has_unread_new_customer_info = True
+        # No strict separation on the Mimer side: a freshly-added tenant also
+        # counts as new customer info. It contributes until acknowledged (the
+        # internal ack clears recently_added_tenant), so no timestamp
+        # comparison is needed. It is a Mimer-internal data-quality flag —
+        # tenant back-filled from the OneCore API, not tenant communication —
+        # so it never raises the badge for external contractors.
+        if not is_external:
+            for record in self:
+                if record.recently_added_tenant:
+                    record.has_unread_new_customer_info = True
 
         # Mina-sidor communications are messages authored by the odoo@mimer.nu
         # integration account that generated an inbox notification. This mirrors
-        # the former _compute_new_mimer_notification discriminator, but shared
-        # across all Mimer users via the ack timestamp instead of per-user
+        # the former _compute_new_mimer_notification discriminator, but keyed on
+        # the acking side's ack timestamp instead of per-user
         # mail.notification read state. sudo() because we now look across every
         # recipient partner's inbox notifications, not just the current user's.
         notifications = (
@@ -543,7 +563,7 @@ class OneCoreMaintenanceRequest(
             latest = latest_by_request.get(record.id)
             if not latest:
                 continue
-            ack_at = record.new_customer_info_ack_at
+            ack_at = record[ack_field]
             if not ack_at or latest > ack_at:
                 record.has_unread_new_customer_info = True
 
@@ -586,21 +606,25 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Mark "Ny kundinfo" read for every Mimer user of the request.
+        """Mark "Ny kundinfo" read for the acking user's whole side.
 
-        Acknowledgement is one shared timestamp on the request — the first
-        Mimer handler to click clears the badge for all Mimer users. External
-        contractors never see or call this. Per "no strict separation", the
-        tenant-onboarding flag is cleared too so the badge fully disappears.
+        Acknowledgement is one shared timestamp per side, like
+        action_acknowledge_dialog: the first Mimer handler to click clears the
+        badge for all Mimer users, and the first external contractor to click
+        clears it for all contractors. The sides are independent — a
+        contractor's ack must never suppress the tenant's message for Mimer.
         """
         self.ensure_one()
-        # Internal-Mimer only: external contractors must never clear the
-        # tenant customer-info flag (mirrors the compute's audience guard).
+        now = fields.Datetime.now()
         if ExternalContractorService(self.env).is_external_contractor():
-            return False
-        self.new_customer_info_ack_at = fields.Datetime.now()
-        if self.recently_added_tenant:
-            self.recently_added_tenant = False
+            self.new_customer_info_external_ack_at = now
+        else:
+            self.new_customer_info_ack_at = now
+            # Per "no strict separation", the tenant-onboarding flag is cleared
+            # too so the badge fully disappears. Internal side only: it is a
+            # Mimer data-quality flag and it drives _order for everyone.
+            if self.recently_added_tenant:
+                self.recently_added_tenant = False
         # Non-stored computed field — force a recompute so the chatter button
         # and the kanban chip re-evaluate immediately.
         self.invalidate_recordset(["has_unread_new_customer_info"])
