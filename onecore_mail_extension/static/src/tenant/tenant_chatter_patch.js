@@ -179,6 +179,10 @@ patch(Chatter.prototype, {
       confirmLabel: _t("Markera som läst"),
       cancelLabel: _t("Avbryt"),
       confirm: () => this._acknowledgeSignals(signals),
+      // ConfirmationDialog renders the cancel button on t-if="props.cancel",
+      // not on cancelLabel — without a callback there is no Avbryt at all and
+      // the only way out is the X / Escape.
+      cancel: () => {},
     });
   },
 });
