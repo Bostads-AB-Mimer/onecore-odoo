@@ -24,6 +24,7 @@ from .security import test_external_contractor
 from .models import test_maintenance_component_wizard
 from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
-from .models import test_mim_1869_form_read_perf
+from .models import test_maintenance_floor_plan
+from .models import test_maintenance_pest_control
 from .utils import test_component_utils
 from .utils import test_helpers
