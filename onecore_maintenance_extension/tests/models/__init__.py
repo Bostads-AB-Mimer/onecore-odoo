@@ -14,6 +14,7 @@ from . import test_maintenance_component_wizard
 from . import test_maintenance_component_line
 from . import test_dialog_indicator
 from . import test_master_key_change_indicator
+from . import test_schedule_date_warning
 from . import test_maintenance_floor_plan
 from . import test_maintenance_pest_control
 from .handlers import test_base_handler

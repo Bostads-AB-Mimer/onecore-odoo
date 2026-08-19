@@ -102,6 +102,30 @@ def create_external_contractor_user(env, **kwargs):
     return env["res.users"].create(defaults)
 
 
+def create_maintenance_team(env, **kwargs):
+    """Create a maintenance team.
+
+    External contractors only reach a request through
+    maintenance_request_rule_external_contractor_group_readonly, whose domain is
+    [('maintenance_team_id.member_ids', 'in', [user.id])]. A test that acts as a
+    contractor must therefore put that user in member_ids here and assign the
+    request to this team, or every write is denied with an AccessError.
+
+    Args:
+        env: Odoo environment
+        **kwargs: Additional fields to override defaults
+            (e.g., member_ids=[(4, user.id)])
+
+    Returns:
+        maintenance.team record
+    """
+    fake = setup_faker()
+
+    defaults = {"name": fake.name()}
+    defaults.update(kwargs)
+    return env["maintenance.team"].create(defaults)
+
+
 def create_maintenance_request(env, **kwargs):
     """Create a maintenance request with minimal required fields.
 

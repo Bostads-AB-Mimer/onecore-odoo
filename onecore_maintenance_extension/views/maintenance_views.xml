@@ -634,6 +634,15 @@
                                             options="{'show_time': false}"
                                             help="Det datum arbete är planerat"
                                         />
+                                        <field
+                                            name="schedule_date_after_due_date"
+                                            invisible="1" />
+                                        <div
+                                            class="text-danger"
+                                            invisible="not schedule_date_after_due_date">
+                                            <i class="fa fa-exclamation-triangle me-1" />
+                                            Planerat utförandedatum ligger efter förfallodatum
+                                        </div>
 
                                         <field
                                             name="master_key" string="Huvudnyckel"
@@ -762,6 +771,7 @@
                     <field name="priority_expanded" />
                     <field name="due_date" />
                     <field name="schedule_date_date" />
+                    <field name="schedule_date_after_due_date" />
                     <field name="today_date" />
                     <field name="equipment_id" />
                     <field name="user_id" />
