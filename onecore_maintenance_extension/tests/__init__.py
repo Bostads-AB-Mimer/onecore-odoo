@@ -27,5 +27,6 @@ from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
 from .models import test_maintenance_floor_plan
 from .models import test_maintenance_pest_control
+from .models import test_schedule_date_warning
 from .utils import test_component_utils
 from .utils import test_helpers
