@@ -289,3 +289,71 @@ class TestRemoveActionPermissions(TransactionCase):
             request.with_user(plain).action_remove_rental_object()
 
         self.assertTrue(request.rental_property_id)
+
+
+@tagged("onecore")
+class TestRemoveIsLogged(TransactionCase):
+    """MIM-1840 requires the removals to show up in the ärende's log.
+
+    Nothing here posts a note explicitly — the removals go through a plain
+    ``write``, so the existing FieldChangeTracker picks them up. These tests lock
+    that in: passing ``skip_change_tracking`` (as the backfill wizard does) would
+    silently drop the audit trail for a destructive action.
+
+    The request has to be re-browsed before acting on it: ``create`` returns a
+    recordset carrying ``creating_records=True`` (maintenance.py, so that the
+    field-by-field notes are suppressed while a request is being built), and that
+    context sticks to the recordset. Writing through it would skip tracking and
+    make these tests pass vacuously. The form loads the record fresh over RPC, so
+    re-browsing is what actually matches the UI.
+    """
+
+    def _request_and_user(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        rp = create_rental_property(self.env, maintenance_request_id=request.id)
+        lease = create_lease(self.env, maintenance_request_id=request.id)
+        tenant = create_tenant(self.env, maintenance_request_id=request.id)
+        request.write(
+            {
+                "rental_property_id": rp.id,
+                "lease_id": lease.id,
+                "tenant_id": tenant.id,
+            }
+        )
+        fresh = self.env["maintenance.request"].browse(request.id)
+        return fresh, create_internal_user(self.env)
+
+    def _message_ids(self, request):
+        """Read the chatter straight from mail.message.
+
+        The note is posted in the acting user's environment, so ``request``'s own
+        ``message_ids`` cache here is stale — searching sidesteps that.
+        """
+        return self.env["mail.message"].search(
+            [("model", "=", "maintenance.request"), ("res_id", "=", request.id)]
+        )
+
+    def _bodies_after(self, request, before_ids):
+        new_messages = self._message_ids(request).filtered(
+            lambda m: m.id not in before_ids
+        )
+        return " ".join(new_messages.mapped("body"))
+
+    def test_removing_rental_object_is_logged(self):
+        request, manager = self._request_and_user()
+        before = set(self._message_ids(request).ids)
+
+        request.with_user(manager).action_remove_rental_object()
+
+        self.assertIn("Hyresobjekt", self._bodies_after(request, before))
+
+    def test_removing_tenant_logs_tenant_lease_and_vacated_flag(self):
+        request, manager = self._request_and_user()
+        before = set(self._message_ids(request).ids)
+
+        request.with_user(manager).action_remove_tenant()
+
+        body = self._bodies_after(request, before)
+        self.assertIn("Hyresgäst", body)
+        self.assertIn("Lease", body)
+        self.assertIn("Manuellt tomställd", body)
