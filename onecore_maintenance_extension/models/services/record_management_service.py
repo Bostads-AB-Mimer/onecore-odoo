@@ -5,6 +5,7 @@ import datetime
 import logging
 from odoo import fields
 from ..utils.helpers import get_tenant_name, get_main_phone_number
+from .direct_lookup_service import all_routes
 from ....onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
@@ -320,6 +321,38 @@ class RecordManagementService:
             _logger.warning(
                 "Could not delete %s record %s: %s", record._name, record.id, err
             )
+
+    def remove_rental_object(self, request):
+        """Remove the rental object from ``request`` (MIM-1840).
+
+        Object-only: whichever of the rentalId-bearing object fields is set is
+        cleared and its permanent record deleted. The contract and tenant are
+        deliberately left alone — the Objektsinformation trashcan owns only its
+        own section, even though that can leave a contract with no object.
+        """
+        for route in all_routes():
+            field = route["record_field"]
+            old_record = request[field]
+            if not old_record:
+                continue
+            request.write({field: False})
+            self.unlink_record(old_record)
+
+    def remove_tenant(self, request):
+        """Vacate ``request`` — remove both tenant and contract (MIM-1840).
+
+        Tenant and contract are one unit: the Hyresgäst section header sits above
+        both fields, so its trashcan empties the whole section. The rental object
+        is left untouched.
+
+        ``manually_vacated`` is what makes the removal stick: without it the
+        empty-tenant auto-refetch in :meth:`handle_empty_tenant_logic` would
+        re-populate the tenant we just deleted.
+        """
+        old_lease, old_tenant = request.lease_id, request.tenant_id
+        request.write({"lease_id": False, "tenant_id": False, "manually_vacated": True})
+        self.unlink_record(old_lease)
+        self.unlink_record(old_tenant)
 
     def _create_missing_lease_and_tenant(self, record):
         """Create missing lease and tenant data from API."""

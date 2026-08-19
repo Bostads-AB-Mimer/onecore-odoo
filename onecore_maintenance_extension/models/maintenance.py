@@ -6,7 +6,7 @@ import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
@@ -1498,6 +1498,36 @@ class OneCoreMaintenanceRequest(
         )
         # The wizard owns its dialog title/window (it re-renders itself on search).
         return wizard.action_window()
+
+    # MIM-1840: remove the rental object / the tenant + contract.
+    def action_remove_rental_object(self):
+        self.ensure_one()
+        self._ensure_can_edit_object_or_tenant()
+        RecordManagementService(self.env).remove_rental_object(self)
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def action_remove_tenant(self):
+        self.ensure_one()
+        self._ensure_can_edit_object_or_tenant()
+        RecordManagementService(self.env).remove_tenant(self)
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def _ensure_can_edit_object_or_tenant(self):
+        """Guard the destructive removals server-side.
+
+        The trash buttons already carry the same ``groups`` and
+        ``user_is_external_contractor`` gating as the MIM-1841 pens, but that only
+        *hides* the control — a crafted RPC call reaches the method anyway, and
+        the method unlinks permanent records. So the rule is enforced here too,
+        in one place, rather than trusted to the view.
+        """
+        if (
+            not self.env.user.has_group("maintenance.group_equipment_manager")
+            or ExternalContractorService(self.env).is_external_contractor()
+        ):
+            raise AccessError(
+                _("Du har inte behörighet att ändra hyresobjekt eller hyresgäst.")
+            )
 
     # ============================================================================
     # DISTRIKT / RESURSGRUPP
