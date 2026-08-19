@@ -276,28 +276,9 @@ class MaintenanceBackfillWizard(models.TransientModel):
         )
 
     def _unlink_replaced(self, old_record, new_record):
-        """Delete a permanent record that was just replaced by ``new_record``.
-
-        Best-effort: if the delete is blocked (e.g. a reference elsewhere), log and
-        leave the old record unreferenced rather than failing the confirm.
-
-        A blocked delete is a foreign-key violation, which aborts the transaction,
-        so the savepoint is what keeps "best-effort" honest: without it the caught
-        exception would still take down the remaining unlinks and the chatter note,
-        rolling back the attach the user just confirmed.
-        """
-        if not old_record or old_record == new_record or not old_record.exists():
-            return
-        try:
-            with self.env.cr.savepoint():
-                old_record.unlink()
-        except Exception as err:
-            _logger.warning(
-                "Could not delete replaced %s record %s: %s",
-                old_record._name,
-                old_record.id,
-                err,
-            )
+        """Delete a permanent record that was just replaced by ``new_record``."""
+        if old_record and old_record != new_record:
+            RecordManagementService(self.env).unlink_record(old_record)
 
     def action_window(self):
         """The act_window that renders this wizard dialog — used both to open it
