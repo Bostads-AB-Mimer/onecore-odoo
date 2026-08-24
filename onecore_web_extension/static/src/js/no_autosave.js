@@ -88,7 +88,19 @@ patch(FormController.prototype, {
           }
           window.location.href = result.url;
         } else {
-          this.env.services.action.doAction(result);
+          await this.env.services.action.doAction(result);
+          // Stock Odoo reloads the record after a button action (via
+          // doActionButton -> onClose -> reload). We bypass that pipeline
+          // above, so honour the same contract explicitly: an action that
+          // chains act_window_close is asking for the form to show what the
+          // method just wrote. Without this the view keeps stale values until
+          // the user presses F5 (MIM-1967, "Tilldela resursgrupp").
+          // Only opted-in actions reload — dialogs and plain notifications
+          // must not, so unsaved edits survive them, which is the point of
+          // this patch.
+          if (result.params?.next?.type === "ir.actions.act_window_close") {
+            await this.model.load();
+          }
         }
       }
 

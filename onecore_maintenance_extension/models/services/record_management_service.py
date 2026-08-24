@@ -60,6 +60,8 @@ class RecordManagementService:
                 "building_type_name": building_option_record.building_type_name,
                 "construction_year": building_option_record.construction_year,
                 "renovation_year": building_option_record.renovation_year,
+                "property_code": building_option_record.property_code,
+                "property_name": building_option_record.property_name,
                 "maintenance_request_id": maintenance_request.id,
             }
         )

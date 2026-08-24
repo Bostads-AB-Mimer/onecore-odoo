@@ -27,5 +27,8 @@ from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
 from .models import test_maintenance_floor_plan
 from .models import test_maintenance_pest_control
+from .models import test_maintenance_district
+from .models.services import test_management_area_service
+from . import test_stage_hook
 from .utils import test_component_utils
 from .utils import test_helpers

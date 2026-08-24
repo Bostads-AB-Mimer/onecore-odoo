@@ -160,6 +160,13 @@ class FieldChangeTracker:
         "loan_product_details",  # Custom logging in write()
         "master_key_changed_at",
         "master_key_ack_at",
+        # OneCore management-area snapshot (ManagementAreaService) — written
+        # lazily from the button/backfill; not a user change worth a note
+        "kvv_area_code",
+        "kvv_area_name",
+        "cost_center_code",
+        "cost_center_name",
+        "management_area_lookup_at",
     }
 
     def __init__(self, env):
