@@ -3,7 +3,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore Maintenance Extension",
-    "version": "19.0.1.0.3",
+    "version": "19.0.1.0.4",
     "sequence": 100,
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
@@ -21,6 +21,7 @@
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",
         "data/mail_message_subtype.xml",
+        "data/ir_cron.xml",
     ],
     "assets": {
         "web.assets_backend": [

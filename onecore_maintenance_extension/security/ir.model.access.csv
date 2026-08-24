@@ -18,6 +18,8 @@ access_maintenance_parking_space,maintenance.team.user,model_maintenance_parking
 access_maintenance_facility,maintenance.team.user,model_maintenance_facility,base.group_user,1,1,1,1
 access_maintenance_lease,maintenance.team.user,model_maintenance_lease,base.group_user,1,1,1,1
 access_maintenance_request_category,maintenance.team.user,model_maintenance_request_category,base.group_user,1,1,1,1
+access_maintenance_kvv_area,maintenance.kvv.area.user,model_maintenance_kvv_area,base.group_user,1,0,0,0
+access_maintenance_cost_center,maintenance.cost.center.user,model_maintenance_cost_center,base.group_user,1,0,0,0
 access_maintenance_request_equipment_manager,maintenance.group_equipment_manager,model_maintenance_request,maintenance.group_equipment_manager,1,1,1,1
 access_ir_config_parameter_system_equipment_manager,maintenance.group_equipment_manager,base.model_ir_config_parameter,maintenance.group_equipment_manager,1,0,0,0
 access_maintenance_component_wizard_equipment_manager,maintenance.component.wizard.equipment.manager,model_maintenance_component_wizard,maintenance.group_equipment_manager,1,1,1,1

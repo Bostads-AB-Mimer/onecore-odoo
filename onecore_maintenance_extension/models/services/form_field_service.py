@@ -29,6 +29,8 @@ class FormFieldService:
         record.building_type_name = record.building_option_id.building_type_name
         record.building_construction_year = record.building_option_id.construction_year
         record.building_renovation_year = record.building_option_id.renovation_year
+        record.building_property_code = record.building_option_id.property_code
+        record.building_property_name = record.building_option_id.property_name
 
     def update_staircase_fields(self, record):
         """Update staircase-related fields."""

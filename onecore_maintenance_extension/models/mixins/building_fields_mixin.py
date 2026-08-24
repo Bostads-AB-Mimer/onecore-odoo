@@ -12,3 +12,5 @@ class BuildingFieldsMixin(models.AbstractModel):
     building_type_name = fields.Char("Byggnadstyp", related="building_id.building_type_name", depends=["building_id"])
     building_construction_year = fields.Char("Byggår", related="building_id.construction_year", depends=["building_id"])
     building_renovation_year = fields.Char("Renoveringsår", related="building_id.renovation_year", depends=["building_id"])
+    building_property_code = fields.Char("Byggnadens fastighetsnummer", related="building_id.property_code", depends=["building_id"])
+    building_property_name = fields.Char("Byggnadens fastighet", related="building_id.property_name", depends=["building_id"])
