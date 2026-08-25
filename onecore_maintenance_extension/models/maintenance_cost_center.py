@@ -14,9 +14,13 @@ class OnecoreMaintenanceCostCenter(models.Model):
     _name = "maintenance.cost.center"
     _description = "Kostnadsställe/distrikt (OneCore)"
     _order = "code"
-    _sql_constraints = [
-        ("code_uniq", "unique (code)", "Kostnadsställets kod måste vara unik."),
-    ]
+
+    # models.Constraint, not _sql_constraints: Odoo 19 ignores the latter with
+    # only a warning, so the unique index would never be created.
+    _code_uniq = models.Constraint(
+        "unique (code)",
+        "Kostnadsställets kod måste vara unik.",
+    )
 
     code = fields.Char("Kod", required=True, index=True)
     name = fields.Char("Namn")

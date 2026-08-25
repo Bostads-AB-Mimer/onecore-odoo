@@ -13,6 +13,8 @@ patch(FormController.prototype, {
    */
   beforeUnload() {
     // For maintenance requests, show native browser warning if there are changes
+    // The dirty flag rather than isDirty(): this hook is synchronous, the
+    // browser will not wait for a promise.
     if (
       this.model.root.resModel === "maintenance.request" &&
       this.model.root.dirty
@@ -41,7 +43,7 @@ patch(FormController.prototype, {
   async beforeLeave() {
     if (
       this.model.root.resModel === "maintenance.request" &&
-      this.model.root.dirty
+      (await this.model.root.isDirty())
     ) {
       const dialogService = this.env.services.dialog;
       if (dialogService) {
@@ -99,11 +101,14 @@ patch(FormController.prototype, {
           // Never when the form is dirty: reloading would drop the user's
           // unsaved edits, and not saving them is the whole point of this
           // patch. A stale field is recoverable, typed-in work is not.
+          // isDirty(), not the dirty flag: pending changes may not have been
+          // notified yet (record.js warns about exactly this), so a debounced
+          // field would read as clean and get discarded.
           if (
             result.params?.next?.type === "ir.actions.act_window_close" &&
-            !this.model.root.dirty
+            !(await this.model.root.isDirty())
           ) {
-            await this.model.load();
+            await this.model.root.load();
           }
         }
       }
@@ -122,7 +127,7 @@ patch(FormController.prototype, {
     // For maintenance requests with unsaved changes, show confirmation dialog
     if (
       this.model.root.resModel === "maintenance.request" &&
-      this.model.root.dirty
+      (await this.model.root.isDirty())
     ) {
       const dialogService = this.env.services.dialog;
 

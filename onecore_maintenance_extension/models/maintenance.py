@@ -323,13 +323,14 @@ class OneCoreMaintenanceRequest(
             )
             by_code = {area.code: area.responsible_name for area in areas}
         for record in self:
-            if not record.kvv_area_code:
+            if record.kvv_area_code not in by_code:
+                # No master row: the sync has not run yet (fresh install, or
+                # OneCore was down at 03:00). Hide the row rather than claim
+                # the area has no steward.
                 record.kvv_area_responsible = False
             else:
                 # "–" when the area is known but has no steward right now
-                record.kvv_area_responsible = (
-                    by_code.get(record.kvv_area_code) or "–"
-                )
+                record.kvv_area_responsible = by_code[record.kvv_area_code] or "–"
 
     # ============================================================================
     # COMPUTED FIELD METHODS

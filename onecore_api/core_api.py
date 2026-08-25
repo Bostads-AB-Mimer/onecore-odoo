@@ -359,6 +359,16 @@ class CoreApi:
             **kwargs,
         )
         if response.status_code == 404:
+            # Only the route's own 404 means "this property has no link". A 404
+            # from a core that does not know the route at all (this module
+            # deployed ahead of the OneCore release) must stay an error, or the
+            # caller stamps the request as looked-up and the backfill skips it
+            # forever. The handler answers JSON, Koa answers text/plain for an
+            # unrouted path — that is the whole difference.
+            try:
+                response.json()
+            except ValueError:
+                response.raise_for_status()
             return None
         response.raise_for_status()
         return response.json().get("content")

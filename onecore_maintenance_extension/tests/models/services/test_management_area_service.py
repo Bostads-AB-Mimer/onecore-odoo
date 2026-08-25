@@ -6,10 +6,15 @@ OneCore is always mocked (patch CoreApi); ``onecore_base_url`` is only set in
 tests that expect a call, because the service refuses to construct the client
 without it.
 """
+from datetime import timedelta
 from unittest.mock import patch
 
+from psycopg2 import IntegrityError
+
+from odoo import fields
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
+from odoo.tools import mute_logger
 
 from ...utils.test_utils import (
     create_building,
@@ -767,6 +772,37 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.assertEqual(self.service.backfill_batch(limit=500), 0)
         self.assertFalse(request.management_area_lookup_at)
 
+    def test_backfill_retries_a_stale_unresolved_stamp(self):
+        """A property linked in Förvaltningsområden after the request was
+        created — or anything stamped while OneCore did not know the endpoint —
+        must come back, not be excluded for good."""
+        request = self._apartment_request(estate_code="2201")
+        request.sudo().write(
+            {
+                "management_area_lookup_at": fields.Datetime.now()
+                - timedelta(days=mas_module.STALE_LOOKUP_DAYS + 1)
+            }
+        )
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_trees(MockApi)
+            self.assertEqual(self.service.backfill_batch(limit=500), 1)
+
+        self.assertEqual(request.cost_center_code, "61140")
+
+    def test_backfill_leaves_a_fresh_unresolved_stamp_alone(self):
+        request = self._apartment_request(estate_code="2201")
+        stamp = fields.Datetime.now() - timedelta(days=1)
+        request.sudo().write({"management_area_lookup_at": stamp})
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_trees(MockApi)
+            self.assertEqual(self.service.backfill_batch(limit=500), 0)
+
+        self.assertEqual(request.management_area_lookup_at, stamp)
+
     def test_backfill_stamps_nothing_when_onecore_fails(self):
         request = self._apartment_request(estate_code="2201")
         self._configure_onecore()
@@ -774,3 +810,24 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             MockApi.return_value.fetch_cost_centers.side_effect = Exception("boom")
             self.assertEqual(self.service.backfill_batch(limit=500), 0)
         self.assertFalse(request.management_area_lookup_at)
+
+
+@tagged("onecore")
+class TestManagementAreaMasterConstraints(TransactionCase):
+    """Both masters are read and written by code — a second row for the same
+    code would split them silently (two overlapping sync runs, a manual one on
+    top of the scheduled). The database has to refuse it."""
+
+    def _assert_code_is_unique(self, model, code):
+        self.env[model].create({"code": code})
+        self.env.flush_all()
+        with self.assertRaises(IntegrityError), mute_logger("odoo.sql_db"):
+            with self.cr.savepoint():
+                self.env[model].create({"code": code})
+                self.env.flush_all()
+
+    def test_kvv_area_code_is_unique(self):
+        self._assert_code_is_unique("maintenance.kvv.area", "61141")
+
+    def test_cost_center_code_is_unique(self):
+        self._assert_code_is_unique("maintenance.cost.center", "61140")

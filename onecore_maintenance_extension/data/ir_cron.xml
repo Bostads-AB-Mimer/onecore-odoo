@@ -19,6 +19,9 @@
             <field name="model_id" ref="maintenance.model_maintenance_request"/>
             <field name="state">code</field>
             <field name="code">model._cron_sync_kvv_areas()</field>
+            <!-- Pinned, like Odoo's own crons: user_id otherwise defaults to
+                 whoever ran the upgrade, and noupdate="1" freezes that. -->
+            <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
             <field name="nextcall" eval="(DateTime.now().replace(hour=3, minute=0, second=0) + timedelta(days=1))"/>
@@ -39,6 +42,7 @@
             <field name="model_id" ref="maintenance.model_maintenance_request"/>
             <field name="state">code</field>
             <field name="code">model._cron_backfill_management_area()</field>
+            <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">hours</field>
             <field name="active" eval="True"/>

@@ -136,9 +136,15 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         request.sudo().write({"kvv_area_code": "61141"})
         self.assertEqual(request.kvv_area_responsible, "Kim Kvartersvärd")
 
-        # Area known in OneCore terms but not in the master (or no steward) -> dash
-        request.sudo().write({"kvv_area_code": "99999"})
+        # Master row exists but nobody holds the area right now -> dash
+        self.env["maintenance.kvv.area"].sudo().create({"code": "61199"})
+        request.sudo().write({"kvv_area_code": "61199"})
         self.assertEqual(request.kvv_area_responsible, "–")
+
+        # No master row at all: the sync has not run yet, so we know nothing
+        # about the area. Hidden, not a dash claiming it has no steward.
+        request.sudo().write({"kvv_area_code": "99999"})
+        self.assertFalse(request.kvv_area_responsible)
 
         # No kvv area on the request -> hidden
         request.sudo().write({"kvv_area_code": False})

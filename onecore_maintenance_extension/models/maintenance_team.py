@@ -15,7 +15,10 @@ class MaintenanceTeam(models.Model):
         string="Kostnadsställe (distrikt)",
         index=True,
         help="Kod för kostnadsstället/distriktet i OneCore, t.ex. 61140 för "
-        "Distrikt Väst. Används av knappen 'Tilldela resursgrupp' på ärenden.",
+        "Distrikt Väst. Används av knappen 'Tilldela resursgrupp' på ärenden. "
+        "För de förvalda resursgrupperna underhålls kopplingen i "
+        "data/maintenance.team.csv och skrivs om därifrån vid varje "
+        "moduluppgradering — ändringar här överlever bara till nästa release.",
     )
 
     @api.depends('todo_request_ids')
