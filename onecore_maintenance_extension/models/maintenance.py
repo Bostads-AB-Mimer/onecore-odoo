@@ -6,6 +6,7 @@ import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
@@ -16,6 +17,7 @@ from .services import (
     FormFieldService,
     ExternalContractorService,
     MaintenanceStageManager,
+    ManagementAreaService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -200,6 +202,48 @@ class OneCoreMaintenanceRequest(
     form_state = fields.Selection(FORM_STATES, compute="_compute_form_state")
 
     # ============================================================================
+    # MANAGEMENT AREA — distrikt / kvartersvärdsområde (OneCore snapshot)
+    # ============================================================================
+    # Written on the write path only (create, "Tilldela resursgrupp", backfill
+    # cron) by ManagementAreaService — never computed on read (MIM-1869).
+    # kvv_area_name can be empty in OneCore and captions are not unique:
+    # group and pair on the codes, show the names as labels.
+    kvv_area_code = fields.Char("Kvartersvärdsområde (kod)", readonly=True)
+    kvv_area_name = fields.Char("Kvartersvärdsområde (namn)", readonly=True)
+    kvv_area_display = fields.Char(
+        "Kvartersvärdsområde", compute="_compute_kvv_area_display"
+    )
+    cost_center_code = fields.Char("Distrikt (kod)", readonly=True)
+    cost_center_name = fields.Char("Distrikt (namn)", readonly=True)
+    cost_center_display = fields.Char(
+        "Tillhör distrikt", compute="_compute_cost_center_display"
+    )
+    district_manager = fields.Char(
+        "Distriktschef",
+        compute="_compute_district_manager",
+        help="Kontakta i första hand ärendets resurs.",
+    )
+    # Deliberately NOT stored on the request: resolved from the local
+    # maintenance.kvv.area master (cron-synced), so vikarie/steward changes in
+    # OneCore show up everywhere without touching requests. DB-only compute.
+    kvv_area_responsible = fields.Char(
+        "Nuvarande kvartersvärd",
+        compute="_compute_kvv_area_responsible",
+        # Escalation ladder: resurs -> kvartersvärd -> distriktschef. The
+        # kvartersvärd is not the one handling the request, so say who is.
+        # Defined on the field, not in the view: it applies to all six
+        # Objektsinformation groups and the list column at once.
+        help="Kontakta i första hand ärendets resurs.",
+    )
+    management_area_lookup_at = fields.Datetime(
+        "Distrikt uppslaget",
+        readonly=True,
+        help="Senaste lyckade uppslag av distrikt/kvartersvärdsområde i OneCore "
+        "(även när fastigheten saknar koppling). Tomt = aldrig uppslaget eller "
+        "misslyckat — backfill-jobbet försöker igen.",
+    )
+
+    # ============================================================================
     # PERMISSION FIELDS
     # ============================================================================
 
@@ -220,6 +264,78 @@ class OneCoreMaintenanceRequest(
 
     def get_core_api(self):
         return core_api.CoreApi(self.env)
+
+    @api.depends("kvv_area_code", "kvv_area_name")
+    def _compute_kvv_area_display(self):
+        # MIM-1967: the code is what users work with ("61112"). OneCore's
+        # captions are not unique (61111/61112 share one) and grouping already
+        # runs on the code, so showing the code keeps display and grouping
+        # consistent. Name is kept as a fallback only.
+        for record in self:
+            record.kvv_area_display = (
+                record.kvv_area_code or record.kvv_area_name or False
+            )
+
+    @api.depends("cost_center_code", "cost_center_name")
+    def _compute_cost_center_display(self):
+        # Same format as property-tree's dropdown: "61110 - Distrikt Mitt"
+        for record in self:
+            if record.cost_center_code and record.cost_center_name:
+                record.cost_center_display = (
+                    f"{record.cost_center_code} - {record.cost_center_name}"
+                )
+            else:
+                record.cost_center_display = (
+                    record.cost_center_code or record.cost_center_name or False
+                )
+
+    @api.depends("cost_center_code")
+    def _compute_district_manager(self):
+        """Escalation step 3, from the nightly-synced cost-center master.
+
+        Hidden when OneCore has no chef for the district — an empty row would
+        be worse than none. Batched, like the kvartersvärd."""
+        codes = {record.cost_center_code for record in self if record.cost_center_code}
+        by_code = {}
+        if codes:
+            districts = self.env["maintenance.cost.center"].sudo().search(
+                [("code", "in", list(codes))]
+            )
+            by_code = {district.code: district for district in districts}
+        for record in self:
+            district = by_code.get(record.cost_center_code)
+            lead = district.lead_name if district else False
+            deputy = district.deputy_name if district else False
+            if lead and deputy and lead != deputy:
+                record.district_manager = f"{lead} (bitr. {deputy})"
+            elif lead:
+                # Mimer Student has no deputy, and test data can point both
+                # roles at the same person — show the name once either way
+                record.district_manager = lead
+            elif deputy:
+                record.district_manager = f"{deputy} (bitr.)"
+            else:
+                record.district_manager = False
+
+    @api.depends("kvv_area_code")
+    def _compute_kvv_area_responsible(self):
+        # One batched lookup in the local master — no HTTP on read (MIM-1869)
+        codes = {record.kvv_area_code for record in self if record.kvv_area_code}
+        by_code = {}
+        if codes:
+            areas = self.env["maintenance.kvv.area"].sudo().search(
+                [("code", "in", list(codes))]
+            )
+            by_code = {area.code: area.responsible_name for area in areas}
+        for record in self:
+            if record.kvv_area_code not in by_code:
+                # No master row: the sync has not run yet (fresh install, or
+                # OneCore was down at 03:00). Hide the row rather than claim
+                # the area has no steward.
+                record.kvv_area_responsible = False
+            else:
+                # "–" when the area is known but has no steward right now
+                record.kvv_area_responsible = by_code[record.kvv_area_code] or "–"
 
     # ============================================================================
     # COMPUTED FIELD METHODS
@@ -746,6 +862,24 @@ class OneCoreMaintenanceRequest(
     # ONCHANGE METHODS
     # ============================================================================
 
+    @api.onchange(
+        "rental_property_option_id",
+        "property_option_id",
+        "building_option_id",
+        "parking_space_option_id",
+        "facility_option_id",
+    )
+    def _onchange_management_area_preview(self):
+        """Show "Tillhör distrikt" already before the request is saved.
+
+        Runs on the search/selection path (which already calls OneCore), never
+        on read — see MIM-1869. Cached per property code, and create() re-reads
+        the same cache, so picking a search hit costs at most one extra call.
+        """
+        service = ManagementAreaService(self.env)
+        for record in self:
+            service.preview(record)
+
     @api.onchange("property_option_id")
     def _onchange_property_option_id(self):
         field_manager = FormFieldService(self.env)
@@ -926,6 +1060,7 @@ class OneCoreMaintenanceRequest(
 
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
+        management_area_service = ManagementAreaService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -940,6 +1075,10 @@ class OneCoreMaintenanceRequest(
                 request._add_followers()
 
             create_service.setup_team_assignment(request)
+            # Snapshot distrikt / kvartersvärdsområde from OneCore. Best
+            # effort (never blocks creation); skipped when the caller already
+            # stamped the fields (core does for mimer.nu requests).
+            management_area_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -1143,17 +1282,8 @@ class OneCoreMaintenanceRequest(
 
     def open_time_report(self):
         self.ensure_one()
-        estate_code = False
-
-        # Try different sources for estate/property code based on space type
-        if self.rental_property_id and self.rental_property_id.estate_code:
-            estate_code = self.rental_property_id.estate_code
-        elif self.parking_space_property_code:
-            estate_code = self.parking_space_property_code
-        elif self.facility_property_code:
-            estate_code = self.facility_property_code
-        elif self.property_code:
-            estate_code = self.property_code
+        # Property code of the request's location, whatever the space type
+        estate_code = ManagementAreaService.get_property_code(self)
 
         base_url = self.env["ir.config_parameter"].get_param(
             "time_report_base_url",
@@ -1262,3 +1392,68 @@ class OneCoreMaintenanceRequest(
             "target": "new",
             "context": {"dialog_size": "extra-large"},
         }
+
+    # ============================================================================
+    # DISTRIKT / RESURSGRUPP
+    # ============================================================================
+
+    def action_assign_district_team(self):
+        """"Tilldela resursgrupp": set the team paired with the request's
+        district (OneCore cost center), fetching the district first when the
+        request doesn't carry one yet (legacy requests)."""
+        self.ensure_one()
+        if ExternalContractorService(self.env).is_external_contractor():
+            # The view hides the button; this guards RPC callers.
+            raise UserError(
+                "Endast interna användare kan tilldela resursgrupp utifrån distrikt."
+            )
+        result = ManagementAreaService(self.env).assign_team(self)
+        if result["error"]:
+            return self._district_team_notification(result["error"], "warning")
+        team_name = result["team"].name
+        if not result["changed"]:
+            return self._district_team_notification(
+                f"Ärendet ligger redan på {team_name}.", "info"
+            )
+        return self._district_team_notification(
+            f"Resursgrupp satt till {team_name}.", "success"
+        )
+
+    @staticmethod
+    def _district_team_notification(message, notification_type):
+        # "next" is what makes the form show the new values without a manual
+        # reload: a button that returns nothing gets act_window_close from the
+        # web client, which triggers the record reload; a client action does
+        # not. display_notification returns params.next, and the action service
+        # runs it with the same onClose. Same pattern as hr_recruitment,
+        # l10n_in and mail in stock Odoo. Needed for every outcome — the
+        # warning case may have just fetched the district.
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Tilldela resursgrupp",
+                "message": message,
+                "type": notification_type,
+                "sticky": False,
+                "next": {"type": "ir.actions.act_window_close"},
+            },
+        }
+
+    @api.model
+    def _cron_sync_kvv_areas(self):
+        """Scheduled action (nightly): refresh the kvartersvärds- and
+        distriktschefsmasters so both follow OneCore without any HTTP on the
+        read path. One call for all 33 areas plus one tree per district."""
+        service = ManagementAreaService(self.env)
+        return service.sync_kvv_areas() + service.sync_cost_centers()
+
+    @api.model
+    def _cron_backfill_management_area(self, limit=5000):
+        """Scheduled action (hourly): snapshot distrikt/kvartersvärdsområde on
+        requests that lack one (created before the feature or while OneCore
+        was down). Display only — never changes Resursgrupp/Resurs.
+
+        The batch is large because the cost is the cost-center trees, fetched
+        once per run, not per request."""
+        return ManagementAreaService(self.env).backfill_batch(limit=limit)

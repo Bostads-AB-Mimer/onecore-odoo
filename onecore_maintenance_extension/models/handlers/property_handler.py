@@ -78,6 +78,8 @@ class PropertyHandler(BaseMaintenanceHandler):
                             else None
                         ),
                         "property_option_id": property_option.id,
+                        "property_code": property_data["code"],
+                        "property_name": property_data["designation"],
                     }
                 )
 

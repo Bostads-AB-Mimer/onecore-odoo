@@ -4,3 +4,4 @@ from . import test_external_contractor_service
 from . import test_component_ai_analysis_service
 from . import test_component_hierarchy_service
 from . import test_component_onecore_service
+from . import test_management_area_service

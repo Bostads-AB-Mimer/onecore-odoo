@@ -834,3 +834,59 @@ class TestParallelGetJson:
 
         assert result == ["serial:/x", "serial:/y"]
         assert mock_serial.call_count == 2
+
+
+class TestManagementAreaEndpoints:
+    """MIM-1967: property -> kvv area -> cost center (distrikt) lookups."""
+
+    @staticmethod
+    def _response(status_code, content=None):
+        response = Mock()
+        response.status_code = status_code
+        response.json.return_value = {"content": content}
+        return response
+
+    def test_fetch_kvv_area_for_property_returns_content(self, api):
+        payload = {"kvvArea": {"code": "61141"}, "costCenter": {"code": "61140"}}
+        with patch.object(api, "request", return_value=self._response(200, payload)) as mock_request:
+            result = api.fetch_kvv_area_for_property("22 01", timeout=5)
+
+        mock_request.assert_called_once_with(
+            "GET", "/properties/22%2001/kvv-area", timeout=5
+        )
+        assert result == payload
+
+    def test_fetch_kvv_area_for_property_404_is_none(self, api):
+        """Unlinked property: OneCore answers 404 -> no district, no error."""
+        response = self._response(404)
+        response.raise_for_status.side_effect = AssertionError("must not be called")
+        with patch.object(api, "request", return_value=response):
+            assert api.fetch_kvv_area_for_property("2201") is None
+
+    def test_fetch_kvv_area_for_property_404_without_json_raises(self, api):
+        """A core that does not know the route answers Koa's text/plain 404.
+        Treating that as "no district" would stamp the request as looked up and
+        exclude it from the backfill forever, so it has to stay an error."""
+        response = self._response(404)
+        response.json.side_effect = ValueError("no json")
+        response.raise_for_status.side_effect = requests.HTTPError("404")
+        with patch.object(api, "request", return_value=response):
+            with pytest.raises(requests.HTTPError):
+                api.fetch_kvv_area_for_property("2201")
+
+    def test_fetch_kvv_area_for_property_raises_on_other_errors(self, api):
+        response = self._response(500)
+        response.raise_for_status.side_effect = requests.HTTPError("500")
+        with patch.object(api, "request", return_value=response):
+            with pytest.raises(requests.HTTPError):
+                api.fetch_kvv_area_for_property("2201")
+
+    def test_fetch_cost_centers(self, api):
+        with patch.object(api, "_get_json", return_value=[{"id": 4}]) as mock_get_json:
+            assert api.fetch_cost_centers() == [{"id": 4}]
+        mock_get_json.assert_called_once_with("/cost-centers")
+
+    def test_fetch_cost_center_tree_quotes_id(self, api):
+        with patch.object(api, "_get_json", return_value={"kvvAreas": []}) as mock_get_json:
+            assert api.fetch_cost_center_tree("a/b") == {"kvvAreas": []}
+        mock_get_json.assert_called_once_with("/cost-centers/a%2Fb/tree")

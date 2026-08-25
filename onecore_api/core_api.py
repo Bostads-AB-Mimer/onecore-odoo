@@ -341,6 +341,58 @@ class CoreApi:
             f"/facilities/by-rental-id/{urllib.parse.quote(str(id), safe='')}"
         )
 
+    # ------------------------------------------------------------------
+    # Management areas: property -> kvv area (kvartersvärdsområde) ->
+    # cost center (distrikt). Owned by OneCore (onecore_* tables).
+    # ------------------------------------------------------------------
+    def fetch_kvv_area_for_property(self, property_code, **kwargs):
+        """Reverse lookup of a property's management area.
+
+        Returns the ``content`` dict
+        ``{"kvvArea": {id, code, name}, "costCenter": {id, code, name},
+        "responsible": {...} | None}`` or ``None`` when the property has no
+        management-area link (OneCore answers 404).
+        """
+        response = self.request(
+            "GET",
+            f"/properties/{urllib.parse.quote(str(property_code), safe='')}/kvv-area",
+            **kwargs,
+        )
+        if response.status_code == 404:
+            # Only the route's own 404 means "this property has no link". A 404
+            # from a core that does not know the route at all (this module
+            # deployed ahead of the OneCore release) must stay an error, or the
+            # caller stamps the request as looked-up and the backfill skips it
+            # forever. The handler answers JSON, Koa answers text/plain for an
+            # unrouted path — that is the whole difference.
+            try:
+                response.json()
+            except ValueError:
+                response.raise_for_status()
+            return None
+        response.raise_for_status()
+        return response.json().get("content")
+
+    def fetch_kvv_areas(self, **kwargs):
+        """All kvv areas: ``[{"code", "name", "costCenter": {...},
+        "responsible": {firstName, lastName, email, ...} | None}]``."""
+        return self._get_json("/kvv-areas", **kwargs)
+
+    def fetch_cost_centers(self, **kwargs):
+        """All cost centers (distrikt): ``[{"id", "code", "name", ...}]``."""
+        return self._get_json("/cost-centers", **kwargs)
+
+    def fetch_cost_center_tree(self, cost_center_id, **kwargs):
+        """Cost center tree: ``{code, name, kvvAreas: [{code, name, properties: [{code, ...}]}]}``.
+
+        Used by the backfill cron: a handful of tree calls give the full
+        property -> kvv area -> cost center map.
+        """
+        return self._get_json(
+            f"/cost-centers/{urllib.parse.quote(str(cost_center_id), safe='')}/tree",
+            **kwargs,
+        )
+
     def fetch_rooms(self, rental_id):
         """Fetch rooms for a residence by rental id."""
         return self._get_json(

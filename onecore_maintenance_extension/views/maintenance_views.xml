@@ -22,6 +22,9 @@
                         <field name="owner_user_id" />
                         <field name="stage_id" />
                         <field string="Resursgrupp" name="maintenance_team_id" />
+                        <field string="Distrikt" name="cost_center_name" />
+                        <field string="Distriktkod" name="cost_center_code" />
+                        <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
                         <filter string="Mina ärenden" name="my_maintenances"
                             domain="[('user_id', '=', uid)]" />
                         <separator />
@@ -95,6 +98,12 @@
                                 context="{'group_by' : 'stage_id'}" />
                             <filter string='Skapad av' name='created_by' domain="[]"
                                 context="{'group_by': 'owner_user_id'}" />
+                            <!-- Group on the stored OneCore codes/names; kvv-area captions
+                                 are not unique in OneCore, so the code is the grouping key -->
+                            <filter string='Distrikt' name='district' domain="[]"
+                                context="{'group_by': 'cost_center_name'}" />
+                            <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
+                                context="{'group_by': 'kvv_area_code'}" />
                         </group>
                     </search>
                 </xpath>
@@ -285,6 +294,16 @@
                                             string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <field name="building_code" invisible="1"
                                             string="Byggnadskod" />
                                         <field name="building" invisible="1" string="Byggnad" />
@@ -318,7 +337,16 @@
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
-
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'property'">
@@ -329,6 +357,16 @@
                                         <field name="property_designation"
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <!-- <field name="maintenance_unit_option_id"
                                             string="Underhållsenhet"
                                             domain="[('property_option_id', '=', property_option_id)]"
@@ -393,6 +431,21 @@
                                             string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <!-- Building-code searches have no rental property:
+                                             the property comes from the building itself -->
+                                        <field name="building_property_name"
+                                            invisible="estate or not building_property_name"
+                                            string="Tillhör fastighet" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'parking-space'">
@@ -412,6 +465,16 @@
                                             invisible="not parking_space_number" />
                                         <field name="parking_space_property_name" string="Fastighet"
                                             invisible="not parking_space_property_name" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <field name="parking_space_address" string="Adress"
                                             invisible="not parking_space_address" />
                                         <field name="parking_space_postal_code" string="Postnummer"
@@ -455,6 +518,16 @@
                                         <field
                                             name="facility_property_code" string="Fastighetsnummer"
                                             invisible="not facility_property_code" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                 </div>
                             </div>
@@ -623,8 +696,22 @@
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
+                                        <!-- "Tilldela resursgrupp": pairs the request's
+                                             distrikt (cost center) with the team carrying the
+                                             same cost_center_code; fetches the distrikt from
+                                             OneCore first on legacy requests -->
+                                        <div class="d-flex align-items-center">
+                                            <label for="maintenance_team_id" string="Resursgrupp" />
+                                            <button name="action_assign_district_team" type="object"
+                                                class="btn btn-link btn-sm p-0 ms-2"
+                                                string="Tilldela resursgrupp"
+                                                icon="fa-magic"
+                                                title="Sätt resursgrupp utifrån ärendets distrikt"
+                                                help="Sätter resursgruppen som är kopplad till ärendets distrikt (kostnadsställe). Distriktet hämtas från OneCore om det saknas."
+                                                invisible="user_is_external_contractor or not id" />
+                                        </div>
                                         <field
-                                            name="maintenance_team_id"
+                                            name="maintenance_team_id" nolabel="1"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
                                         <field name="user_id"
@@ -827,6 +914,9 @@
                         <field name="address" optional="show" />
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
+                        <field name="cost_center_display" string="Distrikt" optional="show" />
+                        <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
+                        <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
                         <field name="start_date" optional="hide" />
                         <field name="schedule_date" options="{'show_time': false}" optional="hide" />
                         <field name="due_date" optional="show" />

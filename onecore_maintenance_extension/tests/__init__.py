@@ -32,6 +32,9 @@ from .models import test_maintenance_activity_suppression
 from .models import test_dialog_indicator
 from .models import test_master_key_change_indicator
 from .models import test_schedule_date_warning
+from .models import test_maintenance_district
+from .models.services import test_management_area_service
+from . import test_stage_hook
 from .utils import test_component_utils
 from .utils import test_helpers
 from . import test_registration

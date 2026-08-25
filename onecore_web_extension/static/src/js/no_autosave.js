@@ -13,6 +13,8 @@ patch(FormController.prototype, {
    */
   beforeUnload() {
     // For maintenance requests, show native browser warning if there are changes
+    // The dirty flag rather than isDirty(): this hook is synchronous, the
+    // browser will not wait for a promise.
     if (
       this.model.root.resModel === "maintenance.request" &&
       this.model.root.dirty
@@ -41,7 +43,7 @@ patch(FormController.prototype, {
   async beforeLeave() {
     if (
       this.model.root.resModel === "maintenance.request" &&
-      this.model.root.dirty
+      (await this.model.root.isDirty())
     ) {
       const dialogService = this.env.services.dialog;
       if (dialogService) {
@@ -88,7 +90,26 @@ patch(FormController.prototype, {
           }
           window.location.href = result.url;
         } else {
-          this.env.services.action.doAction(result);
+          await this.env.services.action.doAction(result);
+          // Stock Odoo reloads the record after a button action (via
+          // doActionButton -> onClose -> reload). We bypass that pipeline
+          // above, so honour the same contract explicitly: an action that
+          // chains act_window_close is asking for the form to show what the
+          // method just wrote. Without this the view keeps stale values until
+          // the user presses F5 (MIM-1967, "Tilldela resursgrupp").
+          //
+          // Never when the form is dirty: reloading would drop the user's
+          // unsaved edits, and not saving them is the whole point of this
+          // patch. A stale field is recoverable, typed-in work is not.
+          // isDirty(), not the dirty flag: pending changes may not have been
+          // notified yet (record.js warns about exactly this), so a debounced
+          // field would read as clean and get discarded.
+          if (
+            result.params?.next?.type === "ir.actions.act_window_close" &&
+            !(await this.model.root.isDirty())
+          ) {
+            await this.model.root.load();
+          }
         }
       }
 
@@ -106,7 +127,7 @@ patch(FormController.prototype, {
     // For maintenance requests with unsaved changes, show confirmation dialog
     if (
       this.model.root.resModel === "maintenance.request" &&
-      this.model.root.dirty
+      (await this.model.root.isDirty())
     ) {
       const dialogService = this.env.services.dialog;
 

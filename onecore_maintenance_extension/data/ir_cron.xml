@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!--
+        Two jobs on purpose: they have completely different tempos.
+
+        noupdate="1" so ops can retune the intervals without an upgrade
+        overwriting them.
+        -->
+
+        <!--
+        Kvartersvärdsområden (33 rows) with responsible + distriktschef.
+        One GET /kvv-areas per run. Stewards change a few times a month, so
+        nightly is plenty - run it manually after reassigning someone in
+        Förvaltningsområden if you don't want to wait.
+        -->
+        <record id="ir_cron_sync_kvv_areas" model="ir.cron">
+            <field name="name">Ärenden: synka kvartersvärdsområden från OneCore</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_kvv_areas()</field>
+            <!-- Pinned, like Odoo's own crons: user_id otherwise defaults to
+                 whoever ran the upgrade, and noupdate="1" freezes that. -->
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now().replace(hour=3, minute=0, second=0) + timedelta(days=1))"/>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!--
+        Backfill of distrikt/kvartersvärdsområde on requests that lack it:
+        everything created before this feature, plus anything created while
+        OneCore was down. Writes ONLY the management-area fields - never
+        Resursgrupp/Resurs. Cost per run is the cost-center trees (a handful
+        of calls) regardless of batch size, so the batch is large and the
+        interval long. Once the backlog is done this is one query that
+        returns nothing.
+        -->
+        <record id="ir_cron_backfill_management_area" model="ir.cron">
+            <field name="name">Ärenden: hämta distrikt/kvartersvärdsområde från OneCore</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_backfill_management_area()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>
