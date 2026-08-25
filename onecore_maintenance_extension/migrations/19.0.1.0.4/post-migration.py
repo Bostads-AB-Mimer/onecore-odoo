@@ -10,17 +10,19 @@ deliberately ignores `is_read`. Without a baseline, every request that ever
 received a Mina-sidor inbox notification from odoo@mimer.nu would light up as
 unread again — including notifications read long before this release.
 
-The cutover:
+The cutover preserves the old read state, and both audiences get the exact same
+treatment of in-flight cases: a request keeps NULL acks (so it stays flagged for
+Mimer *and* for contractors) when any of its odoo@mimer.nu inbox notifications
+is still unread; otherwise both acks are set to the date of the latest such
+message, which reads as "everything up to here is acknowledged".
 
-* **Mimer side** — preserve the old read state. A request keeps a NULL ack (so
-  it stays flagged) when any of its odoo@mimer.nu inbox notifications is still
-  unread for a *non-contractor* recipient; that mirrors the old "any unread
-  notification raises the badge" rule. Otherwise the ack is set to the date of
-  the latest such message, which reads as "everything up to here is
-  acknowledged".
-* **Contractor side** — baseline every request as acknowledged. Contractors
-  never saw this badge before MIM-1844, so they start from a clean slate and
-  only see tenant communication that arrives after the release.
+The unread test only looks at *non-contractor* recipients. That is not an
+audience split — it is the only read state that ever existed. Contractors never
+saw this badge before MIM-1844, so their own inbox rows say nothing about
+whether the tenant's message is still outstanding on the case; Mimer's read
+state answers that for both sides. Ignoring contractor rows also keeps the old
+"any unread notification raises the badge" rule intact for Mimer, exactly as it
+behaved before the release.
 
 Requests with no odoo@mimer.nu notification history are left alone: both acks
 stay NULL, which the compute already reads as "nothing to acknowledge".
@@ -43,7 +45,7 @@ def migrate(cr, version):
     env.registry.clear_cache()
     _logger.info(
         "MIM-1844 migration complete: baselined 'Ny kundinfo' acknowledgements on "
-        "%d request(s); %d kept flagged for Mimer.",
+        "%d request(s); %d kept flagged for both audiences.",
         baselined,
         still_unread,
     )
@@ -52,7 +54,10 @@ def migrate(cr, version):
 def _baseline_new_customer_info_acks(env):
     """Seed the two "Ny kundinfo" ack columns from the pre-MIM-1844 read state.
 
-    Returns ``(rows_updated, rows_left_unread_for_mimer)``.
+    Both columns get the same verdict, so an in-flight case looks identical to
+    Mimer handlers and to external contractors.
+
+    Returns ``(rows_updated, rows_left_flagged)``.
     """
     author_partner_ids = _mimer_integration_partner_ids(env)
     if not author_partner_ids:
@@ -72,7 +77,7 @@ def _baseline_new_customer_info_acks(env):
     # One aggregate per request: the latest Mina-sidor message, and whether any
     # of its inbox notifications is still unread for a non-contractor recipient.
     # FILTER yields NULL when a request has no internal recipient at all, which
-    # COALESCE reads as "nothing outstanding for Mimer".
+    # COALESCE reads as "nothing outstanding".
     env.cr.execute(
         """
         SELECT mm.res_id,
@@ -104,8 +109,10 @@ def _baseline_new_customer_info_acks(env):
     env.cr.execute(
         """
         UPDATE maintenance_request mr
-        SET new_customer_info_external_ack_at = v.latest,
-            new_customer_info_ack_at = CASE
+        SET new_customer_info_ack_at = CASE
+                WHEN v.internal_unread THEN NULL ELSE v.latest
+            END,
+            new_customer_info_external_ack_at = CASE
                 WHEN v.internal_unread THEN NULL ELSE v.latest
             END
         FROM (
@@ -137,8 +144,11 @@ def _mimer_integration_partner_ids(env):
 
 
 def _external_contractor_partner_ids(env):
-    """Partner ids of every external contractor, so their unread notifications
-    never keep a request flagged for Mimer."""
+    """Partner ids of every external contractor.
+
+    Their inbox rows are excluded from the unread test: contractors had no
+    "Ny kundinfo" badge before MIM-1844, so their read state carries no signal
+    about whether the tenant's message is still outstanding."""
     group = env.ref(
         "onecore_maintenance_extension.group_external_contractor",
         raise_if_not_found=False,

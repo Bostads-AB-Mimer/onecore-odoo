@@ -306,8 +306,8 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
     The two ack columns are new, and the compute deliberately ignores
     mail.notification.is_read — so without a baseline every request with any
     historical Mina-sidor notification would resurface as unread. The
-    post-migration seeds Mimer's ack from the old read state and gives
-    contractors, who never had this badge, a clean slate.
+    post-migration seeds both acks from the old read state, giving Mimer and
+    external contractors the exact same view of in-flight cases.
     """
 
     def setUp(self):
@@ -340,6 +340,7 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
         return self.env["mail.notification"].sudo().search(domain)
 
     def _baseline(self):
+        """Returns (rows_updated, rows_left_flagged)."""
         return self.migration._baseline_new_customer_info_acks(self.env)
 
     def _unread_for(self, request, user):
@@ -352,35 +353,38 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
         message = _post_customer_info(request, self.mimer_user, self.internal_user)
         self._notifications(request).write({"is_read": True})
 
-        baselined, still_unread = self._baseline()
+        baselined, still_flagged = self._baseline()
 
         self.assertEqual(baselined, 1)
-        self.assertEqual(still_unread, 0)
+        self.assertEqual(still_flagged, 0)
         self.assertEqual(request.new_customer_info_ack_at, message.date)
         self.assertEqual(request.new_customer_info_external_ack_at, message.date)
         self.assertFalse(self._unread_for(request, self.internal_user))
         self.assertFalse(self._unread_for(request, self.external_user))
 
-    def test_unread_history_stays_flagged_for_mimer_only(self):
+    def test_unread_history_stays_flagged_for_both_audiences(self):
+        # In-flight cases look identical to both sides: an outstanding tenant
+        # message keeps the badge up for Mimer and for the contractor.
         request = self._request()
-        message = _post_customer_info(request, self.mimer_user, self.internal_user)
+        _post_customer_info(request, self.mimer_user, self.internal_user)
         self._notifications(request).write({"is_read": True})
         self._notifications(request, self.internal_user.partner_id).write(
             {"is_read": False}
         )
 
-        baselined, still_unread = self._baseline()
+        baselined, still_flagged = self._baseline()
 
         self.assertEqual(baselined, 1)
-        self.assertEqual(still_unread, 1)
+        self.assertEqual(still_flagged, 1)
         self.assertFalse(request.new_customer_info_ack_at)
-        self.assertEqual(request.new_customer_info_external_ack_at, message.date)
+        self.assertFalse(request.new_customer_info_external_ack_at)
         self.assertTrue(self._unread_for(request, self.internal_user))
-        self.assertFalse(self._unread_for(request, self.external_user))
+        self.assertTrue(self._unread_for(request, self.external_user))
 
-    def test_contractor_unread_does_not_keep_it_flagged_for_mimer(self):
-        # Before MIM-1844 the badge was per-user and contractors never had it,
-        # so a contractor's unread inbox row says nothing about Mimer's state.
+    def test_contractor_unread_alone_does_not_keep_it_flagged(self):
+        # Contractors had no "Ny kundinfo" badge before MIM-1844, so their own
+        # inbox rows carry no signal — only Mimer's read state decides, for
+        # both sides.
         request = self._request()
         message = _post_customer_info(request, self.mimer_user, self.external_user)
         self._notifications(request).write({"is_read": True})
@@ -391,12 +395,14 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
         self._baseline()
 
         self.assertEqual(request.new_customer_info_ack_at, message.date)
+        self.assertEqual(request.new_customer_info_external_ack_at, message.date)
         self.assertFalse(self._unread_for(request, self.internal_user))
+        self.assertFalse(self._unread_for(request, self.external_user))
 
     def test_request_without_customer_info_history_is_left_alone(self):
         request = self._request()
 
-        baselined, _still_unread = self._baseline()
+        baselined, _still_flagged = self._baseline()
 
         self.assertEqual(baselined, 0)
         self.assertFalse(request.new_customer_info_ack_at)
@@ -414,6 +420,7 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
         self._baseline()
 
         self.assertEqual(request.new_customer_info_ack_at, latest.date)
+        self.assertEqual(request.new_customer_info_external_ack_at, latest.date)
 
     def test_rerun_does_not_overwrite_a_post_upgrade_ack(self):
         request = self._request()
@@ -429,7 +436,7 @@ class TestNewCustomerInfoAckBaseline(TransactionCase):
             }
         )
 
-        baselined, _still_unread = self._baseline()
+        baselined, _still_flagged = self._baseline()
 
         self.assertEqual(baselined, 0)
         self.assertEqual(request.new_customer_info_ack_at, acked_after_upgrade)
