@@ -11,6 +11,7 @@ from .models import test_maintenance_rental_property
 from .models import test_maintenance_request_category
 from .models import test_maintenance_team
 from .models import test_maintenance_tenant
+from .models import test_maintenance_staircase
 from .models.handlers import test_base_handler
 from .models.handlers import test_handler_factory
 from .models.services import test_maintenance_workflow_service
@@ -27,8 +28,13 @@ from .models import test_maintenance_component_line
 from .models import test_mim_1768_followers
 from .models import test_maintenance_floor_plan
 from .models import test_maintenance_pest_control
+from .models import test_maintenance_activity_suppression
+from .models import test_dialog_indicator
+from .models import test_master_key_change_indicator
+from .models import test_schedule_date_warning
 from .models import test_maintenance_district
 from .models.services import test_management_area_service
 from . import test_stage_hook
 from .utils import test_component_utils
 from .utils import test_helpers
+from . import test_registration

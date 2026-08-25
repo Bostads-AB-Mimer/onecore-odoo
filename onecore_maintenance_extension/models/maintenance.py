@@ -149,6 +149,11 @@ class OneCoreMaintenanceRequest(
         compute="_compute_schedule_date_date",
         store=False,
     )
+    schedule_date_after_due_date = fields.Boolean(
+        string="Planerat utförandedatum efter förfallodatum",
+        compute="_compute_schedule_date_after_due_date",
+        store=False,
+    )
     new_mimer_notification = fields.Boolean(
         string="New Mimer Message",
         compute="_compute_new_mimer_notification",
@@ -690,6 +695,18 @@ class OneCoreMaintenanceRequest(
                 ).date()
             else:
                 record.schedule_date_date = False
+
+    @api.depends("schedule_date_date", "due_date")
+    def _compute_schedule_date_after_due_date(self):
+        # Compares calendar dates, not timestamps: schedule_date is a Datetime
+        # and due_date a Date, so a time of day on the due date itself must not
+        # count as a breach. schedule_date_date already resolves the timezone.
+        for record in self:
+            record.schedule_date_after_due_date = bool(
+                record.schedule_date_date
+                and record.due_date
+                and record.schedule_date_date > record.due_date
+            )
 
     def _compute_restricted_external(self):
         external_contractor_service = ExternalContractorService(self.env)
