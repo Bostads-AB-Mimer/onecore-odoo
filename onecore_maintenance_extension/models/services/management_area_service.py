@@ -12,6 +12,7 @@ Write path only: create(), the button and the backfill cron. Never on read
 
 import logging
 import time
+from datetime import timedelta
 
 from odoo import fields
 
@@ -28,6 +29,13 @@ LOOKUP_TIMEOUT = 5
 # staging answer to a production request.
 DISTRICT_CACHE_TTL = 300  # seconds
 _district_cache = {}  # (dbname, property_code) -> (expires_at_monotonic, values | None)
+
+# A request that came back without a district is retried after this long. Two
+# things heal that way and cannot heal otherwise: a property linked in
+# Förvaltningsområden after the request was created, and anything created while
+# OneCore answered without knowing the endpoint. Costs no extra HTTP — the
+# backfill builds the whole map from the cost-center trees either way.
+STALE_LOOKUP_DAYS = 7
 
 
 class ManagementAreaService:
@@ -238,9 +246,13 @@ class ManagementAreaService:
             return {
                 "team": no_team,
                 "changed": False,
+                # Not "set the cost center on the team": the mapping is seeded
+                # from data/maintenance.team.csv and rewritten from it on every
+                # module upgrade, so a handläggare fixing it in the UI would
+                # lose the fix at the next release.
                 "error": (
                     "Ingen resursgrupp är kopplad till distrikt %s. "
-                    "Ange kostnadsställe på resursgruppen."
+                    "Kontakta systemadministratör."
                 )
                 % (request.cost_center_name or request.cost_center_code),
             }
@@ -388,19 +400,23 @@ class ManagementAreaService:
     # Backfill (cron) — display only, never touches team/resource
     # ------------------------------------------------------------------
     def backfill_batch(self, limit=1000, api=None):
-        """Stamp up to ``limit`` requests that have no cost center and were
-        never successfully looked up. Returns the number processed.
+        """Stamp up to ``limit`` requests that have no cost center. Returns the
+        number processed.
 
         Uses the cost-center trees (a handful of calls) instead of one call
-        per property. Unresolvable requests (no property code, property not
-        in any tree) are stamped too so they are not retried every run; the
-        button can still force a retry on demand.
+        per property. Unresolvable requests (no property code, property not in
+        any tree) are stamped too so they are not retried every run — but the
+        stamp expires after STALE_LOOKUP_DAYS, so a property that gets linked
+        later is picked up instead of being excluded for good.
         """
         Request = self.env["maintenance.request"].sudo()
+        cutoff = fields.Datetime.now() - timedelta(days=STALE_LOOKUP_DAYS)
         records = Request.search(
             [
                 ("cost_center_code", "=", False),
+                "|",
                 ("management_area_lookup_at", "=", False),
+                ("management_area_lookup_at", "<", cutoff),
             ],
             order="id desc",
             limit=limit,

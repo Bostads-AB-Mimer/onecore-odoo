@@ -863,6 +863,17 @@ class TestManagementAreaEndpoints:
         with patch.object(api, "request", return_value=response):
             assert api.fetch_kvv_area_for_property("2201") is None
 
+    def test_fetch_kvv_area_for_property_404_without_json_raises(self, api):
+        """A core that does not know the route answers Koa's text/plain 404.
+        Treating that as "no district" would stamp the request as looked up and
+        exclude it from the backfill forever, so it has to stay an error."""
+        response = self._response(404)
+        response.json.side_effect = ValueError("no json")
+        response.raise_for_status.side_effect = requests.HTTPError("404")
+        with patch.object(api, "request", return_value=response):
+            with pytest.raises(requests.HTTPError):
+                api.fetch_kvv_area_for_property("2201")
+
     def test_fetch_kvv_area_for_property_raises_on_other_errors(self, api):
         response = self._response(500)
         response.raise_for_status.side_effect = requests.HTTPError("500")

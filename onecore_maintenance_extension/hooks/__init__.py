@@ -1,8 +1,10 @@
 """Seeding of the OneCore maintenance stages.
 
-Run from the post_init hook on install and from migrations/19.0.1.0.3 on
-upgrade. Both paths call _update_maintenance_stages(), which must be
-idempotent: it is re-run whenever a database replays an old migration.
+Run from the post_init hook on install and from migrations/19.0.1.0.3 and
+/19.0.1.0.4 on upgrade. Every path calls _update_maintenance_stages(), which
+must be idempotent: it is re-run whenever a database replays an old migration.
+_repair_duplicate_stages() is migration-only — a fresh install cannot end up
+in the state it repairs.
 
 Odoo 19 ships only stage_0, stage_1, stage_3 and stage_4 — stage_5/stage_6
 existed in earlier versions. Databases upgraded to 19 therefore keep the
@@ -144,6 +146,110 @@ def _link_xml_id(env, xml_id, stage):
             "noupdate": True,
         }
     )
+
+
+def _foreign_xml_ids(env, stage, own_xml_id):
+    """xml-ids pointing at this stage that are not ``own_xml_id``.
+
+    A stage carrying someone else's xml-id belongs to that module — we neither
+    merge it away nor move its requests.
+    """
+    module, name = own_xml_id.split(".", 1)
+    return env["ir.model.data"].search(
+        [
+            ("model", "=", STAGE_MODEL),
+            ("res_id", "=", stage.id),
+            "!",
+            "&",
+            ("module", "=", module),
+            ("name", "=", name),
+        ]
+    )
+
+
+def _repair_duplicate_stages(env):
+    """Merge stages that an earlier release duplicated. Safe to run repeatedly.
+
+    _update_maintenance_stages() stops NEW duplicates, but it cannot heal a
+    database where the previous version already made one: there the xml-id
+    points at a freshly created (empty) stage while the original — carrying
+    every historical request — sits orphaned under the same name. Resolving
+    the xml-id succeeds, so nothing in the normal path ever looks further.
+
+    The oldest record wins: it is the one request history hangs off. Losers
+    hand over their requests, and are deleted only when they are fully
+    detached (no xml-id of their own, no requests left). Anything unexpected
+    is logged and skipped — a failed cleanup must never abort an upgrade.
+    """
+    Stage = env[STAGE_MODEL]
+
+    for xml_id, stage_values in STAGE_DATA.items():
+        name = stage_values["name"]
+        try:
+            duplicates = Stage.with_context(active_test=False).search(
+                [("name", "=", name)], order="id"
+            )
+            if len(duplicates) < 2:
+                continue
+
+            survivor = duplicates[0]
+            if _foreign_xml_ids(env, survivor, xml_id):
+                _logger.warning(
+                    "Not merging stages named %r: %s is owned by another "
+                    "module",
+                    name,
+                    survivor.id,
+                )
+                continue
+
+            # Only stages nothing else lays claim to may be merged away. A
+            # duplicate carrying someone else's xml-id is their record, not a
+            # leftover of ours.
+            losers = duplicates[1:].filtered(
+                lambda stage: not _foreign_xml_ids(env, stage, xml_id)
+            )
+            if not losers:
+                _logger.warning(
+                    "Duplicate stages named %r (%s) all belong to other "
+                    "modules; leaving them alone",
+                    name,
+                    duplicates.ids,
+                )
+                continue
+
+            _logger.warning(
+                "Duplicate maintenance stages named %r (%s); merging %s into %s",
+                name,
+                duplicates.ids,
+                losers.ids,
+                survivor.id,
+            )
+
+            # Straight SQL, not write(): a stage change runs the workflow
+            # rules (priority validation, team handback, chatter tracking) and
+            # would raise on the first legacy request that never got a
+            # priority. Nothing about the request actually changes here — the
+            # two rows are the same stage, one of them by accident.
+            env.cr.execute(
+                "UPDATE maintenance_request SET stage_id = %s WHERE stage_id IN %s",
+                (survivor.id, tuple(losers.ids)),
+            )
+            if env.cr.rowcount:
+                _logger.info(
+                    "Moved %s requests from stages %s to %s",
+                    env.cr.rowcount,
+                    losers.ids,
+                    survivor.id,
+                )
+            env.invalidate_all()
+
+            # Point our xml-id at the survivor before deleting anything, so a
+            # failure below still leaves the database resolvable.
+            _link_xml_id(env, xml_id, survivor)
+            losers.unlink()
+            _logger.info("Removed duplicate stages %s (%r)", losers.ids, name)
+        except Exception:  # noqa: BLE001 - never block an upgrade on cleanup
+            _logger.exception("Could not repair duplicate stages named %r", name)
 
 
 def _update_maintenance_stages(env):
