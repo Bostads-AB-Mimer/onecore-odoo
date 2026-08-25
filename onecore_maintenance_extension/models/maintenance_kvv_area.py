@@ -15,6 +15,11 @@ class OnecoreMaintenanceKvvArea(models.Model):
     _name = "maintenance.kvv.area"
     _description = "Kvartersvärdsområde (OneCore)"
     _order = "code"
+    # Reads and writes key on the code; two rows would split them silently
+    # (e.g. a manual cron run overlapping the scheduled one).
+    _sql_constraints = [
+        ("code_uniq", "unique (code)", "Kvartersvärdsområdets kod måste vara unik."),
+    ]
 
     code = fields.Char("Kod", required=True, index=True)
     name = fields.Char("Namn")

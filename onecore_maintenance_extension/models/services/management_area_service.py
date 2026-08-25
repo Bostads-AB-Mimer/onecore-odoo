@@ -20,12 +20,14 @@ _logger = logging.getLogger(__name__)
 # Seconds. A slow OneCore must not stall request creation or the button.
 LOOKUP_TIMEOUT = 5
 
-# Per-worker cache of property_code -> values, so the form preview (onchange)
-# and the create() snapshot right after it share one OneCore call, and so
-# picking between search hits on the same property is free. Worst-case
-# staleness = TTL; a property changes kvv area very rarely.
+# Per-worker cache so the form preview (onchange) and the create() snapshot
+# right after it share one OneCore call, and so picking between search hits on
+# the same property is free. Worst-case staleness = TTL; a property changes kvv
+# area very rarely. Keyed on (database, property_code): onecore_base_url is a
+# per-database setting, so a worker serving several databases must not hand a
+# staging answer to a production request.
 DISTRICT_CACHE_TTL = 300  # seconds
-_district_cache = {}  # property_code -> (expires_at_monotonic, values | None)
+_district_cache = {}  # (dbname, property_code) -> (expires_at_monotonic, values | None)
 
 
 class ManagementAreaService:
@@ -106,7 +108,8 @@ class ManagementAreaService:
         if not property_code or not self.is_configured():
             return False, None
 
-        cached = _district_cache.get(property_code)
+        cache_key = (self.env.cr.dbname, property_code)
+        cached = _district_cache.get(cache_key)
         if cached and time.monotonic() < cached[0]:
             return True, cached[1]
 
@@ -125,7 +128,7 @@ class ManagementAreaService:
 
         values = self.normalize(payload)
         # Cache misses too: a property without a kvv link stays without one.
-        _district_cache[property_code] = (
+        _district_cache[cache_key] = (
             time.monotonic() + DISTRICT_CACHE_TTL,
             values,
         )
@@ -141,22 +144,34 @@ class ManagementAreaService:
         The prefill exists because maintenance_team_id is required to save:
         without it the user has to guess a team at creation and correct it with
         the button afterwards. Never overrides a team the user (or a caller)
-        already picked — a Vitvaru- or Skadedjursärende must keep its team.
+        picked — a Vitvaru- or Skadedjursärende must keep its team.
+
+        Re-runs on every option change: picking a second property in the same
+        unsaved form must not keep the first property's distrikt, nor the team
+        prefilled from it.
         """
-        if record.cost_center_code:
-            return False
         property_code = self.get_property_code_from_options(record)
         if not property_code:
             return False
         ok, values = self.fetch_for_property(property_code)
         if not ok or not values:
             return False
+        if values.get("cost_center_code") == record.cost_center_code and values.get(
+            "kvv_area_code"
+        ) == record.kvv_area_code:
+            return False
+
+        previous_code = record.cost_center_code
         for field, value in values.items():
             record[field] = value
-        if not record.maintenance_team_id:
-            team = self.find_team_for_cost_center(values.get("cost_center_code"))
-            if team:
-                record.maintenance_team_id = team
+
+        team = record.maintenance_team_id
+        # Replace a team only when it is ours to replace: empty, or the one we
+        # prefilled from the district the user just navigated away from.
+        if not team or (previous_code and team.cost_center_code == previous_code):
+            new_team = self.find_team_for_cost_center(values.get("cost_center_code"))
+            if new_team:
+                record.maintenance_team_id = new_team
         return True
 
     def populate(self, request, force=False, api=None):
@@ -436,10 +451,19 @@ class ManagementAreaService:
 
     @staticmethod
     def build_property_map(api):
-        """property_code -> request values, from GET /cost-centers/{id}/tree."""
+        """property_code -> request values, from GET /cost-centers/{id}/tree.
+
+        Raises when a tree cannot be fetched: a partial map would make the
+        caller stamp that district's requests as "looked up", excluding them
+        from every future run. All-or-nothing is cheap here — five calls.
+        """
         mapping = {}
         for cost_center in api.fetch_cost_centers() or []:
-            tree = api.fetch_cost_center_tree(cost_center["id"]) or {}
+            tree = api.fetch_cost_center_tree(cost_center["id"])
+            if not tree:
+                raise ValueError(
+                    f"Empty cost-center tree for {cost_center.get('code')}"
+                )
             cost_center_code = tree.get("code") or cost_center.get("code") or False
             cost_center_name = tree.get("name") or cost_center.get("name") or False
             for area in tree.get("kvvAreas") or []:

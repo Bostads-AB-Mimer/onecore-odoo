@@ -292,6 +292,53 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         self.assertFalse(record.maintenance_team_id)
         self.assertEqual(record.cost_center_name, "Distrikt Okänt")
 
+    def test_preview_follows_a_second_property_in_the_same_form(self):
+        """Picking another search hit must not keep the first property's
+        distrikt — nor the team we prefilled from it."""
+        self._configure_onecore()
+        record = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
+        record.rental_property_option_id = create_rental_property_option(
+            self.env, estate_code="2201"
+        )
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            self.service.preview(record)
+        self.assertEqual(record.cost_center_code, "61140")
+        self.assertEqual(record.maintenance_team_id, self.vast_team)
+
+        mitt_team = self.env.ref("onecore_maintenance_extension.5")
+        mitt_team.cost_center_code = "61110"
+        record.rental_property_option_id = create_rental_property_option(
+            self.env, estate_code="3301"
+        )
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+                kvv_code="61111", cc_code="61110", cc_name="Distrikt Mitt"
+            )
+            self.service.preview(record)
+
+        self.assertEqual(record.cost_center_name, "Distrikt Mitt")
+        self.assertEqual(record.kvv_area_code, "61111")
+        self.assertEqual(record.maintenance_team_id, mitt_team, "team följde inte med")
+
+    def test_preview_keeps_manual_team_when_switching_property(self):
+        self._configure_onecore()
+        vitvaror = self.env.ref("onecore_maintenance_extension.1")
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Lägenhet",
+                "maintenance_team_id": vitvaror.id,
+            }
+        )
+        record.rental_property_option_id = create_rental_property_option(
+            self.env, estate_code="2201"
+        )
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            self.service.preview(record)
+        self.assertEqual(record.maintenance_team_id, vitvaror)
+        self.assertEqual(record.cost_center_code, "61140")
+
     def test_preview_skips_when_already_known_or_without_property(self):
         self._configure_onecore()
         empty = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
@@ -299,17 +346,21 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.assertFalse(self.service.preview(empty))
             MockApi.assert_not_called()
 
+        # Already carrying what OneCore would answer: nothing to write
         option = create_rental_property_option(self.env, estate_code="2201")
-        stamped = self.env["maintenance.request"].new(
+        unchanged = self.env["maintenance.request"].new(
             {
                 "space_caption": "Lägenhet",
                 "rental_property_option_id": option.id,
-                "cost_center_code": "61110",
+                "cost_center_code": "61140",
+                "cost_center_name": "Distrikt Väst",
+                "kvv_area_code": "61141",
             }
         )
         with patch(CORE_API_PATH) as MockApi:
-            self.assertFalse(self.service.preview(stamped))
-            MockApi.assert_not_called()
+            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            self.assertFalse(self.service.preview(unchanged))
+        self.assertEqual(unchanged.cost_center_code, "61140")
 
     # ------------------------------------------------------------------
     # populate
@@ -695,6 +746,24 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
             MockApi.return_value.fetch_cost_centers.return_value = []
+            self.assertEqual(self.service.backfill_batch(limit=500), 0)
+        self.assertFalse(request.management_area_lookup_at)
+
+    def test_backfill_stamps_nothing_when_one_tree_is_missing(self):
+        """A partial map would stamp the missing district's requests as looked
+        up, excluding them from every future run."""
+        request = self._apartment_request(estate_code="2201")
+        self._configure_onecore()
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_trees(MockApi)
+            api.fetch_cost_centers.return_value = [
+                {"id": 4, "code": "61140", "name": "Distrikt Väst"},
+                {"id": 5, "code": "61110", "name": "Distrikt Mitt"},
+            ]
+            api.fetch_cost_center_tree.side_effect = [
+                api.fetch_cost_center_tree.return_value,
+                None,  # OneCore hiccup on the second district
+            ]
             self.assertEqual(self.service.backfill_batch(limit=500), 0)
         self.assertFalse(request.management_area_lookup_at)
 

@@ -14,6 +14,9 @@ class OnecoreMaintenanceCostCenter(models.Model):
     _name = "maintenance.cost.center"
     _description = "Kostnadsställe/distrikt (OneCore)"
     _order = "code"
+    _sql_constraints = [
+        ("code_uniq", "unique (code)", "Kostnadsställets kod måste vara unik."),
+    ]
 
     code = fields.Char("Kod", required=True, index=True)
     name = fields.Char("Namn")

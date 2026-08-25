@@ -95,10 +95,14 @@ patch(FormController.prototype, {
           // chains act_window_close is asking for the form to show what the
           // method just wrote. Without this the view keeps stale values until
           // the user presses F5 (MIM-1967, "Tilldela resursgrupp").
-          // Only opted-in actions reload — dialogs and plain notifications
-          // must not, so unsaved edits survive them, which is the point of
-          // this patch.
-          if (result.params?.next?.type === "ir.actions.act_window_close") {
+          //
+          // Never when the form is dirty: reloading would drop the user's
+          // unsaved edits, and not saving them is the whole point of this
+          // patch. A stale field is recoverable, typed-in work is not.
+          if (
+            result.params?.next?.type === "ir.actions.act_window_close" &&
+            !this.model.root.dirty
+          ) {
             await this.model.load();
           }
         }
