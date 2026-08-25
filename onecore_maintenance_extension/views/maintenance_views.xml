@@ -122,6 +122,7 @@
                     <field name="has_unread_supplier_dialog" invisible="1" />
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
+                    <field name="has_unread_new_customer_info" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -556,7 +557,13 @@
                                         invisible="not empty_tenant">Ingen
                                         hyresgäst</div>
 
+                                    <!-- Mimer-internal data-quality flag: the tenant was
+                                         back-filled from the OneCore API, it is not tenant
+                                         communication. Never shown to external contractors,
+                                         matching the internal-only branch in
+                                         _compute_has_unread_new_customer_info. -->
                                     <div class="mb-3 fw-bold"
+                                        groups="!onecore_maintenance_extension.group_external_contractor"
                                         invisible="not recently_added_tenant">
                                         <span
                                             class="mimer-badge mb-1 fs-7 px-2 py-2">
@@ -885,8 +892,7 @@
                     <field name="create_date" />
                     <field name="master_key" />
                     <field name="hidden_from_my_pages" />
-                    <field name="new_mimer_notification" />
-                    <field name="recently_added_tenant" />
+                    <field name="has_unread_new_customer_info" />
                     <field name="special_attention" />
                     <field name="has_unread_supplier_dialog" />
                     <field name="has_unread_internal_dialog" />

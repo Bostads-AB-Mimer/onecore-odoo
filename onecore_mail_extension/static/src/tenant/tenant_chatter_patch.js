@@ -99,34 +99,90 @@ patch(Chatter.prototype, {
     return super.scheduleActivity();
   },
 
-  async onClickAcknowledgeDialog() {
+  // Unread acknowledge signals for the current viewer, in display order.
+  // supplier/internal dialog collapse into one "Meddelande" signal (only one
+  // is ever set for a given viewer). Labels/names are Swedish.
+  _unreadAckSignals() {
+    const data = this.props.record?.data ?? {};
+    const signals = [];
+    if (data.has_unread_supplier_dialog || data.has_unread_internal_dialog) {
+      signals.push({
+        name: _t("Meddelande"),
+        buttonLabel: _t("Markera meddelande som läst"),
+        method: "action_acknowledge_dialog",
+      });
+    }
+    if (data.has_unread_master_key_change) {
+      signals.push({
+        name: _t("Huvudnyckeländring"),
+        buttonLabel: _t("Markera huvudnyckeländring som läst"),
+        method: "action_acknowledge_master_key_change",
+      });
+    }
+    if (data.has_unread_new_customer_info) {
+      signals.push({
+        name: _t("Ny kundinfo"),
+        buttonLabel: _t("Markera ny kundinfo som läst"),
+        method: "action_acknowledge_new_customer_info",
+      });
+    }
+    return signals;
+  },
+
+  showAckButton() {
+    return (
+      this.props.record?.resModel === "maintenance.request" &&
+      this._unreadAckSignals().length > 0
+    );
+  },
+
+  ackButtonLabel() {
+    const signals = this._unreadAckSignals();
+    return signals.length === 1 ? signals[0].buttonLabel : _t("Markera som läst");
+  },
+
+  async _acknowledgeSignals(signals) {
+    const record = this.props.record;
+    await Promise.all(
+      signals.map((s) =>
+        this.env.services.orm.call("maintenance.request", s.method, [
+          [record.resId],
+        ]),
+      ),
+    );
+    // Reload so has_unread_* refresh -> the button relabels/hides.
+    await record.load();
+    // Re-fetch messages so is_dialog_unread_for_side re-serializes and the
+    // orange highlight clears (acknowledging only changes computed flags on
+    // existing messages, so fetchNewMessages() would not refresh them).
+    await this.state?.thread?.fetchMessages();
+  },
+
+  async onClickAcknowledge() {
     const record = this.props.record;
     if (!record?.resId) {
       return;
     }
-    // The button is shared by two independent unread signals: the
-    // bidirectional supplier/internal dialog and the one-directional
-    // master-key change shared by all viewers. One click clears both.
-    // The dialog RPC is a no-op when no log-note dialog is unread for the
-    // caller's side, so calling both unconditionally is safe.
-    await Promise.all([
-      this.env.services.orm.call(
-        "maintenance.request",
-        "action_acknowledge_dialog",
-        [[record.resId]],
-      ),
-      this.env.services.orm.call(
-        "maintenance.request",
-        "action_acknowledge_master_key_change",
-        [[record.resId]],
-      ),
-    ]);
-    // Reload the form record so has_unread_* refreshes -> the button hides.
-    await record.load();
-    // Re-fetch the chatter messages so is_dialog_unread_for_side is
-    // re-serialized and the orange background clears. Acknowledging only
-    // changes a computed flag on existing messages, so fetchNewMessages()
-    // (which pulls messages newer than the latest) would not refresh them.
-    await this.state?.thread?.fetchMessages();
+    const signals = this._unreadAckSignals();
+    if (signals.length === 0) {
+      return;
+    }
+    if (signals.length === 1) {
+      await this._acknowledgeSignals(signals);
+      return;
+    }
+    // Two or more unread signals: confirm acknowledging all of them.
+    const names = signals.map((s) => s.name).join(", ");
+    this.dialogService.add(ConfirmationDialog, {
+      title: _t("Markera som läst"),
+      body: _t("Vill du markera följande som läst?") + " " + names,
+      confirmLabel: _t("Markera som läst"),
+      cancelLabel: _t("Avbryt"),
+      confirm: () => this._acknowledgeSignals(signals),
+      // ConfirmationDialog renders the cancel button on t-if="props.cancel",
+      // not on cancelLabel — without a callback there is no Avbryt at all and
+      // the only way out is the X / Escape.
+      cancel: () => {},
+    });
   },
 });

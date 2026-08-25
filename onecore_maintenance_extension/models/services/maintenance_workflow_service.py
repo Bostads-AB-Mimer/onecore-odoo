@@ -159,7 +159,7 @@ class FieldChangeTracker:
         "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
         "master_key_changed_at",
-        "master_key_ack_at",
+        "recently_added_tenant",  # technical flag, English label — never log
         # OneCore management-area snapshot (ManagementAreaService) — written
         # lazily from the button/backfill; not a user change worth a note
         "kvv_area_code",
