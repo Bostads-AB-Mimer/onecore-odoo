@@ -40,17 +40,33 @@ function isPlannedAfterDue(scheduleDate, dueDate) {
     return scheduleDate.startOf("day") > dueDate.startOf("day");
 }
 
+/**
+ * Whether `record` ends up planned after its deadline once `changes` is applied.
+ */
+function breachesDueDate(record, changes) {
+    // ?? rather than ||: clearing a date yields false, which has to win over the
+    // stored value so that clearing never trips the warning.
+    return isPlannedAfterDue(
+        changes[SCHEDULE_DATE] ?? record.data[SCHEDULE_DATE],
+        changes[DUE_DATE] ?? record.data[DUE_DATE]
+    );
+}
+
 patch(Record.prototype, {
     async update(changes, options) {
         const touchesDates = SCHEDULE_DATE in changes || DUE_DATE in changes;
 
         if (this.resModel === "maintenance.request" && touchesDates) {
-            // ?? rather than ||: clearing a date yields false, which has to win
-            // over the stored value so that clearing never trips the warning.
-            const scheduleDate = changes[SCHEDULE_DATE] ?? this.data[SCHEDULE_DATE];
-            const dueDate = changes[DUE_DATE] ?? this.data[DUE_DATE];
+            // Multi-edit applies the change to every selected record
+            // (Record._update -> DynamicList._multiSave), so the breach has to be
+            // looked for across the whole selection rather than only in the row
+            // whose editor was opened.
+            const records =
+                this.selected && this.model.multiEdit
+                    ? this.model.root.selection ?? [this]
+                    : [this];
 
-            if (isPlannedAfterDue(scheduleDate, dueDate)) {
+            if (records.some((record) => breachesDueDate(record, changes))) {
                 const confirmed = await this._confirmScheduleDateAfterDueDate(
                     SCHEDULE_DATE in changes
                 );
