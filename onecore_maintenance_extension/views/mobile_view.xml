@@ -47,7 +47,6 @@
         <field name="schedule_date_date" />
         <field name="today_date" />
         <field name="has_unread_new_customer_info" />
-        <field name="recently_added_tenant" />
         <field name="special_attention" />
         <field name="has_unread_supplier_dialog" />
         <field name="has_unread_internal_dialog" />
