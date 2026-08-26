@@ -67,6 +67,8 @@ patch(Message.prototype, {
         return " (via mejl)";
       case "tenant_mail_and_sms":
         return " (via sms och mejl)";
+      case "tenant_my_pages":
+        return " (via Mina sidor)";
       case "failed_tenant_sms":
         return " (sms misslyckades)";
       case "failed_tenant_mail":
