@@ -10,6 +10,7 @@ import importlib.util
 import os
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
 from odoo.tests.common import TransactionCase
@@ -21,6 +22,7 @@ from ..utils.test_utils import (
     create_external_contractor_user,
     create_maintenance_request,
 )
+from ...models.constants import RECEIPT_TO_TENANT_MESSAGE_TYPE
 
 
 def _get_or_create_mimer_user(env):
@@ -484,10 +486,30 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
         ).action_acknowledge_customer_message()
         self.assertFalse(self._receipts())
 
-    def test_receipt_type_is_not_an_outbound_tenant_dispatch(self):
+    def test_receipt_constant_is_not_an_outbound_tenant_dispatch_type(self):
         # Every tenant_* type sends a real SMS/email in mail.message.create.
-        # The receipt must not be one of them.
-        self.assertFalse("receipt_to_tenant".startswith("tenant_"))
+        # Assert on the constant itself, not a hardcoded literal, so renaming
+        # its value to a dangerous tenant_* form fails here by assertion,
+        # rather than being caught only incidentally (e.g. by an unregistered
+        # selection value raising elsewhere).
+        self.assertFalse(RECEIPT_TO_TENANT_MESSAGE_TYPE.startswith("tenant_"))
+
+    def test_ack_never_dispatches_a_real_sms_or_email(self):
+        # The behavioural guard: whatever create()'s dispatch branch does in
+        # the future, acknowledging a customer message must never reach the
+        # real senders. Patches the senders on the class actually used by the
+        # ORM (mail.message's registry class), following the
+        # patch.object(type(...), ...) idiom used elsewhere in this suite
+        # (see test_maintenance_component_line.py).
+        _post_tenant_message(self.request, self.mimer_user)
+        mail_message_cls = type(self.env["mail.message"])
+        with patch.object(mail_message_cls, "_send_sms") as mock_send_sms:
+            with patch.object(mail_message_cls, "_send_email") as mock_send_email:
+                self.request.with_user(
+                    self.internal_user
+                ).action_acknowledge_customer_message()
+        mock_send_sms.assert_not_called()
+        mock_send_email.assert_not_called()
 
     def test_receipt_type_is_registered_on_mail_message(self):
         selection = dict(
