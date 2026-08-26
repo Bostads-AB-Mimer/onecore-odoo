@@ -4,8 +4,7 @@ MIM-1844 added new_customer_info_ack_at / new_customer_info_external_ack_at for
 the tenant -> case channel (Mina sidor), keyed on a narrow discriminator
 (author odoo@mimer.nu AND an inbox notification). MIM-1960 gives that channel
 its own name and a broader discriminator (message_type == 'from_tenant'), so
-the columns are renamed rather than duplicated: on a real production upgrade
-their values carry over verbatim and MIM-1844's cutover baseline stays valid.
+the columns are renamed rather than duplicated.
 
 Ordering: Odoo runs every applicable version's pre-migration for every
 module, THEN init_models() (which creates any new column a field definition

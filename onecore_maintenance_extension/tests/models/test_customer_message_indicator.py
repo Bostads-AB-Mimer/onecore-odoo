@@ -12,6 +12,7 @@ import os
 from odoo import fields
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
+from odoo.tools.sql import column_exists
 
 from ..utils.test_utils import (
     create_internal_user,
@@ -212,19 +213,22 @@ class TestAckRenameMigration(CustomerMessageCase):
         self.migration.migrate(cr, "19.0.1.0.5")
         self.env.invalidate_all()
 
-        cr.execute("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'maintenance_request'
-              AND column_name IN (
-                  'customer_message_ack_at',
-                  'customer_message_external_ack_at',
-                  'new_customer_info_ack_at',
-                  'new_customer_info_external_ack_at'
-              )
-            """)
-        remaining = {row[0] for row in cr.fetchall()}
-        self.assertEqual(
-            remaining, {"customer_message_ack_at", "customer_message_external_ack_at"}
+        # column_exists(), not a hand-rolled information_schema query: the
+        # same false-positive class (missing table_schema = current_schema)
+        # that review had removed from the migration itself (MIM-1960 F3).
+        self.assertTrue(
+            column_exists(cr, "maintenance_request", "customer_message_ack_at")
+        )
+        self.assertTrue(
+            column_exists(cr, "maintenance_request", "customer_message_external_ack_at")
+        )
+        self.assertFalse(
+            column_exists(cr, "maintenance_request", "new_customer_info_ack_at")
+        )
+        self.assertFalse(
+            column_exists(
+                cr, "maintenance_request", "new_customer_info_external_ack_at"
+            )
         )
         self.assertFalse(self.request.customer_message_ack_at)
         self.assertFalse(self.request.customer_message_external_ack_at)
@@ -238,10 +242,30 @@ class TestAckRenameMigration(CustomerMessageCase):
         # against a seeded ack on the natural test schema is the closest
         # this suite can get to that without fabricating a third schema
         # shape.
+        #
+        # Stored-field writes through the ORM only dirty the cache
+        # (odoo/orm/fields.py ~1503-1521) — nothing flushes it to the
+        # database on its own, and the request was created under
+        # creating_records=True, which skips FieldChangeTracker but not the
+        # underlying deferral. flush_all() is required *before* migrate() so
+        # the column genuinely holds the seeded value while the migration
+        # runs, mirroring what a real ack write followed by a real upgrade
+        # looks like.
         seeded_ack = fields.Datetime.now()
         self.request.customer_message_ack_at = seeded_ack
+        self.env.flush_all()
 
         self.migration.migrate(self.env.cr, "19.0.1.0.4")
-        self.env.invalidate_all()
 
-        self.assertEqual(self.request.customer_message_ack_at, seeded_ack)
+        # Assert on the raw column, not through the ORM: env.invalidate_all()
+        # defaults to flush=True (odoo/orm/environments.py ~357-366), which
+        # would push the cached value back into the database *after*
+        # migrate() ran and mask a real unconditional wipe. Reading straight
+        # from Postgres is the only way this test can actually fail if the
+        # reset guard regresses.
+        self.env.cr.execute(
+            "SELECT customer_message_ack_at FROM maintenance_request WHERE id = %s",
+            (self.request.id,),
+        )
+        (stored_ack,) = self.env.cr.fetchone()
+        self.assertEqual(stored_ack, seeded_ack)
