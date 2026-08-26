@@ -98,12 +98,22 @@ class TestLastCustomerMessageAt(CustomerMessageCase):
         # The request is written on every inbound tenant message. Without a
         # SKIP_FIELDS entry, FieldChangeTracker posts a chatter note about the
         # field change on top of the tenant's own message.
-        before = set(self.request.message_ids.ids)
-        _post_tenant_message(self.request, self.mimer_user)
+        #
+        # create_maintenance_request()/create() leaves `creating_records=True`
+        # on the returned recordset's context (see maintenance.py create()),
+        # which makes write() skip FieldChangeTracker entirely. Tests that
+        # assert on posted chatter notes must override it, same as
+        # test_new_customer_info_indicator.py, test_master_key_change_indicator.py
+        # and test_maintenance_workflow_service.py do.
+        request = self.request.with_context(creating_records=False)
+        before = set(request.message_ids.ids)
+        _post_tenant_message(request, self.mimer_user)
+        # message_ids is a plain relational field, not a compute — it was
+        # already fetched (and cached) by the `before` read above, so it must
+        # be explicitly invalidated to see the note just posted.
+        request.invalidate_recordset(["message_ids"])
         new_bodies = " ".join(
-            self.request.message_ids.filtered(lambda m: m.id not in before).mapped(
-                "body"
-            )
+            request.message_ids.filtered(lambda m: m.id not in before).mapped("body")
         )
         # Assert on the field LABEL: FieldChangeTracker logs labels, never
         # field names. Asserting on the name would pass even with the
