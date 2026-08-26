@@ -9,6 +9,8 @@ mirroring action_acknowledge_dialog.
 import importlib.util
 import os
 
+from datetime import timedelta
+
 from odoo import fields
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
@@ -269,3 +271,125 @@ class TestAckRenameMigration(CustomerMessageCase):
         )
         (stored_ack,) = self.env.cr.fetchone()
         self.assertEqual(stored_ack, seeded_ack)
+
+
+@tagged("onecore")
+class TestHasUnreadCustomerMessage(CustomerMessageCase):
+    def _refresh(self, user):
+        record = self.request.with_user(user)
+        record.invalidate_recordset(["has_unread_customer_message"])
+        return record
+
+    def test_from_tenant_message_raises_it_for_both_audiences(self):
+        # "Statusen ska vara synlig för alla" — no group guard anywhere.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.assertTrue(self._refresh(self.internal_user).has_unread_customer_message)
+        self.assertTrue(self._refresh(self.external_user).has_unread_customer_message)
+
+    def test_no_inbox_notification_needed(self):
+        # The old MIM-1844 heuristic required one. The work-order service does
+        # not create one, so requiring it missed real tenant messages.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.env["mail.notification"].sudo().search(
+            [
+                ("mail_message_id.model", "=", "maintenance.request"),
+                ("mail_message_id.res_id", "=", self.request.id),
+            ]
+        ).unlink()
+        self.request.invalidate_recordset(["has_unread_customer_message"])
+        self.assertTrue(self._refresh(self.internal_user).has_unread_customer_message)
+
+    def test_comment_from_the_integration_user_does_not_raise_it(self):
+        # The old heuristic matched any odoo@mimer.nu message with an inbox
+        # notification, including plain comments.
+        _post_tenant_message(self.request, self.mimer_user, message_type="comment")
+        self.assertFalse(self._refresh(self.internal_user).has_unread_customer_message)
+
+    def test_no_message_means_not_unread(self):
+        self.assertFalse(self._refresh(self.internal_user).has_unread_customer_message)
+
+    def test_reading_the_record_does_not_clear_it(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        record = self._refresh(self.internal_user)
+        _ = record.name  # simulate opening the form
+        self.assertTrue(self._refresh(self.internal_user).has_unread_customer_message)
+
+
+@tagged("onecore")
+class TestAcknowledgeCustomerMessage(CustomerMessageCase):
+    def _refresh(self, user):
+        record = self.request.with_user(user)
+        record.invalidate_recordset(["has_unread_customer_message"])
+        return record
+
+    def test_internal_ack_clears_only_the_internal_side(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+
+        self.assertTrue(self.request.customer_message_ack_at)
+        self.assertFalse(self.request.customer_message_external_ack_at)
+        self.assertFalse(self._refresh(self.internal_user).has_unread_customer_message)
+        self.assertTrue(self._refresh(self.external_user).has_unread_customer_message)
+
+    def test_contractor_ack_clears_only_the_contractor_side(self):
+        # A contractor's ack must never suppress the tenant's message for Mimer.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+
+        self.assertTrue(self.request.customer_message_external_ack_at)
+        self.assertFalse(self.request.customer_message_ack_at)
+        self.assertFalse(self._refresh(self.external_user).has_unread_customer_message)
+        self.assertTrue(self._refresh(self.internal_user).has_unread_customer_message)
+
+    def test_ack_is_shared_within_an_audience(self):
+        other_internal = create_internal_user(self.env)
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        self.assertFalse(self._refresh(other_internal).has_unread_customer_message)
+
+    def test_newer_message_re_raises_it_after_ack(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+
+        later = _post_tenant_message(self.request, self.mimer_user, body="Mer")
+        later.date = self.request.customer_message_ack_at + timedelta(seconds=1)
+        self.request.sudo().write({"last_customer_message_at": later.date})
+        self.assertTrue(self._refresh(self.internal_user).has_unread_customer_message)
+
+    def test_ack_with_nothing_unread_is_a_no_op(self):
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        self.assertFalse(self.request.customer_message_ack_at)
+
+    def test_ack_is_written_to_the_audit_log(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        # create_maintenance_request()/create() leaves `creating_records=True`
+        # on the returned recordset's context (see maintenance.py create()),
+        # which makes write() skip FieldChangeTracker entirely. Tests that
+        # assert on posted chatter notes must override it, same as
+        # test_new_customer_info_indicator.py and
+        # test_master_key_change_indicator.py do.
+        request = self.request.with_context(creating_records=False)
+        before = set(request.message_ids.ids)
+        request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        # message_ids is a plain relational field, not a compute — it was
+        # already fetched (and cached) by the `before` read above, so it must
+        # be explicitly invalidated to see the note just posted.
+        request.invalidate_recordset(["message_ids"])
+        bodies = " ".join(
+            request.message_ids.filtered(
+                lambda m: m.id not in before
+            ).mapped("body")
+        )
+        self.assertIn("Meddelande från kund kvitterat", bodies)

@@ -208,6 +208,24 @@ class OneCoreMaintenanceRequest(
         help="Sätts automatiskt när ett meddelande från kund kommer in via "
         "Mina sidor. Driver sorteringen i kanbanvyn.",
     )
+    # Stored, so _order can promote requests with an outstanding customer
+    # message. One column per audience: has_unread_customer_message picks the
+    # matching one per viewer, which _order cannot do.
+    customer_message_unread_internal = fields.Boolean(
+        string="Okvitterat kundmeddelande (Mimer)",
+        compute="_compute_customer_message_unread",
+        store=True,
+    )
+    customer_message_unread_external = fields.Boolean(
+        string="Okvitterat kundmeddelande (entreprenör)",
+        compute="_compute_customer_message_unread",
+        store=True,
+    )
+    has_unread_customer_message = fields.Boolean(
+        string="Okvitterat meddelande från kund",
+        compute="_compute_has_unread_customer_message",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
@@ -705,6 +723,48 @@ class OneCoreMaintenanceRequest(
             if not ack_at or latest > ack_at:
                 record.has_unread_new_customer_info = True
 
+    @api.depends(
+        "last_customer_message_at",
+        "customer_message_ack_at",
+        "customer_message_external_ack_at",
+    )
+    def _compute_customer_message_unread(self):
+        # Stored, so no depends_context: these are the two audience-independent
+        # facts, and the per-user pick happens in
+        # _compute_has_unread_customer_message.
+        for record in self:
+            latest = record.last_customer_message_at
+            if not latest:
+                record.customer_message_unread_internal = False
+                record.customer_message_unread_external = False
+                continue
+            internal_ack = record.customer_message_ack_at
+            external_ack = record.customer_message_external_ack_at
+            record.customer_message_unread_internal = (
+                not internal_ack or latest > internal_ack
+            )
+            record.customer_message_unread_external = (
+                not external_ack or latest > external_ack
+            )
+
+    @api.depends(
+        "customer_message_unread_internal", "customer_message_unread_external"
+    )
+    @api.depends_context("uid")
+    def _compute_has_unread_customer_message(self):
+        # Each side acknowledges separately, mirroring the audience split in
+        # _compute_dialog_indicators: an external contractor reads the tenant's
+        # message in the same chatter, but their ack must never suppress it for
+        # Mimer. depends_context("uid") keeps the cache keyed per user so the
+        # two sides cannot read each other's value.
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        for record in self:
+            record.has_unread_customer_message = (
+                record.customer_message_unread_external
+                if is_external
+                else record.customer_message_unread_internal
+            )
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -726,6 +786,28 @@ class OneCoreMaintenanceRequest(
             ["has_unread_supplier_dialog", "has_unread_internal_dialog"]
         )
         self.env["mail.message"].invalidate_model(["is_dialog_unread_for_side"])
+        return True
+
+    def action_acknowledge_customer_message(self):
+        """Mark the tenant's Mina-sidor message read for the acking user's side.
+
+        One shared timestamp per side, like action_acknowledge_dialog: the first
+        Mimer handler to click clears it for all of Mimer, the first contractor
+        for all contractors. The sides are independent — a contractor's ack must
+        never suppress the tenant's message for Mimer.
+        """
+        self.ensure_one()
+        if not self.has_unread_customer_message:
+            return True
+        now = fields.Datetime.now()
+        if ExternalContractorService(self.env).is_external_contractor():
+            self.customer_message_external_ack_at = now
+        else:
+            self.customer_message_ack_at = now
+        # Non-stored computed field — writing the stored ack does not invalidate
+        # it automatically, so force a recompute for the chatter button and the
+        # kanban chip.
+        self.invalidate_recordset(["has_unread_customer_message"])
         return True
 
     def action_acknowledge_master_key_change(self):
