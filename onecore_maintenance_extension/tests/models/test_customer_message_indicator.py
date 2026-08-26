@@ -570,3 +570,217 @@ class TestCustomerMessageBadgeVisibility(CustomerMessageCase):
                 .get_view(view_type="form")["arch"]
             )
             self.assertIn("has_unread_customer_message", arch)
+
+
+def _load_customer_message_migration():
+    """Load migrations/19.0.1.0.6/post-migration.py by path.
+
+    The migration sits outside the importable package tree — neither the
+    directory nor the file name is a valid Python identifier.
+    """
+    module_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    path = os.path.join(
+        module_root, "migrations", "19.0.1.0.6", "post-migration.py"
+    )
+    spec = importlib.util.spec_from_file_location("mim_1960_post_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@tagged("onecore", "mim_1960")
+class TestCustomerMessageAckBaseline(CustomerMessageCase):
+    """MIM-1960 cutover (migrations/19.0.1.0.6/post-migration.py).
+
+    MIM-1844 keyed on "authored by odoo@mimer.nu AND carrying an inbox
+    notification" and baselined against that. The new rule is
+    message_type='from_tenant', which matches a wider set — so without a
+    re-baseline, historical tenant messages that never produced an inbox
+    notification resurface as unread and get promoted to the top of the kanban.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.migration = _load_customer_message_migration()
+
+    def _notifications(self, request):
+        return (
+            self.env["mail.notification"]
+            .sudo()
+            .search(
+                [
+                    ("mail_message_id.model", "=", "maintenance.request"),
+                    ("mail_message_id.res_id", "=", request.id),
+                    ("notification_type", "=", "inbox"),
+                ]
+            )
+        )
+
+    def _reset_to_pre_migration_state(self, request):
+        """Clear what the ORM already computed, leaving the state the migration
+        actually meets: fresh NULL ack columns and no stored sort inputs."""
+        request.sudo().write(
+            {
+                "customer_message_ack_at": False,
+                "customer_message_external_ack_at": False,
+                "last_customer_message_at": False,
+            }
+        )
+
+    def _baseline(self):
+        return self.migration._baseline_customer_message_acks(self.env)
+
+    def _unread_for(self, request, user):
+        record = request.with_user(user)
+        record.invalidate_recordset(["has_unread_customer_message"])
+        return record.has_unread_customer_message
+
+    def _create_inbox_notification(self, message, partner, is_read):
+        """Seed a real inbox mail.notification row directly, the way
+        MIM-1844's own fixtures did (test_new_customer_info_indicator.py).
+
+        message_post()'s own recipient computation is not a reliable way to
+        pin an exact read state here: the recipient's user notification
+        preference decides email vs inbox (defaults to email, so a follower
+        with no explicit preference gets an 'email' row, not 'inbox'), and a
+        message with no follower at all produces no row whatsoever. Upserting
+        the row directly sidesteps both and pins the exact pre-migration read
+        state each test needs — updating in place when message_post() already
+        created an (email-typed) row for this message/partner pair, since
+        (mail_message_id, res_partner_id) is unique.
+        """
+        notification = (
+            self.env["mail.notification"]
+            .sudo()
+            .search(
+                [
+                    ("mail_message_id", "=", message.id),
+                    ("res_partner_id", "=", partner.id),
+                ]
+            )
+        )
+        if notification:
+            notification.write({"notification_type": "inbox", "is_read": is_read})
+            return notification
+        return (
+            self.env["mail.notification"]
+            .sudo()
+            .create(
+                {
+                    "mail_message_id": message.id,
+                    "res_partner_id": partner.id,
+                    "notification_type": "inbox",
+                    "is_read": is_read,
+                }
+            )
+        )
+
+    def test_read_history_is_baselined_as_acknowledged(self):
+        message = _post_tenant_message(self.request, self.mimer_user)
+        self._create_inbox_notification(
+            message, self.internal_user.partner_id, is_read=True
+        )
+        self._reset_to_pre_migration_state(self.request)
+
+        updated, still_flagged = self._baseline()
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(still_flagged, 0)
+        self.assertEqual(self.request.customer_message_ack_at, message.date)
+        self.assertEqual(
+            self.request.customer_message_external_ack_at, message.date
+        )
+        self.assertFalse(self._unread_for(self.request, self.internal_user))
+        self.assertFalse(self._unread_for(self.request, self.external_user))
+
+    def test_outstanding_history_stays_flagged(self):
+        message = _post_tenant_message(self.request, self.mimer_user)
+        self._create_inbox_notification(
+            message, self.internal_user.partner_id, is_read=False
+        )
+        self._reset_to_pre_migration_state(self.request)
+
+        updated, still_flagged = self._baseline()
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(still_flagged, 1)
+        self.assertFalse(self.request.customer_message_ack_at)
+        self.assertTrue(self._unread_for(self.request, self.internal_user))
+
+    def test_message_with_no_inbox_notification_is_baselined_as_read(self):
+        # THE regression this migration exists for. MIM-1844's aggregate joined
+        # FROM mail_notification, so this request got no row and kept NULL acks.
+        message = _post_tenant_message(self.request, self.mimer_user)
+        self._notifications(self.request).unlink()
+        self._reset_to_pre_migration_state(self.request)
+
+        self._baseline()
+
+        self.assertEqual(self.request.customer_message_ack_at, message.date)
+        self.assertFalse(self._unread_for(self.request, self.internal_user))
+        self.assertFalse(self._unread_for(self.request, self.external_user))
+
+    def test_baseline_backfills_the_sort_input(self):
+        message = _post_tenant_message(self.request, self.mimer_user)
+        self._create_inbox_notification(
+            message, self.internal_user.partner_id, is_read=True
+        )
+        self._reset_to_pre_migration_state(self.request)
+
+        self._baseline()
+
+        self.assertEqual(self.request.last_customer_message_at, message.date)
+        # Acked, so it must not be promoted by _order.
+        self.assertFalse(self.request.customer_message_unread_internal)
+        self.assertFalse(self.request.customer_message_unread_external)
+
+    def test_request_without_tenant_messages_is_untouched(self):
+        self._reset_to_pre_migration_state(self.request)
+        updated, still_flagged = self._baseline()
+        self.assertEqual(updated, 0)
+        self.assertEqual(still_flagged, 0)
+        self.assertFalse(self.request.last_customer_message_at)
+
+    def test_rerun_does_not_clobber_a_post_upgrade_ack(self):
+        message = _post_tenant_message(self.request, self.mimer_user)
+        self._create_inbox_notification(
+            message, self.internal_user.partner_id, is_read=True
+        )
+        self._reset_to_pre_migration_state(self.request)
+        self._baseline()
+
+        later = self.request.customer_message_ack_at + timedelta(days=1)
+        self.request.sudo().write({"customer_message_ack_at": later})
+
+        self._baseline()
+
+        self.assertEqual(self.request.customer_message_ack_at, later)
+
+    def test_contractor_read_state_does_not_decide_the_verdict(self):
+        # Contractor inbox rows carry no signal about whether the tenant's
+        # message is outstanding — the reason MIM-1844 documents.
+        # Subscribe the contractor first: team membership alone does not make
+        # them a follower — real production inbox notifications for a
+        # contractor require it. Seeded directly (see
+        # _create_inbox_notification) since message_post()'s own recipient
+        # computation cannot be relied on here: the fallback subtype for an
+        # un-typed post is mail.mt_note (default=False), so a plain
+        # message_subscribe() never enrolls the follower for it.
+        self.request.sudo().message_subscribe(
+            partner_ids=self.external_user.partner_id.ids
+        )
+        message = _post_tenant_message(self.request, self.mimer_user)
+        contractor_rows = self._create_inbox_notification(
+            message, self.external_user.partner_id, is_read=False
+        )
+        self.assertTrue(
+            contractor_rows,
+            "no contractor inbox row — the test would not exercise the FILTER",
+        )
+        self._reset_to_pre_migration_state(self.request)
+
+        _updated, still_flagged = self._baseline()
+
+        self.assertEqual(still_flagged, 0)
