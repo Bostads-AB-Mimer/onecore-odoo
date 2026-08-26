@@ -90,3 +90,21 @@ class TestMyPagesMessage(TransactionCase):
         # have made this raise where it must not.
         message = self._post(self.hidden_request, message_type="comment")
         self.assertEqual(message.message_type, "comment")
+
+    def test_sms_payload_includes_work_order_code(self):
+        # MIM-1957: lets the kommunikationslogg link the SMS row to the errand.
+        with patch.object(
+            type(self.env["mail.message"]), "_send_sms", return_value={}
+        ) as send_mock:
+            self.env["mail.message"].create(
+                {
+                    "model": "maintenance.request",
+                    "res_id": self.request.id,
+                    "body": "Hej!",
+                    "message_type": "tenant_sms",
+                }
+            )
+        self.assertEqual(
+            send_mock.call_args.kwargs.get("work_order_code"),
+            f"od-{self.request.id}",
+        )

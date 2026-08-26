@@ -184,6 +184,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "to": to_email,
@@ -192,6 +193,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -213,6 +215,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "phoneNumber": phone_number,
@@ -220,6 +223,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -285,6 +289,7 @@ class OneCoreMailMessage(models.Model):
                 # log entry for the outbound SMS/email.
                 contact_code = the_record.tenant_id.contact_code
                 triggered_by_user = self.env.user.name
+                work_order_code = f"od-{the_record.id}"
 
                 # Mina sidor only: nothing is sent, the message is published by
                 # existing on the record. Refuse it outright when the errand is
@@ -299,7 +304,7 @@ class OneCoreMailMessage(models.Model):
                             )
                         )
                     self._log_my_pages_message(
-                        f"od-{the_record.id}",
+                        work_order_code,
                         contact_code,
                         body,
                         triggered_by_user,
@@ -313,6 +318,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_sms_result is None:
@@ -327,6 +333,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None:
@@ -341,6 +348,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
                     send_sms_result = self._send_sms(
                         the_record.tenant_id.phone_number,
@@ -348,6 +356,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None and send_sms_result is not None:
