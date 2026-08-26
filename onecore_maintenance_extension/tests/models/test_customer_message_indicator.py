@@ -6,6 +6,10 @@ message. Acknowledgement is shared within each audience and split between them,
 mirroring action_acknowledge_dialog.
 """
 
+import importlib.util
+import os
+
+from odoo import fields
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
@@ -55,6 +59,24 @@ def _post_tenant_message(
     return request.with_user(mimer_user).message_post(
         body=body, message_type=message_type
     )
+
+
+def _load_ack_rename_migration():
+    """Load migrations/19.0.1.0.6/pre-migration.py by path.
+
+    The migration lives outside the importable package tree (the directory
+    name is not a valid Python identifier), so it has to be loaded from its
+    file location. Mirrors the idiom test_new_customer_info_indicator.py used
+    for the 19.0.1.0.5 post-migration.
+    """
+    module_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    path = os.path.join(module_root, "migrations", "19.0.1.0.6", "pre-migration.py")
+    spec = importlib.util.spec_from_file_location("mim_1960_pre_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class CustomerMessageCase(TransactionCase):
@@ -146,3 +168,80 @@ class TestAckColumnRename(CustomerMessageCase):
             "entreprenör",
             fields_["customer_message_external_ack_at"].string.lower(),
         )
+
+
+@tagged("onecore")
+class TestAckRenameMigration(CustomerMessageCase):
+    """Covers migrations/19.0.1.0.6/pre-migration.py directly. The suite
+    installs modules fresh and never upgrades, so nothing else in the run
+    exercises this script — see its own docstring for why it must be a
+    pre-migration and why a rename resets both acks to NULL.
+
+    TransactionCase rolls back and Postgres DDL is transactional, so
+    renaming maintenance_request's columns inside a test is safe; each test
+    ends with the columns back the way the ORM expects them (either the
+    migration renamed them back, or it never touched them).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.migration = _load_ack_rename_migration()
+
+    def test_path_b_renames_and_resets_stale_narrow_acks(self):
+        # Simulate a test/dev database still on the unreleased MIM-1844
+        # build: the old columns exist, and one carries a non-NULL ack
+        # written under the old narrow discriminator.
+        cr = self.env.cr
+        cr.execute(
+            "ALTER TABLE maintenance_request "
+            'RENAME COLUMN "customer_message_ack_at" TO "new_customer_info_ack_at"'
+        )
+        cr.execute(
+            "ALTER TABLE maintenance_request "
+            'RENAME COLUMN "customer_message_external_ack_at" '
+            'TO "new_customer_info_external_ack_at"'
+        )
+        stale_ack = fields.Datetime.now()
+        cr.execute(
+            "UPDATE maintenance_request SET new_customer_info_ack_at = %s "
+            "WHERE id = %s",
+            (stale_ack, self.request.id),
+        )
+        self.env.invalidate_all()
+
+        self.migration.migrate(cr, "19.0.1.0.5")
+        self.env.invalidate_all()
+
+        cr.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'maintenance_request'
+              AND column_name IN (
+                  'customer_message_ack_at',
+                  'customer_message_external_ack_at',
+                  'new_customer_info_ack_at',
+                  'new_customer_info_external_ack_at'
+              )
+            """)
+        remaining = {row[0] for row in cr.fetchall()}
+        self.assertEqual(
+            remaining, {"customer_message_ack_at", "customer_message_external_ack_at"}
+        )
+        self.assertFalse(self.request.customer_message_ack_at)
+        self.assertFalse(self.request.customer_message_external_ack_at)
+
+    def test_path_a_is_a_no_op_on_the_natural_test_schema(self):
+        # The test database's schema already matches post-upgrade production:
+        # only the new columns exist. This is also the shape of a real
+        # 1.0.4 -> 1.0.6 production upgrade at the point this script runs
+        # (see its docstring) — neither old nor new columns exist there
+        # either, so the loop finds nothing on both counts, but asserting
+        # against a seeded ack on the natural test schema is the closest
+        # this suite can get to that without fabricating a third schema
+        # shape.
+        seeded_ack = fields.Datetime.now()
+        self.request.customer_message_ack_at = seeded_ack
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.4")
+        self.env.invalidate_all()
+
+        self.assertEqual(self.request.customer_message_ack_at, seeded_ack)
