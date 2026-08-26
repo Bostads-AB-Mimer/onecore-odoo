@@ -1,4 +1,4 @@
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, tagged
@@ -91,8 +91,25 @@ class TestMyPagesMessage(TransactionCase):
         message = self._post(self.hidden_request, message_type="comment")
         self.assertEqual(message.message_type, "comment")
 
+    def test_log_payload_uses_onecore_key_names(self):
+        # OneCore validates these exact camelCase keys; a rename here would pass
+        # every test in this repo and 400 in production.
+        api = MagicMock()
+        with patch.object(
+            type(self.env["mail.message"]), "get_core_api", return_value=api
+        ):
+            self._post(self.request, body="Hej!")
+        args, kwargs = api.request.call_args
+        self.assertEqual(args[0], "POST")
+        self.assertEqual(args[1], "/work-orders/log-my-pages-message")
+        self.assertEqual(
+            set(kwargs["json"]),
+            {"workOrderCode", "contactCode", "text", "triggeredByUser"},
+        )
+        self.assertEqual(kwargs["json"]["workOrderCode"], f"od-{self.request.id}")
+
     def test_sms_payload_includes_work_order_code(self):
-        # MIM-1957: lets the kommunikationslogg link the SMS row to the errand.
+        # MIM-1957: lets the communication log link the SMS row to the errand.
         with patch.object(
             type(self.env["mail.message"]), "_send_sms", return_value={}
         ) as send_mock:

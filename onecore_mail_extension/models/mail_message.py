@@ -268,6 +268,7 @@ class OneCoreMailMessage(models.Model):
 
     @api.model_create_multi
     def create(self, values_list):
+        pending_my_pages = []
         for values in values_list:
             if values["message_type"].startswith("tenant_"):
                 the_record = self.env["maintenance.request"].search(
@@ -303,11 +304,8 @@ class OneCoreMailMessage(models.Model):
                                 "Meddelanden till hyresgäst kan inte skickas."
                             )
                         )
-                    self._log_my_pages_message(
-                        work_order_code,
-                        contact_code,
-                        body,
-                        triggered_by_user,
+                    pending_my_pages.append(
+                        (work_order_code, contact_code, body, triggered_by_user)
                     )
 
                 # send by sms
@@ -367,5 +365,12 @@ class OneCoreMailMessage(models.Model):
                         values["message_type"] = "failed_tenant_mail_and_sms"
 
         messages = super(OneCoreMailMessage, self).create(values_list)
+
+        # Logged after the records exist: the log call is not transactional, so
+        # firing it inside the loop would leave OneCore asserting a publication
+        # that a later rollback erased. Safe to defer because nothing reads the
+        # result — a failed log call must never change message_type.
+        for args in pending_my_pages:
+            self._log_my_pages_message(*args)
 
         return messages
