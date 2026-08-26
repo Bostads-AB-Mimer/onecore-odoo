@@ -12,12 +12,21 @@
                         <field name="state" invisible="1" />
                         <field name="object_option_ref" invisible="1" />
                         <field name="is_vacant" invisible="1" />
+                        <field name="has_unsupported_contract" invisible="1" />
 
                         <div class="alert alert-warning" role="alert"
                             invisible="state != 'preview' or not is_vacant">
                             <i class="fa fa-exclamation-triangle me-2" />
                             Hyresobjektet saknar aktivt kontrakt. Det kopplas till
                             ärendet utan hyresgäst (tomställt).
+                        </div>
+
+                        <div class="alert alert-warning" role="alert"
+                            invisible="state != 'preview' or not has_unsupported_contract">
+                            <i class="fa fa-exclamation-triangle me-2" />
+                            Hyresobjektet har kontrakt av en typ som inte kan hanteras
+                            här. Det kopplas till ärendet utan kontrakt och hyresgäst,
+                            men ärendet markeras inte som tomställt.
                         </div>
 
                         <group invisible="state != 'input'">

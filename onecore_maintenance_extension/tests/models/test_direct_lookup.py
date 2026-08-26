@@ -143,7 +143,7 @@ class TestLoadObjectContracts(TransactionCase):
         result = self.service.load_object_contracts(request, "216-704-00-0034")
         self.assertEqual(result["object_option"].code, "0034")
 
-    def test_unmappable_contract_type_still_offers_the_object_as_vacant(self):
+    def test_unmappable_contract_type_still_offers_the_object(self):
         # A contract whose type we cannot map to an object kind is not evidence
         # that the objektnummer is wrong — the object itself may well exist, and
         # telling the user to check the number would be a dead end.
@@ -157,6 +157,29 @@ class TestLoadObjectContracts(TransactionCase):
 
         self.assertFalse(result["lease_options"])
         self.assertEqual(result["object_option"].code, "RES-001")
+
+    def test_unmappable_contract_type_is_not_reported_as_vacant(self):
+        # ...but it is not a vacancy either: OneCore did report a contract. The
+        # caller has to tell the two apart, because only a real vacancy may flag
+        # the ärende manually tomställd.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_leases_unfiltered.return_value = [
+            dict(RES_LEASE, type="Korttidskontrakt")
+        ]
+        self.core_api.fetch_residence.return_value = RESIDENCE
+
+        result = self.service.load_object_contracts(request, "216-034-03-0101")
+
+        self.assertTrue(result["unsupported_contract"])
+
+    def test_object_without_any_contract_is_reported_as_vacant(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_leases_unfiltered.return_value = []
+        self.core_api.fetch_residence.return_value = RESIDENCE
+
+        result = self.service.load_object_contracts(request, "216-034-03-0101")
+
+        self.assertFalse(result["unsupported_contract"])
 
     def test_not_found_returns_none(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
@@ -313,3 +336,26 @@ class TestLoadContactContracts(TransactionCase):
         self.core_api.fetch_leases_unfiltered.side_effect = _http_error(503)
         with self.assertRaises(LookupFailed):
             self.service.load_contact_contracts(request, "P005468")
+
+    def test_objects_sharing_a_code_are_kept_apart(self):
+        # Object options are reused so a renewed contract lists its object once.
+        # The reuse key must be the rental id: `code` is a local payload field and
+        # two different objects can carry the same one, which would otherwise point
+        # both contracts at whichever object was created first.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        other_lease = _lease(
+            "216-034-03-0202/01", "216-034-03-0202", "Bostadskontrakt", "P005468"
+        )
+        self.core_api.fetch_leases_unfiltered.return_value = [RES_LEASE, other_lease]
+        self.core_api.fetch_residence.side_effect = lambda rental_id: _residence(
+            rental_id, "SAME-CODE"
+        )
+
+        result = self.service.load_contact_contracts(request, "P005468")
+
+        objects = result["lease_options"].rental_property_option_id
+        self.assertEqual(len(objects), 2)
+        self.assertEqual(
+            {o.rental_id for o in objects},
+            {"216-034-03-0101", "216-034-03-0202"},
+        )

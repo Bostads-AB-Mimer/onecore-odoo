@@ -8,6 +8,8 @@ from ..utils.test_utils import create_maintenance_request
 
 SOFT_RELOAD = {"type": "ir.actions.client", "tag": "soft_reload"}
 
+WIZARD_PATH = "odoo.addons.onecore_maintenance_extension.models.backfill_wizard"
+
 
 def _residence(rental_id, code):
     return {
@@ -456,3 +458,51 @@ class TestBackfillWizard(TransactionCase):
         wiz.lookup_value = "   "
         with self.assertRaises(UserError):
             wiz.action_search()
+
+    def test_unsupported_contract_does_not_mark_the_request_vacated(self):
+        # The object has a contract, just one of a type this wizard cannot map to
+        # an object kind. It is attached on its own, but the ärende must NOT be
+        # flagged manually tomställd: that flag is permanent and would suppress the
+        # tenant refetch for an object that is in fact let.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns(
+            [dict(RES_LEASE, type="Korttidskontrakt")], residence=RESIDENCE
+        )
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            self.assertFalse(wiz.is_vacant)
+            self.assertTrue(wiz.has_unsupported_contract)
+            wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.rental_property_id)
+        self.assertFalse(reloaded.manually_vacated)
+
+    def test_option_belonging_to_another_user_is_refused(self):
+        # The option models have no record rule, only a group-level ACL, so the id
+        # posted from the dialog has to be checked against its owner.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.lease_option_id.user_id = self.env.ref("base.public_user")
+            with self.assertRaises(UserError):
+                wiz.action_confirm()
+
+    def test_auth_failure_reports_outage_not_wrong_number(self):
+        # CoreApi authenticates in its constructor, so on a cold token cache an
+        # outage hits before the lookup starts — and must still read as an outage.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch(
+            f"{WIZARD_PATH}.core_api.CoreApi", side_effect=ConnectionError("boom")
+        ):
+            with self.assertRaises(UserError) as caught:
+                wiz.action_search()
+        self.assertIn("misslyckades", str(caught.exception))

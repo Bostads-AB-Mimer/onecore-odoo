@@ -14,8 +14,9 @@ class FacilityHandler(RentalObjectBaseHandler):
                 continue
 
             # Reuse existing facility option if one already exists for this facility
+            rental_id = item.get("rental_id")
             facility_option = self._existing_option(
-                "maintenance.facility.option", facility.get("code")
+                "maintenance.facility.option", rental_id
             )
 
             if not facility_option:
@@ -23,6 +24,7 @@ class FacilityHandler(RentalObjectBaseHandler):
                     {
                         "user_id": self.env.user.id,
                         "name": facility.get("name", "Namn saknas"),
+                        "rental_id": rental_id,
                         "code": facility.get("code"),
                         "type_name": facility.get("type", {}).get("name"),
                         "type_code": facility.get("type", {}).get("code"),

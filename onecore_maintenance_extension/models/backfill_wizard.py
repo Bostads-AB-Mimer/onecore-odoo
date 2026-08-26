@@ -51,11 +51,17 @@ class MaintenanceBackfillWizard(models.TransientModel):
             ("maintenance.parking.space.option", "Bilplats"),
             ("maintenance.facility.option", "Lokal"),
         ],
-        string="Hyresobjekt (tomställt)",
+        string="Hyresobjekt (utan kontrakt)",
         readonly=True,
     )
-    # True when the search resolved an object with no contract → attached as vacant.
+    # True when the search resolved an object OneCore reports no contract for →
+    # attached as vacant.
     is_vacant = fields.Boolean(readonly=True)
+    # True when the object does have contracts, but none of a type that maps to an
+    # object kind. The object is attached on its own like the vacant case, but the
+    # ärende must not be flagged tomställd — it is let, just not by a contract we
+    # can resolve.
+    has_unsupported_contract = fields.Boolean(readonly=True)
     # Read-only preview of what will be attached (kept in sync with the contract).
     prev_object_id = fields.Char(string="Hyresobjekt", readonly=True)
     prev_object_address = fields.Char(string="Adress", readonly=True)
@@ -64,7 +70,16 @@ class MaintenanceBackfillWizard(models.TransientModel):
     prev_tenant_contact = fields.Char(string="Kundnummer", readonly=True)
 
     def _get_core_api(self):
-        return core_api.CoreApi(self.env)
+        """The client, with a failed authentication reported like a failed lookup.
+
+        ``CoreApi`` authenticates in its constructor when no token is cached, so
+        an outage can surface here rather than on the call itself — raw, and
+        outside the caller's ``LookupFailed`` guard.
+        """
+        try:
+            return core_api.CoreApi(self.env)
+        except Exception as err:
+            raise LookupFailed(str(err)) from err
 
     @property
     def _value_label(self):
@@ -77,8 +92,8 @@ class MaintenanceBackfillWizard(models.TransientModel):
         if not value:
             raise exceptions.UserError(_("Ange ett %s.") % self._value_label)
 
-        service = DirectLookupService(self.env, self._get_core_api())
         try:
+            service = DirectLookupService(self.env, self._get_core_api())
             if self.lookup_kind == "tenant":
                 result = service.load_contact_contracts(
                     self.maintenance_request_id, value
@@ -105,6 +120,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
             "lease_option_id": False,
             "object_option_ref": False,
             "is_vacant": False,
+            "has_unsupported_contract": False,
         }
         lease_options = result.get("lease_options")
         if lease_options:
@@ -114,10 +130,15 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 self._preview_vals(self._object_option_of(active), self._tenant_of(active))
             )
         else:
-            # Vacant object (objektnummer with no contract): just attach the object.
+            # Objektnummer with no contract to attach: offer the object on its own.
+            # Genuinely vacant and "has contracts, none of a type we can map" look
+            # the same here but must not be treated the same — only the former may
+            # flag the ärende tomställt.
             obj = result["object_option"]
+            unsupported = result.get("unsupported_contract", False)
             vals["object_option_ref"] = f"{obj._name},{obj.id}"
-            vals["is_vacant"] = True
+            vals["is_vacant"] = not unsupported
+            vals["has_unsupported_contract"] = unsupported
             vals.update(self._preview_vals(obj, None))
         self.write(vals)
         return self.action_window()
@@ -150,6 +171,7 @@ class MaintenanceBackfillWizard(models.TransientModel):
 
         if self.lease_option_id and self.lease_option_id.exists():
             lease_option = self.lease_option_id
+            self._check_own_option(lease_option)
             route = route_for_lease_option(lease_option)
             if not route:
                 raise exceptions.UserError(
@@ -162,12 +184,13 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 raise exceptions.UserError(
                     _("Resultatet är inte längre giltigt. Sök igen.")
                 )
+            self._check_own_option(object_option)
             route = route_for_object_option(object_option)
             if not route:
                 raise exceptions.UserError(
                     _("Kunde inte avgöra hyresobjektets typ.")
                 )
-            self._attach(request, route, object_option, None)
+            self._attach(request, route, object_option, None, vacant=self.is_vacant)
         else:
             raise exceptions.UserError(_("Sök fram ett resultat först."))
 
@@ -175,10 +198,27 @@ class MaintenanceBackfillWizard(models.TransientModel):
         # data shows immediately (act_window_close alone leaves the stale form).
         return {"type": "ir.actions.client", "tag": "soft_reload"}
 
-    def _attach(self, request, route, object_option, lease_option):
+    def _check_own_option(self, option):
+        """Refuse an option row this user's own search did not create.
+
+        The option models carry a group-level ACL and no record rule, so the ids
+        posted back from the dialog are whatever the client sent. Everything the
+        wizard attaches is materialized from them, on an already-saved ärende.
+        """
+        if option.user_id != self.env.user:
+            raise exceptions.UserError(
+                _("Resultatet är inte längre giltigt. Sök igen.")
+            )
+
+    def _attach(self, request, route, object_option, lease_option, vacant=False):
         """Materialize object (+ contract + tenant), align the space type to the
         object's kind, and delete whatever we replaced (including a different-typed
         object left over from a previous attach).
+
+        ``vacant`` says whether an attach without a contract is a real vacancy.
+        Only then is the ärende flagged ``manually_vacated`` — that flag is
+        permanent, so an object whose contracts we merely could not map must not
+        get it.
 
         Every write runs with change tracking suppressed and one summary note is
         posted at the end: the attach touches half a dozen fields, and a
@@ -205,11 +245,17 @@ class MaintenanceBackfillWizard(models.TransientModel):
             if request.manually_vacated:
                 vals["manually_vacated"] = False
         else:
-            # Vacant object: leave it genuinely vacant — drop the old contract and
-            # tenant, and flag it so the empty-tenant compute won't silently refetch.
-            vals.update(
-                {"lease_id": False, "tenant_id": False, "manually_vacated": True}
-            )
+            # No contract attached — the old one belongs to whatever object was
+            # attached before, so it goes either way.
+            vals.update({"lease_id": False, "tenant_id": False})
+            if vacant:
+                # Genuinely vacant: flag it so the empty-tenant compute won't
+                # silently refetch a tenant who moves in later.
+                vals["manually_vacated"] = True
+            elif request.manually_vacated:
+                # The object IS let, we just cannot resolve its contract. Leaving
+                # the flag on would permanently suppress the refetch.
+                vals["manually_vacated"] = False
 
         untracked = request.with_context(skip_change_tracking=True)
         if vals:

@@ -103,19 +103,30 @@ class DirectLookupService:
         """Objektnummer entry: resolve the object regardless of the request's
         current space type and create its object + contract + tenant options.
 
-        Returns ``{"lease_options", "object_option"}`` or ``None`` when OneCore
-        knows no such object. ``object_option`` carries the vacant case (object
-        found, no contract). Raises :class:`LookupFailed` if a call failed.
+        Returns ``{"lease_options", "object_option", "unsupported_contract"}`` or
+        ``None`` when OneCore knows no such object. ``object_option`` carries the
+        contract-less case; ``unsupported_contract`` tells apart its two flavours —
+        False when OneCore reported no contract at all (a real vacancy), True when
+        it reported contracts but none of a type that maps to an object kind. The
+        caller needs the difference: only a real vacancy may flag the ärende
+        tomställd. Raises :class:`LookupFailed` if a call failed.
         """
         leases = self._fetch_leases("rentalObjectId", rental_id)
         if leases:
             lease_options = self._build_options(request, leases)
             if lease_options:
-                return {"lease_options": lease_options, "object_option": None}
+                return {
+                    "lease_options": lease_options,
+                    "object_option": None,
+                    "unsupported_contract": False,
+                }
         # No usable contract — either none at all, or none of a type we can map to
         # an object kind. Neither means the objektnummer is wrong, so still try to
-        # resolve the object itself and offer it as vacant.
-        return self._load_vacant_object(request, rental_id)
+        # resolve the object itself and offer it on its own.
+        result = self._load_object_without_contract(request, rental_id)
+        if result:
+            result["unsupported_contract"] = bool(leases)
+        return result
 
     def load_contact_contracts(self, request, contact_code):
         """Kundnummer entry: fetch ALL of the customer's contracts (any object
@@ -196,9 +207,10 @@ class DirectLookupService:
             raise LookupFailed("No options could be built from the OneCore payload")
         return lease_options
 
-    def _load_vacant_object(self, request, rental_id):
-        """No contract for this objektnummer: the object's kind is unknown, so try
-        each fetcher until one answers, and offer the object as vacant."""
+    def _load_object_without_contract(self, request, rental_id):
+        """No contract to attach for this objektnummer: the object's kind is
+        unknown, so try each fetcher until one answers, and offer the object on
+        its own."""
         failed = False
         for kind, route in _ROUTES.items():
             try:
@@ -211,9 +223,11 @@ class DirectLookupService:
 
             BaseMaintenanceHandler(request, self.core_api)._delete_options()
             if not self._create_options(
-                request, route, core_api.build_form_item(None, kind, obj)
+                request,
+                route,
+                core_api.build_form_item(None, kind, obj, rental_id=rental_id),
             ):
-                raise LookupFailed("Could not build options for the vacant object")
+                raise LookupFailed("Could not build options for the object")
             object_option = self.env[route["option_model"]].search(
                 [("user_id", "=", self.env.user.id)], limit=1
             )

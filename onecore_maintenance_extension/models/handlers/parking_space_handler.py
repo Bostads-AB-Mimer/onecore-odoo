@@ -16,8 +16,9 @@ class ParkingSpaceHandler(RentalObjectBaseHandler):
             address_info = parking_space.get("address", {}) if parking_space else {}
 
             # Reuse existing parking space option if one already exists for this space
+            rental_id = item.get("rental_id")
             parking_space_option = self._existing_option(
-                "maintenance.parking.space.option", parking_space_info.get("code")
+                "maintenance.parking.space.option", rental_id
             )
 
             if not parking_space_option:
@@ -27,6 +28,7 @@ class ParkingSpaceHandler(RentalObjectBaseHandler):
                     {
                         "user_id": self.env.user.id,
                         "name": parking_space_info.get("name", "Namn saknas"),
+                        "rental_id": rental_id,
                         "code": parking_space_info.get("code"),
                         "type_name": parking_space_info.get(
                             "parkingSpaceType", {}

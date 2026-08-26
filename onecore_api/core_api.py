@@ -46,14 +46,17 @@ KINDS_WITH_MAINTENANCE_UNITS = ("residence", "facility")
 MAINTENANCE_UNIT_TYPES = ["Tvättstuga", "Miljöbod", "Lekplats"]
 
 
-def build_form_item(lease, kind, obj, maintenance_units=None):
+def build_form_item(lease, kind, obj, maintenance_units=None, rental_id=None):
     """The per-contract payload shape the space-type handlers consume.
 
-    ``kind`` is one of :data:`OBJECT_KIND_FETCHERS`; ``lease`` may be None for a
-    vacant object.
+    ``kind`` is one of :data:`OBJECT_KIND_FETCHERS`; ``lease`` may be None for an
+    object with no contract, in which case ``rental_id`` has to be passed: it is
+    the id the object was fetched by, and the only identifier available for every
+    object kind (the parking and facility payloads do not carry one).
     """
     return {
         "lease": lease,
+        "rental_id": rental_id or (lease or {}).get("rentalPropertyId"),
         "rental_property": obj if kind == "residence" else None,
         "parking_space": obj if kind == "parking" else None,
         "facility": obj if kind == "facility" else None,
@@ -607,7 +610,11 @@ class CoreApi:
                         # Fetch parking space
                         parking_space = self.fetch_parking_space(value)
                         if parking_space:
-                            data.append(build_form_item(None, "parking", parking_space))
+                            data.append(
+                                build_form_item(
+                                    None, "parking", parking_space, rental_id=value
+                                )
+                            )
                             return data
                     elif location_type == "Lokal":
                         # Fetch facility
@@ -623,7 +630,11 @@ class CoreApi:
 
                             data.append(
                                 build_form_item(
-                                    None, "facility", facility, maintenance_units
+                                    None,
+                                    "facility",
+                                    facility,
+                                    maintenance_units,
+                                    rental_id=value,
                                 )
                             )
                             return data
@@ -645,6 +656,7 @@ class CoreApi:
                                     "residence",
                                     rental_property,
                                     maintenance_units,
+                                    rental_id=value,
                                 )
                             )
                             return data

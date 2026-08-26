@@ -42,18 +42,23 @@ class RentalObjectBaseHandler(BaseMaintenanceHandler):
                     tenant_records, search_type, search_value
                 ).id
 
-    def _existing_option(self, model_name, code):
-        """An object option already created for ``code``, if any.
+    def _existing_option(self, model_name, rental_id):
+        """An object option already created for ``rental_id``, if any.
 
         Several contracts can point at the same object (a renewed contract is two
         leases on one object, both returned because upcoming leases are included).
         Reusing the option keeps the object listed once in the form's dropdown.
-        Codeless payloads are never matched — every one of them would look alike.
+
+        Keyed on the rentalId, which is what identifies an object to OneCore — the
+        payloads' ``code`` is a local field and two objects can share one, which
+        would silently point both contracts at whichever was created first.
+        Payloads without a rentalId are never matched — they would all look alike.
         """
-        if not code:
+        if not rental_id:
             return self.env[model_name].browse()
         return self.env[model_name].search(
-            [("user_id", "=", self.env.user.id), ("code", "=", code)], limit=1
+            [("user_id", "=", self.env.user.id), ("rental_id", "=", rental_id)],
+            limit=1,
         )
 
     def _clear_lease_and_tenant_options(self):
