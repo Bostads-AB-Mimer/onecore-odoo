@@ -140,9 +140,16 @@ patch(Composer.prototype, {
     get postData() {
         const data = super.postData;
         if (this.thread?.model === "maintenance.request") {
-            data.sendSMS = this.tenantState.sendSMS;
-            data.sendEmail = this.tenantState.sendEmail;
-            data.sendMyPages = this.myPagesChecked;
+            // Channel selection only exists in message mode. In note mode the
+            // checkboxes are not rendered, so these flags must not reach the
+            // store patch and steer message_type — sendMyPages defaults to true
+            // and would otherwise turn every internal log note into a Mina
+            // sidor publication.
+            if (this.props.type === "message") {
+                data.sendSMS = this.tenantState.sendSMS;
+                data.sendEmail = this.tenantState.sendEmail;
+                data.sendMyPages = this.myPagesChecked;
+            }
             data.informOpposite = this.tenantState.informOpposite;
         }
         return data;
