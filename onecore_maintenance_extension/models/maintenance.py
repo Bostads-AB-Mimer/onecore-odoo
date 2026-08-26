@@ -25,6 +25,7 @@ from .constants import (
     PRIORITY_OPTIONS,
     CREATION_ORIGINS,
     FORM_STATES,
+    CUSTOMER_MESSAGE_TYPE,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -200,6 +201,11 @@ class OneCoreMaintenanceRequest(
         string="Okvitterad ny kundinfo",
         compute="_compute_has_unread_new_customer_info",
         store=False,
+    )
+    last_customer_message_at = fields.Datetime(
+        string="Senaste meddelande från kund",
+        help="Sätts automatiskt när ett meddelande från kund kommer in via "
+        "Mina sidor. Driver sorteringen i kanbanvyn.",
     )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
@@ -501,6 +507,16 @@ class OneCoreMaintenanceRequest(
         for record in self:
             if record.id in unread_res_ids:
                 record[indicator_field] = True
+
+    def message_post(self, **kwargs):
+        message = super().message_post(**kwargs)
+        # Stored so _order can promote the request — a per-user computed field
+        # cannot be ordered on. sudo() because the poster is the work-order
+        # service's integration account, which need not hold write access on
+        # every field of the request.
+        if message.message_type == CUSTOMER_MESSAGE_TYPE:
+            self.sudo().write({"last_customer_message_at": message.date})
+        return message
 
     def _get_allowed_message_params(self):
         # Let the chatter composer flag a log note as "inform the opposite
