@@ -643,85 +643,19 @@ class OneCoreMaintenanceRequest(
                 not ack_at or record.master_key_changed_at > ack_at
             )
 
-    @api.depends(
-        "message_ids.date",
-        "message_ids.author_id",
-        "message_ids.notification_ids",
-        "customer_message_ack_at",
-        "customer_message_external_ack_at",
-        "recently_added_tenant",
-    )
+    @api.depends("recently_added_tenant")
     @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
-        # "Ny kundinfo" is the tenant -> case channel (Mina sidor). Both
-        # audiences see it — an external contractor reads the tenant's message
-        # in the same chatter — but each side acknowledges separately via its
-        # own timestamp, mirroring the audience split in
-        # _compute_dialog_indicators. A contractor's ack must never suppress
-        # the tenant's message for Mimer. depends_context("uid") keeps the
-        # cache keyed per user so the two sides cannot read each other's value.
-        for record in self:
-            record.has_unread_new_customer_info = False
-
-        if not self:
-            return
-
+        # "Ny kundinfo" now means exactly what the name says: the customer's
+        # *information* was updated. The tenant was back-filled from the OneCore
+        # API — a Mimer data-quality flag, not tenant communication, so it never
+        # reaches external contractors. Tenant messages moved to
+        # has_unread_customer_message (MIM-1960).
         is_external = ExternalContractorService(self.env).is_external_contractor()
-        ack_field = (
-            "customer_message_external_ack_at"
-            if is_external
-            else "customer_message_ack_at"
-        )
-
-        # No strict separation on the Mimer side: a freshly-added tenant also
-        # counts as new customer info. It contributes until acknowledged (the
-        # internal ack clears recently_added_tenant), so no timestamp
-        # comparison is needed. It is a Mimer-internal data-quality flag —
-        # tenant back-filled from the OneCore API, not tenant communication —
-        # so it never raises the badge for external contractors.
-        if not is_external:
-            for record in self:
-                if record.recently_added_tenant:
-                    record.has_unread_new_customer_info = True
-
-        # Mina-sidor communications are messages authored by the odoo@mimer.nu
-        # integration account that generated an inbox notification. This mirrors
-        # the former _compute_new_mimer_notification discriminator, but keyed on
-        # the acking side's ack timestamp instead of per-user
-        # mail.notification read state. sudo() because we now look across every
-        # recipient partner's inbox notifications, not just the current user's.
-        notifications = (
-            self.env["mail.notification"]
-            .sudo()
-            .search(
-                [
-                    ("mail_message_id.model", "=", "maintenance.request"),
-                    ("mail_message_id.res_id", "in", self.ids),
-                    ("notification_type", "=", "inbox"),
-                    (
-                        "mail_message_id.author_id.user_ids.login",
-                        "=",
-                        "odoo@mimer.nu",
-                    ),
-                ]
-            )
-        )
-        latest_by_request = {}
-        for notif in notifications:
-            message = notif.mail_message_id
-            if not message.date:
-                continue
-            current = latest_by_request.get(message.res_id)
-            if not current or message.date > current:
-                latest_by_request[message.res_id] = message.date
-
         for record in self:
-            latest = latest_by_request.get(record.id)
-            if not latest:
-                continue
-            ack_at = record[ack_field]
-            if not ack_at or latest > ack_at:
-                record.has_unread_new_customer_info = True
+            record.has_unread_new_customer_info = (
+                False if is_external else record.recently_added_tenant
+            )
 
     @api.depends(
         "last_customer_message_at",
@@ -826,27 +760,17 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Mark "Ny kundinfo" read for the acking user's whole side.
+        """Clear the "Ny kundinfo" flag for every Mimer user on the request.
 
-        Acknowledgement is one shared timestamp per side, like
-        action_acknowledge_dialog: the first Mimer handler to click clears the
-        badge for all Mimer users, and the first external contractor to click
-        clears it for all contractors. The sides are independent — a
-        contractor's ack must never suppress the tenant's message for Mimer.
+        There is no timestamp: the signal *is* recently_added_tenant, so
+        clearing the flag is the acknowledgement. Internal only — the flag also
+        drives _order for everyone, and contractors never see the badge.
         """
         self.ensure_one()
-        now = fields.Datetime.now()
         if ExternalContractorService(self.env).is_external_contractor():
-            self.customer_message_external_ack_at = now
-        else:
-            self.customer_message_ack_at = now
-            # Per "no strict separation", the tenant-onboarding flag is cleared
-            # too so the badge fully disappears. Internal side only: it is a
-            # Mimer data-quality flag and it drives _order for everyone.
-            if self.recently_added_tenant:
-                self.recently_added_tenant = False
-        # Non-stored computed field — force a recompute so the chatter button
-        # and the kanban chip re-evaluate immediately.
+            return True
+        if self.recently_added_tenant:
+            self.recently_added_tenant = False
         self.invalidate_recordset(["has_unread_new_customer_info"])
         return True
 
