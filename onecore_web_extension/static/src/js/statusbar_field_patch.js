@@ -35,11 +35,15 @@ patch(StatusBarField.prototype, {
         isSelected: Boolean(currentValue && option.id === currentValue.id),
         isDisabled:
           (currentStageName === "Väntar på handläggning" &&
-            !record.data.user_id) ||
+            !record.data.user_id &&
+            // MIM-486: returning a request must not require an assigned
+            // resource
+            option.display_name !== "Återsänd") ||
           (this.userIsExternalContractor &&
             (option.display_name === "Avslutad" ||
               currentStageName === "Avslutad" ||
-              currentStageName === "Utförd")),
+              currentStageName === "Utförd" ||
+              currentStageName === "Återsänd")),
       }));
     } else {
       // Selection
@@ -66,6 +70,22 @@ patch(StatusBarField.prototype, {
       record.model.config.resModel === "maintenance.request";
     const goingToUtford =
       isMaintenanceRequest && item.label === "Utförd" && !item.isSelected;
+    const goingToAtersand =
+      isMaintenanceRequest && item.label === "Återsänd" && !item.isSelected;
+
+    // MIM-486: all users confirm before returning a request — the move
+    // hands the request back to the orderer's team.
+    if (goingToAtersand) {
+      const confirmed = await ConfirmDialog(
+        this.dialogService,
+        "Bekräfta återsändning",
+        "Är du säker på att du vill återsända ärendet?"
+      );
+      if (!confirmed) {
+        return;
+      }
+      return super.selectItem(item);
+    }
 
     if (!goingToUtford) {
       return super.selectItem(item);
@@ -85,35 +105,40 @@ patch(StatusBarField.prototype, {
       return super.selectItem(item);
     }
 
-    // Internal users on apartment ärenden: ask the component question
-    const isApartment =
-      record.data.space_caption === "Lägenhet" && !!record.resId;
-    let answer = null;
-
-    if (isApartment) {
-      answer = await askComponentQuestion(this.dialogService);
-      if (answer === "abort") {
-        return;
-      }
-    }
+    // Component question popup disabled: internal users moving an apartment
+    // ärende to Utförd no longer get the "Har du bytt ut eller ändrat..."
+    // prompt. The component wizard is still reachable via the
+    // "Uppdatera/lägg till Komponent" button on the ärende. To re-enable the
+    // popup, uncomment the two blocks below.
+    // // Internal users on apartment ärenden: ask the component question
+    // const isApartment =
+    //   record.data.space_caption === "Lägenhet" && !!record.resId;
+    // let answer = null;
+    //
+    // if (isApartment) {
+    //   answer = await askComponentQuestion(this.dialogService);
+    //   if (answer === "abort") {
+    //     return;
+    //   }
+    // }
 
     // Odoo 19's selectItem awaits record.update() + record.save(); awaiting
     // here guarantees the stage write committed before the wizard opens.
     await super.selectItem(item);
 
-    if (
-      answer === "yes" &&
-      record.resId &&
-      !record.dirty &&
-      record.data.stage_id?.id === item.value
-    ) {
-      await openComponentWizardDialog(
-        this.orm,
-        this.actionService,
-        this.notificationService,
-        record.resId,
-        this.uiService
-      );
-    }
+    // if (
+    //   answer === "yes" &&
+    //   record.resId &&
+    //   !record.dirty &&
+    //   record.data.stage_id?.id === item.value
+    // ) {
+    //   await openComponentWizardDialog(
+    //     this.orm,
+    //     this.actionService,
+    //     this.notificationService,
+    //     record.resId,
+    //     this.uiService
+    //   );
+    // }
   },
 });

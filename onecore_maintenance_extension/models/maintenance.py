@@ -1,12 +1,12 @@
 import urllib.parse
-import base64
 import uuid
-import requests
 import logging
 import json
+import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
@@ -17,6 +17,7 @@ from .services import (
     FormFieldService,
     ExternalContractorService,
     MaintenanceStageManager,
+    ManagementAreaService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -39,6 +40,11 @@ from .mixins import (
 )
 
 _logger = logging.getLogger(__name__)
+
+# Per-worker cache so the pest control badge doesn't trigger a OneCore call on
+# every form read (web_save re-reads included). Worst-case staleness = TTL.
+PEST_CONTROL_CACHE_TTL = 300  # seconds
+_pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
 
 
 class OneCoreMaintenanceRequest(
@@ -79,6 +85,7 @@ class OneCoreMaintenanceRequest(
     start_date = fields.Date("Startdatum", store=True)
     performed_date = fields.Datetime("Utförd datum", store=True, readonly=True)
     closed_date = fields.Datetime("Avslutad datum", store=True, readonly=True)
+    returned_date = fields.Datetime("Återsänd datum", store=True, readonly=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
     )
@@ -142,9 +149,9 @@ class OneCoreMaintenanceRequest(
         compute="_compute_schedule_date_date",
         store=False,
     )
-    new_mimer_notification = fields.Boolean(
-        string="New Mimer Message",
-        compute="_compute_new_mimer_notification",
+    schedule_date_after_due_date = fields.Boolean(
+        string="Planerat utförandedatum efter förfallodatum",
+        compute="_compute_schedule_date_after_due_date",
         store=False,
     )
     supplier_dialog_ack_at = fields.Datetime(
@@ -178,16 +185,74 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_master_key_change",
         store=False,
     )
+    new_customer_info_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad",
+        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ny kundinfo. "
+        "Delas av alla Mimer-användare som har tillgång till ärendet.",
+    )
+    new_customer_info_external_ack_at = fields.Datetime(
+        string="Ny kundinfo kvitterad av entreprenör",
+        help="Senaste tidpunkt en extern entreprenör kvitterade ny kundinfo. "
+        "Delas av alla entreprenörer som har tillgång till ärendet, och påverkar "
+        "aldrig Mimers egen kvittering.",
+    )
+    has_unread_new_customer_info = fields.Boolean(
+        string="Okvitterad ny kundinfo",
+        compute="_compute_has_unread_new_customer_info",
+        store=False,
+    )
     # Form-view only. Adding this to tree/kanban would fire one API call per row.
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
         compute="_compute_requires_pest_control",
         store=False,
     )
-    floor_plan_image = fields.Image(
+    floor_plan_image_url = fields.Char(
         store=False, readonly=True, compute="_compute_floor_plan"
     )
     form_state = fields.Selection(FORM_STATES, compute="_compute_form_state")
+
+    # ============================================================================
+    # MANAGEMENT AREA — distrikt / kvartersvärdsområde (OneCore snapshot)
+    # ============================================================================
+    # Written on the write path only (create, "Tilldela resursgrupp", backfill
+    # cron) by ManagementAreaService — never computed on read (MIM-1869).
+    # kvv_area_name can be empty in OneCore and captions are not unique:
+    # group and pair on the codes, show the names as labels.
+    kvv_area_code = fields.Char("Kvartersvärdsområde (kod)", readonly=True)
+    kvv_area_name = fields.Char("Kvartersvärdsområde (namn)", readonly=True)
+    kvv_area_display = fields.Char(
+        "Kvartersvärdsområde", compute="_compute_kvv_area_display"
+    )
+    cost_center_code = fields.Char("Distrikt (kod)", readonly=True)
+    cost_center_name = fields.Char("Distrikt (namn)", readonly=True)
+    cost_center_display = fields.Char(
+        "Tillhör distrikt", compute="_compute_cost_center_display"
+    )
+    district_manager = fields.Char(
+        "Distriktschef",
+        compute="_compute_district_manager",
+        help="Kontakta i första hand ärendets resurs.",
+    )
+    # Deliberately NOT stored on the request: resolved from the local
+    # maintenance.kvv.area master (cron-synced), so vikarie/steward changes in
+    # OneCore show up everywhere without touching requests. DB-only compute.
+    kvv_area_responsible = fields.Char(
+        "Nuvarande kvartersvärd",
+        compute="_compute_kvv_area_responsible",
+        # Escalation ladder: resurs -> kvartersvärd -> distriktschef. The
+        # kvartersvärd is not the one handling the request, so say who is.
+        # Defined on the field, not in the view: it applies to all six
+        # Objektsinformation groups and the list column at once.
+        help="Kontakta i första hand ärendets resurs.",
+    )
+    management_area_lookup_at = fields.Datetime(
+        "Distrikt uppslaget",
+        readonly=True,
+        help="Senaste lyckade uppslag av distrikt/kvartersvärdsområde i OneCore "
+        "(även när fastigheten saknar koppling). Tomt = aldrig uppslaget eller "
+        "misslyckat — backfill-jobbet försöker igen.",
+    )
 
     # ============================================================================
     # PERMISSION FIELDS
@@ -210,6 +275,78 @@ class OneCoreMaintenanceRequest(
 
     def get_core_api(self):
         return core_api.CoreApi(self.env)
+
+    @api.depends("kvv_area_code", "kvv_area_name")
+    def _compute_kvv_area_display(self):
+        # MIM-1967: the code is what users work with ("61112"). OneCore's
+        # captions are not unique (61111/61112 share one) and grouping already
+        # runs on the code, so showing the code keeps display and grouping
+        # consistent. Name is kept as a fallback only.
+        for record in self:
+            record.kvv_area_display = (
+                record.kvv_area_code or record.kvv_area_name or False
+            )
+
+    @api.depends("cost_center_code", "cost_center_name")
+    def _compute_cost_center_display(self):
+        # Same format as property-tree's dropdown: "61110 - Distrikt Mitt"
+        for record in self:
+            if record.cost_center_code and record.cost_center_name:
+                record.cost_center_display = (
+                    f"{record.cost_center_code} - {record.cost_center_name}"
+                )
+            else:
+                record.cost_center_display = (
+                    record.cost_center_code or record.cost_center_name or False
+                )
+
+    @api.depends("cost_center_code")
+    def _compute_district_manager(self):
+        """Escalation step 3, from the nightly-synced cost-center master.
+
+        Hidden when OneCore has no chef for the district — an empty row would
+        be worse than none. Batched, like the kvartersvärd."""
+        codes = {record.cost_center_code for record in self if record.cost_center_code}
+        by_code = {}
+        if codes:
+            districts = self.env["maintenance.cost.center"].sudo().search(
+                [("code", "in", list(codes))]
+            )
+            by_code = {district.code: district for district in districts}
+        for record in self:
+            district = by_code.get(record.cost_center_code)
+            lead = district.lead_name if district else False
+            deputy = district.deputy_name if district else False
+            if lead and deputy and lead != deputy:
+                record.district_manager = f"{lead} (bitr. {deputy})"
+            elif lead:
+                # Mimer Student has no deputy, and test data can point both
+                # roles at the same person — show the name once either way
+                record.district_manager = lead
+            elif deputy:
+                record.district_manager = f"{deputy} (bitr.)"
+            else:
+                record.district_manager = False
+
+    @api.depends("kvv_area_code")
+    def _compute_kvv_area_responsible(self):
+        # One batched lookup in the local master — no HTTP on read (MIM-1869)
+        codes = {record.kvv_area_code for record in self if record.kvv_area_code}
+        by_code = {}
+        if codes:
+            areas = self.env["maintenance.kvv.area"].sudo().search(
+                [("code", "in", list(codes))]
+            )
+            by_code = {area.code: area.responsible_name for area in areas}
+        for record in self:
+            if record.kvv_area_code not in by_code:
+                # No master row: the sync has not run yet (fresh install, or
+                # OneCore was down at 03:00). Hide the row rather than claim
+                # the area has no steward.
+                record.kvv_area_responsible = False
+            else:
+                # "–" when the area is known but has no steward right now
+                record.kvv_area_responsible = by_code[record.kvv_area_code] or "–"
 
     # ============================================================================
     # COMPUTED FIELD METHODS
@@ -250,8 +387,9 @@ class OneCoreMaintenanceRequest(
                 # Fallback for any undefined space_caption
                 record.form_state = "rental-property"
 
-    @api.depends("rental_property_id", "rental_property_option_id")
+    @api.depends("rental_property_id", "rental_property_option_id", "space_caption")
     def _compute_floor_plan(self):
+        # No HTTP here: the browser loads the image via the image_viewer widget.
         for record in self:
             id = (
                 record.rental_property_id
@@ -260,17 +398,11 @@ class OneCoreMaintenanceRequest(
             )
 
             if id and record.space_caption == "Lägenhet":
-                url = f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
-                try:
-                    response = requests.get(url)
-                    if response.status_code == 200:
-                        record.floor_plan_image = base64.b64encode(response.content)
-                    else:
-                        record.floor_plan_image = ""
-                except (requests.RequestException, requests.Timeout):
-                    record.floor_plan_image = ""
+                record.floor_plan_image_url = (
+                    f"https://pub.mimer.nu/bofaktablad/bofaktablad/{id.name}.jpg"
+                )
             else:
-                record.floor_plan_image = ""
+                record.floor_plan_image_url = False
 
     @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
@@ -292,14 +424,24 @@ class OneCoreMaintenanceRequest(
                 record.requires_pest_control = False
                 continue
 
+            cached = _pest_control_cache.get(rental_id)
+            if cached and time.monotonic() < cached[0]:
+                record.requires_pest_control = cached[1]
+                continue
+
             try:
                 if api is None:
                     api = record.get_core_api()
-                data = api.fetch_residence(rental_id)
+                data = api.fetch_residence(rental_id, timeout=5)
                 blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                record.requires_pest_control = any(
+                value = any(
                     (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
                 )
+                _pest_control_cache[rental_id] = (
+                    time.monotonic() + PEST_CONTROL_CACHE_TTL,
+                    value,
+                )
+                record.requires_pest_control = value
             except Exception as err:
                 _logger.warning(
                     "Could not fetch pest control status for rental_id %s: %s",
@@ -307,34 +449,6 @@ class OneCoreMaintenanceRequest(
                     err,
                 )
                 record.requires_pest_control = False
-
-    @api.depends(
-        "message_ids.notification_ids.is_read",
-        "message_ids.notification_ids.notification_type",
-    )
-    def _compute_new_mimer_notification(self):
-        # Batched: one mail.notification search for the whole recordset.
-        # The previous per-record loop fired ~2 queries per card and
-        # dominated the kanban web_read_group cost.
-        if not self:
-            return
-        notifications = self.env["mail.notification"].search(
-            [
-                ("mail_message_id.model", "=", "maintenance.request"),
-                ("mail_message_id.res_id", "in", self.ids),
-                ("res_partner_id", "=", self.env.user.partner_id.id),
-                ("is_read", "!=", True),
-                ("notification_type", "=", "inbox"),
-                (
-                    "mail_message_id.author_id.user_ids.login",
-                    "=",
-                    "odoo@mimer.nu",
-                ),
-            ]
-        )
-        flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
-        for record in self:
-            record.new_mimer_notification = record.id in flagged_ids
 
     @api.depends(
         "message_ids.date",
@@ -494,6 +608,86 @@ class OneCoreMaintenanceRequest(
                 not ack_at or record.master_key_changed_at > ack_at
             )
 
+    @api.depends(
+        "message_ids.date",
+        "message_ids.author_id",
+        "message_ids.notification_ids",
+        "new_customer_info_ack_at",
+        "new_customer_info_external_ack_at",
+        "recently_added_tenant",
+    )
+    @api.depends_context("uid")
+    def _compute_has_unread_new_customer_info(self):
+        # "Ny kundinfo" is the tenant -> case channel (Mina sidor). Both
+        # audiences see it — an external contractor reads the tenant's message
+        # in the same chatter — but each side acknowledges separately via its
+        # own timestamp, mirroring the audience split in
+        # _compute_dialog_indicators. A contractor's ack must never suppress
+        # the tenant's message for Mimer. depends_context("uid") keeps the
+        # cache keyed per user so the two sides cannot read each other's value.
+        for record in self:
+            record.has_unread_new_customer_info = False
+
+        if not self:
+            return
+
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        ack_field = (
+            "new_customer_info_external_ack_at"
+            if is_external
+            else "new_customer_info_ack_at"
+        )
+
+        # No strict separation on the Mimer side: a freshly-added tenant also
+        # counts as new customer info. It contributes until acknowledged (the
+        # internal ack clears recently_added_tenant), so no timestamp
+        # comparison is needed. It is a Mimer-internal data-quality flag —
+        # tenant back-filled from the OneCore API, not tenant communication —
+        # so it never raises the badge for external contractors.
+        if not is_external:
+            for record in self:
+                if record.recently_added_tenant:
+                    record.has_unread_new_customer_info = True
+
+        # Mina-sidor communications are messages authored by the odoo@mimer.nu
+        # integration account that generated an inbox notification. This mirrors
+        # the former _compute_new_mimer_notification discriminator, but keyed on
+        # the acking side's ack timestamp instead of per-user
+        # mail.notification read state. sudo() because we now look across every
+        # recipient partner's inbox notifications, not just the current user's.
+        notifications = (
+            self.env["mail.notification"]
+            .sudo()
+            .search(
+                [
+                    ("mail_message_id.model", "=", "maintenance.request"),
+                    ("mail_message_id.res_id", "in", self.ids),
+                    ("notification_type", "=", "inbox"),
+                    (
+                        "mail_message_id.author_id.user_ids.login",
+                        "=",
+                        "odoo@mimer.nu",
+                    ),
+                ]
+            )
+        )
+        latest_by_request = {}
+        for notif in notifications:
+            message = notif.mail_message_id
+            if not message.date:
+                continue
+            current = latest_by_request.get(message.res_id)
+            if not current or message.date > current:
+                latest_by_request[message.res_id] = message.date
+
+        for record in self:
+            latest = latest_by_request.get(record.id)
+            if not latest:
+                continue
+            ack_at = record[ack_field]
+            if not ack_at or latest > ack_at:
+                record.has_unread_new_customer_info = True
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -532,6 +726,31 @@ class OneCoreMaintenanceRequest(
         self.invalidate_recordset(["has_unread_master_key_change"])
         return True
 
+    def action_acknowledge_new_customer_info(self):
+        """Mark "Ny kundinfo" read for the acking user's whole side.
+
+        Acknowledgement is one shared timestamp per side, like
+        action_acknowledge_dialog: the first Mimer handler to click clears the
+        badge for all Mimer users, and the first external contractor to click
+        clears it for all contractors. The sides are independent — a
+        contractor's ack must never suppress the tenant's message for Mimer.
+        """
+        self.ensure_one()
+        now = fields.Datetime.now()
+        if ExternalContractorService(self.env).is_external_contractor():
+            self.new_customer_info_external_ack_at = now
+        else:
+            self.new_customer_info_ack_at = now
+            # Per "no strict separation", the tenant-onboarding flag is cleared
+            # too so the badge fully disappears. Internal side only: it is a
+            # Mimer data-quality flag and it drives _order for everyone.
+            if self.recently_added_tenant:
+                self.recently_added_tenant = False
+        # Non-stored computed field — force a recompute so the chatter button
+        # and the kanban chip re-evaluate immediately.
+        self.invalidate_recordset(["has_unread_new_customer_info"])
+        return True
+
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
         if not self.phone_number or self.hidden_from_my_pages:
@@ -564,6 +783,18 @@ class OneCoreMaintenanceRequest(
                 ).date()
             else:
                 record.schedule_date_date = False
+
+    @api.depends("schedule_date_date", "due_date")
+    def _compute_schedule_date_after_due_date(self):
+        # Compares calendar dates, not timestamps: schedule_date is a Datetime
+        # and due_date a Date, so a time of day on the due date itself must not
+        # count as a breach. schedule_date_date already resolves the timezone.
+        for record in self:
+            record.schedule_date_after_due_date = bool(
+                record.schedule_date_date
+                and record.due_date
+                and record.schedule_date_date > record.due_date
+            )
 
     def _compute_restricted_external(self):
         external_contractor_service = ExternalContractorService(self.env)
@@ -719,6 +950,24 @@ class OneCoreMaintenanceRequest(
     # ONCHANGE METHODS
     # ============================================================================
 
+    @api.onchange(
+        "rental_property_option_id",
+        "property_option_id",
+        "building_option_id",
+        "parking_space_option_id",
+        "facility_option_id",
+    )
+    def _onchange_management_area_preview(self):
+        """Show "Tillhör distrikt" already before the request is saved.
+
+        Runs on the search/selection path (which already calls OneCore), never
+        on read — see MIM-1869. Cached per property code, and create() re-reads
+        the same cache, so picking a search hit costs at most one extra call.
+        """
+        service = ManagementAreaService(self.env)
+        for record in self:
+            service.preview(record)
+
     @api.onchange("property_option_id")
     def _onchange_property_option_id(self):
         field_manager = FormFieldService(self.env)
@@ -839,6 +1088,26 @@ class OneCoreMaintenanceRequest(
 
         return defaults
 
+    def _web_read_group_format(self, groupby, aggregates, groups):
+        result = super()._web_read_group_format(groupby, aggregates, groups)
+        # MIM-486: the Återsänd kanban column is folded only while it is empty.
+        # web_read_group folds groups based on the __fold flag stamped here.
+        if groupby and groupby[0] == "stage_id":
+            atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
+            if atersand:
+                for dict_group in result:
+                    # The m2o groupby value is (id, display_name) or False
+                    value = dict_group.get("stage_id")
+                    if (
+                        value
+                        and value[0] == atersand.id
+                        and "__fold" in dict_group
+                        and "__count" in dict_group
+                    ):
+                        dict_group["__fold"] = not dict_group["__count"]
+                        break
+        return result
+
     @api.model_create_multi
     def create(self, vals_list):
         _logger.info(f"Creating maintenance requests: {vals_list}")
@@ -879,6 +1148,7 @@ class OneCoreMaintenanceRequest(
 
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
+        management_area_service = ManagementAreaService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -893,6 +1163,10 @@ class OneCoreMaintenanceRequest(
                 request._add_followers()
 
             create_service.setup_team_assignment(request)
+            # Snapshot distrikt / kvartersvärdsområde from OneCore. Best
+            # effort (never blocks creation); skipped when the caller already
+            # stamped the fields (core does for mimer.nu requests).
+            management_area_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -931,8 +1205,33 @@ class OneCoreMaintenanceRequest(
             )
             vals.update(stage_updates)
 
-        # Handle resource assignment workflow (always run, even during creation)
-        if "user_id" in vals:
+        # MIM-486: entering Återsänd clears the assigned resource and hands the
+        # request back to the orderer's team. The team switch happens after
+        # super().write() + notifications (see below), since the write may be
+        # performed by an external contractor whose record-rule access depends
+        # on the team.
+        # Guarded on an actual stage change: a redundant write of the same
+        # stage must not wipe a newly assigned resource or re-run the handback
+        entering_atersand = (
+            "stage_id" in vals
+            and stage_manager.is_atersand_stage(vals["stage_id"])
+            and any(record.stage_id.id != vals["stage_id"] for record in self)
+        )
+        if entering_atersand:
+            vals["user_id"] = False
+            if external_contractor_service.is_external_contractor():
+                # Keep the returning contractor's access after the team
+                # switch. web_save re-reads the record in the same
+                # transaction; without follower access the read raises
+                # AccessError and rolls back the whole return.
+                self.sudo().message_subscribe(
+                    partner_ids=self.env.user.partner_id.ids
+                )
+
+        # Handle resource assignment workflow (always run, even during creation).
+        # Skipped when entering Återsänd: the injected user_id=False would
+        # otherwise bounce the stage back to "Väntar på handläggning".
+        if "user_id" in vals and not entering_atersand:
             workflow_updates = stage_manager.handle_resource_assignment(
                 self, vals.get("user_id")
             )
@@ -987,6 +1286,24 @@ class OneCoreMaintenanceRequest(
         if not skip_tracking:
             self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
+
+        # MIM-486: hand returned requests back to the orderer's team. Resolved
+        # here, after super().write(), so a write that changes owner_user_id
+        # and the stage together uses the new orderer. sudo() keeps env.uid
+        # (chatter author stays the returning user) but bypasses the
+        # contractor record rule, which would otherwise reject the
+        # contractor's own write once the team no longer includes them. Must
+        # run last: after this the contractor may not see the record at all.
+        if entering_atersand:
+            team_to_record_ids = {}
+            for record in self:
+                team = stage_manager.resolve_return_team(record)
+                if team and record.maintenance_team_id != team:
+                    team_to_record_ids.setdefault(team.id, []).append(record.id)
+            for team_id, record_ids in team_to_record_ids.items():
+                self.browse(record_ids).sudo().write(
+                    {"maintenance_team_id": team_id}
+                )
 
         return result
 
@@ -1057,17 +1374,8 @@ class OneCoreMaintenanceRequest(
 
     def open_time_report(self):
         self.ensure_one()
-        estate_code = False
-
-        # Try different sources for estate/property code based on space type
-        if self.rental_property_id and self.rental_property_id.estate_code:
-            estate_code = self.rental_property_id.estate_code
-        elif self.parking_space_property_code:
-            estate_code = self.parking_space_property_code
-        elif self.facility_property_code:
-            estate_code = self.facility_property_code
-        elif self.property_code:
-            estate_code = self.property_code
+        # Property code of the request's location, whatever the space type
+        estate_code = ManagementAreaService.get_property_code(self)
 
         base_url = self.env["ir.config_parameter"].get_param(
             "time_report_base_url",
@@ -1190,3 +1498,68 @@ class OneCoreMaintenanceRequest(
         )
         # The wizard owns its dialog title/window (it re-renders itself on search).
         return wizard.action_window()
+
+    # ============================================================================
+    # DISTRIKT / RESURSGRUPP
+    # ============================================================================
+
+    def action_assign_district_team(self):
+        """"Tilldela resursgrupp": set the team paired with the request's
+        district (OneCore cost center), fetching the district first when the
+        request doesn't carry one yet (legacy requests)."""
+        self.ensure_one()
+        if ExternalContractorService(self.env).is_external_contractor():
+            # The view hides the button; this guards RPC callers.
+            raise UserError(
+                "Endast interna användare kan tilldela resursgrupp utifrån distrikt."
+            )
+        result = ManagementAreaService(self.env).assign_team(self)
+        if result["error"]:
+            return self._district_team_notification(result["error"], "warning")
+        team_name = result["team"].name
+        if not result["changed"]:
+            return self._district_team_notification(
+                f"Ärendet ligger redan på {team_name}.", "info"
+            )
+        return self._district_team_notification(
+            f"Resursgrupp satt till {team_name}.", "success"
+        )
+
+    @staticmethod
+    def _district_team_notification(message, notification_type):
+        # "next" is what makes the form show the new values without a manual
+        # reload: a button that returns nothing gets act_window_close from the
+        # web client, which triggers the record reload; a client action does
+        # not. display_notification returns params.next, and the action service
+        # runs it with the same onClose. Same pattern as hr_recruitment,
+        # l10n_in and mail in stock Odoo. Needed for every outcome — the
+        # warning case may have just fetched the district.
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Tilldela resursgrupp",
+                "message": message,
+                "type": notification_type,
+                "sticky": False,
+                "next": {"type": "ir.actions.act_window_close"},
+            },
+        }
+
+    @api.model
+    def _cron_sync_kvv_areas(self):
+        """Scheduled action (nightly): refresh the kvartersvärds- and
+        distriktschefsmasters so both follow OneCore without any HTTP on the
+        read path. One call for all 33 areas plus one tree per district."""
+        service = ManagementAreaService(self.env)
+        return service.sync_kvv_areas() + service.sync_cost_centers()
+
+    @api.model
+    def _cron_backfill_management_area(self, limit=5000):
+        """Scheduled action (hourly): snapshot distrikt/kvartersvärdsområde on
+        requests that lack one (created before the feature or while OneCore
+        was down). Display only — never changes Resursgrupp/Resurs.
+
+        The batch is large because the cost is the cost-center trees, fetched
+        once per run, not per request."""
+        return ManagementAreaService(self.env).backfill_batch(limit=limit)

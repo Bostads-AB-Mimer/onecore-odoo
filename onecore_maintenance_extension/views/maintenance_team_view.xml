@@ -25,4 +25,79 @@
             </xpath>
         </field>
     </record>
+
+    <!-- Kostnadsställe (distrikt) pairing used by "Tilldela resursgrupp" -->
+    <record id="maintenance_team_form_cost_center" model="ir.ui.view">
+        <field name="name">maintenance.team.form.cost.center</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='member_ids']" position="after">
+                <field name="cost_center_code" placeholder="t.ex. 61140"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="maintenance_team_list_cost_center" model="ir.ui.view">
+        <field name="name">maintenance.team.list.cost.center</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='member_ids']" position="after">
+                <field name="cost_center_code" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!--
+    Removes the Delete action from all maintenance team views (form, list and both
+    kanbans) so a team cannot be deleted by accident. This is UI-only by design:
+    programmatic deletion (shell/RPC) remains possible. Note that the database only
+    protects teams with maintenance requests (ondelete=restrict) — deleting a team
+    with linked equipment silently clears the team on that equipment, and empty
+    teams are deleted silently. Archiving remains available as the safe alternative.
+    -->
+    <record id="maintenance_team_form_no_delete" model="ir.ui.view">
+        <field name="name">maintenance.team.form.no.delete</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="delete">0</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="maintenance_team_list_no_delete" model="ir.ui.view">
+        <field name="name">maintenance.team.list.no.delete</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="delete">0</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="maintenance_team_kanban_no_delete" model="ir.ui.view">
+        <field name="name">maintenance.team.kanban.no.delete</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_view_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="delete">0</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="maintenance_team_dashboard_kanban_no_delete" model="ir.ui.view">
+        <field name="name">maintenance.team.dashboard.kanban.no.delete</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="delete">0</attribute>
+            </xpath>
+        </field>
+    </record>
 </odoo>

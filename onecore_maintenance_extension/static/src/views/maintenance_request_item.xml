@@ -6,7 +6,7 @@
                 <t t-esc="record.name.raw_value"/>
             </b>
             <div class="d-flex flex-column">
-                <div t-if="record.new_mimer_notification.raw_value || record.recently_added_tenant.raw_value">
+                <div t-if="record.has_unread_new_customer_info.raw_value">
                     <span class="mimer-badge">
                         Ny kundinfo
                     </span>
@@ -68,7 +68,18 @@
         </span>
         Planerat utförandedatum:
         <t t-if="record.schedule_date_date.value">
-            <t t-esc="record.schedule_date_date.value"/>
+            <t t-if="record.schedule_date_after_due_date.raw_value">
+                <span class="text-danger">
+                    <i
+                        class="fa fa-exclamation-triangle me-1"
+                        title="Planerat utförandedatum ligger efter förfallodatum"
+                    />
+                    <t t-esc="record.schedule_date_date.value"/>
+                </span>
+            </t>
+            <t t-else="">
+                <t t-esc="record.schedule_date_date.value"/>
+            </t>
         </t>
         <t t-else="">
             Ej angett

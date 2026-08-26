@@ -45,12 +45,13 @@
         <field name="hidden_from_my_pages" />
         <field name="due_date" />
         <field name="schedule_date_date" />
+        <field name="schedule_date_after_due_date" />
         <field name="today_date" />
-        <field name="new_mimer_notification" />
-        <field name="recently_added_tenant" />
+        <field name="has_unread_new_customer_info" />
         <field name="special_attention" />
         <field name="has_unread_supplier_dialog" />
         <field name="has_unread_internal_dialog" />
+        <field name="has_unread_master_key_change" />
       </mobile>
     </field>
   </record>

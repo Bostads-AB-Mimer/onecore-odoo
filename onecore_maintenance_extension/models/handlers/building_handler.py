@@ -62,6 +62,8 @@ class BuildingHandler(BaseMaintenanceHandler):
                     if building.get("construction", {}).get("renovationYear")
                     else None
                 ),
+                "property_code": (building.get("property") or {}).get("code"),
+                "property_name": (building.get("property") or {}).get("name"),
             }
         )
 
@@ -130,6 +132,8 @@ class BuildingHandler(BaseMaintenanceHandler):
                     "user_id": self.env.user.id,
                     "name": property_data["building"].get("name"),
                     "code": property_data["building"].get("code"),
+                    "property_code": property_data["property"].get("code"),
+                    "property_name": property_data["property"].get("name"),
                 }
             )
 

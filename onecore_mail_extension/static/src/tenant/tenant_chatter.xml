@@ -17,13 +17,29 @@
         <attribute name="t-att-disabled">props.record.data.restricted_external</attribute>
     </xpath>
 
-    <!-- Acknowledge dialog button — only on maintenance.request when there's an unread log-note dialog -->
+    <!-- Acknowledge button — adaptive: specific label when one signal is
+         unread, generic + confirm dialog when several. -->
     <xpath expr="//button[hasclass('o-mail-Chatter-activity')]" position="after">
         <button class="btn btn-warning ms-1 align-self-center text-nowrap"
-                t-if="props.record?.resModel === 'maintenance.request' and (props.record.data.has_unread_supplier_dialog or props.record.data.has_unread_internal_dialog or props.record.data.has_unread_master_key_change)"
-                t-on-click="onClickAcknowledgeDialog">
-            Markera som läst
+                t-if="showAckButton()"
+                t-on-click="onClickAcknowledge">
+            <t t-esc="ackButtonLabel()"/>
         </button>
+    </xpath>
+
+    <!-- Pinned messages section ("Fästa") at the top of the chatter content -->
+    <xpath expr="//div[hasclass('o-mail-Chatter-content')]/t[1]" position="before">
+        <div class="o-mimer-PinnedMessages" t-if="pinnedMessages.length">
+            <div class="o-mimer-PinnedMessages-header">
+                <i class="fa fa-thumb-tack me-1"/>Fästa noteringar
+            </div>
+            <t t-foreach="pinnedMessages" t-as="msg" t-key="msg.id">
+                <Message message="msg" thread="state.thread"/>
+                <div t-if="msg.pinned_by_name" class="o-mimer-PinnedBy text-muted small">
+                    Fäst av <t t-esc="msg.pinned_by_name"/>
+                </div>
+            </t>
+        </div>
     </xpath>
 </t>
 

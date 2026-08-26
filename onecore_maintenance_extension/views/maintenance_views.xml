@@ -22,6 +22,9 @@
                         <field name="owner_user_id" />
                         <field name="stage_id" />
                         <field string="Resursgrupp" name="maintenance_team_id" />
+                        <field string="Distrikt" name="cost_center_name" />
+                        <field string="Distriktkod" name="cost_center_code" />
+                        <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
                         <filter string="Mina ärenden" name="my_maintenances"
                             domain="[('user_id', '=', uid)]" />
                         <separator />
@@ -95,6 +98,12 @@
                                 context="{'group_by' : 'stage_id'}" />
                             <filter string='Skapad av' name='created_by' domain="[]"
                                 context="{'group_by': 'owner_user_id'}" />
+                            <!-- Group on the stored OneCore codes/names; kvv-area captions
+                                 are not unique in OneCore, so the code is the grouping key -->
+                            <filter string='Distrikt' name='district' domain="[]"
+                                context="{'group_by': 'cost_center_name'}" />
+                            <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
+                                context="{'group_by': 'kvv_area_code'}" />
                         </group>
                     </search>
                 </xpath>
@@ -113,6 +122,7 @@
                     <field name="has_unread_supplier_dialog" invisible="1" />
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
+                    <field name="has_unread_new_customer_info" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -294,6 +304,16 @@
                                             string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <field name="building_code" invisible="1"
                                             string="Byggnadskod" />
                                         <field name="building" invisible="1" string="Byggnad" />
@@ -327,7 +347,16 @@
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
-
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'property'">
@@ -338,6 +367,16 @@
                                         <field name="property_designation"
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <!-- <field name="maintenance_unit_option_id"
                                             string="Underhållsenhet"
                                             domain="[('property_option_id', '=', property_option_id)]"
@@ -402,6 +441,21 @@
                                             string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <!-- Building-code searches have no rental property:
+                                             the property comes from the building itself -->
+                                        <field name="building_property_name"
+                                            invisible="estate or not building_property_name"
+                                            string="Tillhör fastighet" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                     <group col="1"
                                         invisible="form_state != 'parking-space'">
@@ -421,6 +475,16 @@
                                             invisible="not parking_space_number" />
                                         <field name="parking_space_property_name" string="Fastighet"
                                             invisible="not parking_space_property_name" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                         <field name="parking_space_address" string="Adress"
                                             invisible="not parking_space_address" />
                                         <field name="parking_space_postal_code" string="Postnummer"
@@ -464,6 +528,16 @@
                                         <field
                                             name="facility_property_code" string="Fastighetsnummer"
                                             invisible="not facility_property_code" />
+                                        <field name="cost_center_display" invisible="not cost_center_display"
+                                            string="Tillhör distrikt" />
+                                        <field name="kvv_area_display" invisible="not kvv_area_display"
+                                            string="Kvartersvärdsområde" />
+                                        <field name="kvv_area_responsible"
+                                            invisible="not kvv_area_responsible"
+                                            string="Nuvarande kvartersvärd" />
+                                        <field name="district_manager"
+                                            invisible="not district_manager"
+                                            string="Distriktschef" />
                                     </group>
                                 </div>
                             </div>
@@ -501,7 +575,13 @@
                                         invisible="tenant_id or not empty_tenant">Ingen
                                         hyresgäst</div>
 
+                                    <!-- Mimer-internal data-quality flag: the tenant was
+                                         back-filled from the OneCore API, it is not tenant
+                                         communication. Never shown to external contractors,
+                                         matching the internal-only branch in
+                                         _compute_has_unread_new_customer_info. -->
                                     <div class="mb-3 fw-bold"
+                                        groups="!onecore_maintenance_extension.group_external_contractor"
                                         invisible="not recently_added_tenant">
                                         <span
                                             class="mimer-badge mb-1 fs-7 px-2 py-2">
@@ -633,21 +713,59 @@
                                             options="{'show_time': false}"
                                             help="Datum då ärendet markerades som avslutat"
                                             readonly="1" />
+                                        <field name="returned_date"
+                                            options="{'show_time': false}"
+                                            help="Datum då ärendet återsändes till beställaren"
+                                            readonly="1"
+                                            invisible="not returned_date" />
                                         <field
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
+                                        <!-- MIM-1967: "Tilldela resursgrupp" är avstängd tills
+                                             kvartersvärdarna börjar arbeta i Odoo. Knappen parar
+                                             ärendets distrikt (kostnadsställe) med resursgruppen
+                                             som bär samma cost_center_code och hämtar distriktet
+                                             från OneCore om det saknas. Metoden
+                                             action_assign_district_team finns kvar och är testad
+                                             — ta bort kommentaren nedan och lägg tillbaka
+                                             nolabel="1" på fältet för att släppa på funktionen.
+
+                                        <div class="d-flex align-items-center">
+                                            <label for="maintenance_team_id" string="Resursgrupp" />
+                                            <button name="action_assign_district_team" type="object"
+                                                class="btn btn-link btn-sm p-0 ms-2"
+                                                string="Tilldela resursgrupp"
+                                                icon="fa-magic"
+                                                title="Sätt resursgrupp utifrån ärendets distrikt"
+                                                help="Sätter resursgruppen som är kopplad till ärendets distrikt (kostnadsställe). Distriktet hämtas från OneCore om det saknas."
+                                                invisible="user_is_external_contractor or not id" />
+                                        </div>
+                                        -->
                                         <field
                                             name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
                                         <field name="user_id"
                                             domain="maintenance_team_domain" />
+                                        <label for="schedule_date" />
+                                        <div>
+                                            <field
+                                                name="schedule_date"
+                                                nolabel="1"
+                                                options="{'show_time': false}"
+                                                help="Det datum arbete är planerat"
+                                            />
+                                            <div
+                                                class="text-danger"
+                                                invisible="not schedule_date_after_due_date">
+                                                <i class="fa fa-exclamation-triangle me-1" />
+                                                Planerat utförandedatum ligger efter förfallodatum
+                                            </div>
+                                        </div>
                                         <field
-                                            name="schedule_date"
-                                            options="{'show_time': false}"
-                                            help="Det datum arbete är planerat"
-                                        />
+                                            name="schedule_date_after_due_date"
+                                            invisible="1" />
 
                                         <field
                                             name="master_key" string="Huvudnyckel"
@@ -711,7 +829,7 @@
                         <!-- Bofaktablad -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 mb-3"
-                            invisible="not floor_plan_image">
+                            invisible="not floor_plan_image_url">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-2"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
@@ -730,7 +848,7 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <p class="mb-1 fw-bold inline-block">Planlösning:</p>
-                                    <field name="floor_plan_image" widget="image_viewer"
+                                    <field name="floor_plan_image_url" widget="image_viewer"
                                         thumbnailSize="160" nolabel="1" />
                                 </div>
                             </div>
@@ -762,8 +880,13 @@
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_kanban" />
             <field name="arch" type="xml">
 
+                <!-- Column add is hidden for everyone. Column edit/delete are also
+                     stripped globally by onecore_web_extension/static/src/js/kanban_header_patch.js;
+                     group_delete here is defense in depth should that patch ever be removed. -->
                 <xpath expr="//kanban" position="attributes">
                     <attribute name="limit">30</attribute>
+                    <attribute name="group_create">false</attribute>
+                    <attribute name="group_delete">false</attribute>
                 </xpath>
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="stage_id" />
@@ -771,6 +894,7 @@
                     <field name="priority_expanded" />
                     <field name="due_date" />
                     <field name="schedule_date_date" />
+                    <field name="schedule_date_after_due_date" />
                     <field name="today_date" />
                     <field name="equipment_id" />
                     <field name="user_id" />
@@ -787,8 +911,7 @@
                     <field name="create_date" />
                     <field name="master_key" />
                     <field name="hidden_from_my_pages" />
-                    <field name="new_mimer_notification" />
-                    <field name="recently_added_tenant" />
+                    <field name="has_unread_new_customer_info" />
                     <field name="special_attention" />
                     <field name="has_unread_supplier_dialog" />
                     <field name="has_unread_internal_dialog" />
@@ -811,7 +934,10 @@
             <field name="inherit_id" ref="maintenance.hr_equipment_request_view_tree" />
             <field name="arch" type="xml">
                 <xpath expr="//list" position="replace">
-                    <list string="maintenance Request" multi_edit="1" sample="1">
+                    <!-- group_* attributes: stages/teams must not be manageable from
+                         grouped list headers, mirroring the kanban restrictions -->
+                    <list string="maintenance Request" multi_edit="1" sample="1"
+                        group_create="false" group_edit="false" group_delete="false">
                         <field name="message_needaction" column_invisible="True" />
                         <field name="id" optional="show" />
                         <field name="name" />
@@ -819,11 +945,15 @@
                         <field name="address" optional="show" />
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
+                        <field name="cost_center_display" string="Distrikt" optional="show" />
+                        <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
+                        <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
                         <field name="start_date" optional="hide" />
                         <field name="schedule_date" options="{'show_time': false}" optional="hide" />
                         <field name="due_date" optional="show" />
                         <field name="performed_date" options="{'show_time': false}" optional="hide" />
                         <field name="closed_date" options="{'show_time': false}" optional="hide" />
+                        <field name="returned_date" options="{'show_time': false}" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
                         <field name="priority_expanded" optional="hide" />
                         <field name="creation_origin" optional="hide" />
