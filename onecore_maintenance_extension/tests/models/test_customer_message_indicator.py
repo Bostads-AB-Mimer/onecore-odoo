@@ -22,7 +22,7 @@ from ..utils.test_utils import (
     create_external_contractor_user,
     create_maintenance_request,
 )
-from ...models.constants import RECEIPT_TO_TENANT_MESSAGE_TYPE
+from ...models.constants import CUSTOMER_MESSAGE_TYPE, RECEIPT_TO_TENANT_MESSAGE_TYPE
 
 
 def _get_or_create_mimer_user(env):
@@ -57,7 +57,7 @@ def _get_or_create_mimer_user(env):
 
 
 def _post_tenant_message(
-    request, mimer_user, body="Hur går det?", message_type="from_tenant"
+    request, mimer_user, body="Hur går det?", message_type=CUSTOMER_MESSAGE_TYPE
 ):
     """Post exactly as odoo-adapter.addMessageToWorkOrder does: message_post
     with message_type='from_tenant' and the default note subtype."""
@@ -113,6 +113,22 @@ class TestLastCustomerMessageAt(CustomerMessageCase):
         _post_tenant_message(self.request, self.mimer_user)
         second = _post_tenant_message(self.request, self.mimer_user, body="Igen")
         self.assertEqual(self.request.last_customer_message_at, second.date)
+
+    def test_backdated_message_does_not_move_the_anchor_backwards(self):
+        # The anchor must be the newest tenant message, so it may only ever
+        # advance. A from_tenant message posted with an explicitly earlier
+        # date (an import, a replay) must not move the anchor below the value
+        # it already holds — that would silence a genuinely newer message.
+        first = _post_tenant_message(self.request, self.mimer_user)
+        earlier_date = first.date - timedelta(days=1)
+
+        self.request.with_user(self.mimer_user).message_post(
+            body="Efterhandsinlägg",
+            message_type=CUSTOMER_MESSAGE_TYPE,
+            date=earlier_date,
+        )
+
+        self.assertEqual(self.request.last_customer_message_at, first.date)
 
     def test_other_message_types_are_ignored(self):
         _post_tenant_message(self.request, self.mimer_user, message_type="comment")
@@ -456,7 +472,7 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
 
     def _receipts(self):
         return self.request.message_ids.filtered(
-            lambda m: m.message_type == "receipt_to_tenant"
+            lambda m: m.message_type == RECEIPT_TO_TENANT_MESSAGE_TYPE
         )
 
     def test_internal_ack_posts_a_receipt_naming_mimer(self):
@@ -512,10 +528,14 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
         mock_send_email.assert_not_called()
 
     def test_receipt_type_is_registered_on_mail_message(self):
+        # Assert on the constant, not a bare literal, so it is genuinely the
+        # value the module writes that is pinned to the registered selection
+        # value — renaming the constant without updating the selection (or
+        # vice versa) fails here.
         selection = dict(
             self.env["mail.message"]._fields["message_type"].selection
         )
-        self.assertIn("receipt_to_tenant", selection)
+        self.assertIn(RECEIPT_TO_TENANT_MESSAGE_TYPE, selection)
 
     def test_receipt_does_not_re_raise_the_customer_message_flag(self):
         _post_tenant_message(self.request, self.mimer_user)
@@ -784,3 +804,37 @@ class TestCustomerMessageAckBaseline(CustomerMessageCase):
         _updated, still_flagged = self._baseline()
 
         self.assertEqual(still_flagged, 0)
+
+    def test_baseline_uses_the_latest_message_and_any_unread_row(self):
+        # Restores the multi-message coverage MIM-1844 had
+        # (test_baseline_uses_the_latest_message) for the aggregate's MAX /
+        # BOOL_OR interaction, lost when this branch replaced that migration.
+        #
+        # Two from_tenant messages: the OLDER one carries the unread inbox
+        # notification, the NEWER one is already read. This pins two things
+        # at once: the anchor must take MAX(date) over both messages (not the
+        # first or the last posted), and "still flagged" must be driven by
+        # whether ANY qualifying row is unread across the whole group — not
+        # merely by the newest message's own read state, which here is read.
+        older = _post_tenant_message(self.request, self.mimer_user, body="Först")
+        older = older.sudo()
+        older.write({"date": older.date - timedelta(days=2)})
+        self._create_inbox_notification(
+            older, self.internal_user.partner_id, is_read=False
+        )
+
+        newer = _post_tenant_message(self.request, self.mimer_user, body="Sedan")
+        newer = newer.sudo()
+        newer.write({"date": newer.date - timedelta(days=1)})
+        self._create_inbox_notification(
+            newer, self.internal_user.partner_id, is_read=True
+        )
+        self._reset_to_pre_migration_state(self.request)
+
+        updated, still_flagged = self._baseline()
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(still_flagged, 1)
+        self.assertEqual(self.request.last_customer_message_at, newer.date)
+        self.assertFalse(self.request.customer_message_ack_at)
+        self.assertTrue(self._unread_for(self.request, self.internal_user))

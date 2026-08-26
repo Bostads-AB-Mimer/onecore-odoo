@@ -542,7 +542,15 @@ class OneCoreMaintenanceRequest(
         # service's integration account, which need not hold write access on
         # every field of the request.
         if message.message_type == CUSTOMER_MESSAGE_TYPE:
-            self.sudo().write({"last_customer_message_at": message.date})
+            # Only ever advance the anchor. A from_tenant message can in
+            # principle be posted with a backdated date (an import, a replay);
+            # assigning unconditionally would then move the anchor below an
+            # existing acknowledgement and silently swallow a newer, genuinely
+            # unread message.
+            if not self.last_customer_message_at or (
+                message.date > self.last_customer_message_at
+            ):
+                self.sudo().write({"last_customer_message_at": message.date})
         return message
 
     def _get_allowed_message_params(self):
