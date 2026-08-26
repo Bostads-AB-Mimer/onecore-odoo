@@ -541,3 +541,32 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
         record = self.request.with_user(self.internal_user)
         record.invalidate_recordset(["has_unread_supplier_dialog"])
         self.assertFalse(record.has_unread_supplier_dialog)
+
+
+@tagged("onecore")
+class TestCustomerMessageBadgeVisibility(CustomerMessageCase):
+    """"Statusen ska vara synlig för alla" — unlike the Ny kundinfo marker,
+    this badge carries no group guard, and the field must load in every view
+    whose template reads it."""
+
+    def _kanban_arch(self, user):
+        return (
+            self.env["maintenance.request"]
+            .with_user(user)
+            .get_view(view_type="kanban")["arch"]
+        )
+
+    def test_field_loads_in_the_kanban_for_internal_users(self):
+        self.assertIn("has_unread_customer_message", self._kanban_arch(self.internal_user))
+
+    def test_field_loads_in_the_kanban_for_contractors(self):
+        self.assertIn("has_unread_customer_message", self._kanban_arch(self.external_user))
+
+    def test_field_loads_in_the_form_for_both_audiences(self):
+        for user in (self.internal_user, self.external_user):
+            arch = (
+                self.env["maintenance.request"]
+                .with_user(user)
+                .get_view(view_type="form")["arch"]
+            )
+            self.assertIn("has_unread_customer_message", arch)
