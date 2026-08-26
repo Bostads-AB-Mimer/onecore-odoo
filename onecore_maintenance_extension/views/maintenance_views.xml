@@ -696,10 +696,15 @@
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
-                                        <!-- "Tilldela resursgrupp": pairs the request's
-                                             distrikt (cost center) with the team carrying the
-                                             same cost_center_code; fetches the distrikt from
-                                             OneCore first on legacy requests -->
+                                        <!-- MIM-1967: "Tilldela resursgrupp" är avstängd tills
+                                             kvartersvärdarna börjar arbeta i Odoo. Knappen parar
+                                             ärendets distrikt (kostnadsställe) med resursgruppen
+                                             som bär samma cost_center_code och hämtar distriktet
+                                             från OneCore om det saknas. Metoden
+                                             action_assign_district_team finns kvar och är testad
+                                             — ta bort kommentaren nedan och lägg tillbaka
+                                             nolabel="1" på fältet för att släppa på funktionen.
+
                                         <div class="d-flex align-items-center">
                                             <label for="maintenance_team_id" string="Resursgrupp" />
                                             <button name="action_assign_district_team" type="object"
@@ -710,8 +715,9 @@
                                                 help="Sätter resursgruppen som är kopplad till ärendets distrikt (kostnadsställe). Distriktet hämtas från OneCore om det saknas."
                                                 invisible="user_is_external_contractor or not id" />
                                         </div>
+                                        -->
                                         <field
-                                            name="maintenance_team_id" nolabel="1"
+                                            name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
                                         <field name="user_id"
