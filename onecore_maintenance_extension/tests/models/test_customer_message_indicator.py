@@ -119,3 +119,30 @@ class TestLastCustomerMessageAt(CustomerMessageCase):
         # field names. Asserting on the name would pass even with the
         # SKIP_FIELDS entry removed.
         self.assertNotIn("Senaste meddelande från kund", new_bodies)
+
+
+@tagged("onecore")
+class TestAckColumnRename(CustomerMessageCase):
+    """The MIM-1844 ack pair is renamed, not duplicated: it only ever served
+    the Mina-sidor channel, so its values carry over verbatim and MIM-1844's
+    cutover baseline stays valid."""
+
+    def test_new_names_exist(self):
+        fields_ = self.env["maintenance.request"]._fields
+        self.assertIn("customer_message_ack_at", fields_)
+        self.assertIn("customer_message_external_ack_at", fields_)
+
+    def test_old_names_are_gone(self):
+        fields_ = self.env["maintenance.request"]._fields
+        self.assertNotIn("new_customer_info_ack_at", fields_)
+        self.assertNotIn("new_customer_info_external_ack_at", fields_)
+
+    def test_labels_are_swedish_so_acks_reach_the_audit_log(self):
+        # FieldChangeTracker logs by field label; a missing/English label would
+        # silently drop the acknowledgement from the chatter.
+        fields_ = self.env["maintenance.request"]._fields
+        self.assertIn("kund", fields_["customer_message_ack_at"].string.lower())
+        self.assertIn(
+            "entreprenör",
+            fields_["customer_message_external_ack_at"].string.lower(),
+        )

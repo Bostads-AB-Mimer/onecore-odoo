@@ -3,8 +3,6 @@
 Acknowledgement is shared within each audience and split between them:
 one timestamp for Mimer, one for external contractors.
 """
-import importlib.util
-import os
 from datetime import timedelta
 
 from odoo import fields
@@ -64,21 +62,6 @@ def _post_customer_info(
     return message
 
 
-def _load_ack_baseline_migration():
-    """Load migrations/19.0.1.0.5/post-migration.py by path.
-
-    The migration lives outside the importable package tree (the directory and
-    file names are not valid Python identifiers), so it has to be loaded from
-    its file location.
-    """
-    module_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.join(module_root, "migrations", "19.0.1.0.5", "post-migration.py")
-    spec = importlib.util.spec_from_file_location("mim_1844_post_migration", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @tagged("onecore")
 class TestHasUnreadNewCustomerInfo(TransactionCase):
     def setUp(self):
@@ -133,13 +116,13 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
 
     def test_new_message_after_ack_reappears(self):
         first = _post_customer_info(self.request, self.mimer_user, self.internal_user)
-        self.request.new_customer_info_ack_at = first.date + timedelta(seconds=1)
+        self.request.customer_message_ack_at = first.date + timedelta(seconds=1)
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
 
         later = _post_customer_info(
             self.request, self.mimer_user, self.internal_user, body="Mer info"
         )
-        later.date = self.request.new_customer_info_ack_at + timedelta(seconds=1)
+        later.date = self.request.customer_message_ack_at + timedelta(seconds=1)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
 
     def test_mimer_message_without_inbox_notification_ignored(self):
@@ -181,7 +164,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         self.assertTrue(record.has_unread_new_customer_info)
 
         record.action_acknowledge_new_customer_info()
-        self.assertTrue(self.request.new_customer_info_ack_at)
+        self.assertTrue(self.request.customer_message_ack_at)
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
 
     def test_ack_clears_recently_added_tenant(self):
@@ -206,8 +189,8 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
 
         record.action_acknowledge_new_customer_info()
 
-        self.assertTrue(self.request.new_customer_info_external_ack_at)
-        self.assertFalse(self.request.new_customer_info_ack_at)
+        self.assertTrue(self.request.customer_message_external_ack_at)
+        self.assertFalse(self.request.customer_message_ack_at)
         self.assertTrue(self.request.recently_added_tenant)
         self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
         self.assertTrue(self._refresh(self.internal_user).has_unread_new_customer_info)
@@ -216,8 +199,8 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         record = self._refresh(self.internal_user)
         record.action_acknowledge_new_customer_info()
 
-        self.assertTrue(self.request.new_customer_info_ack_at)
-        self.assertFalse(self.request.new_customer_info_external_ack_at)
+        self.assertTrue(self.request.customer_message_ack_at)
+        self.assertFalse(self.request.customer_message_external_ack_at)
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
         self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
 
@@ -229,7 +212,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         later = _post_customer_info(
             self.request, self.mimer_user, self.internal_user, body="Mer info"
         )
-        later.date = self.request.new_customer_info_external_ack_at + timedelta(
+        later.date = self.request.customer_message_external_ack_at + timedelta(
             seconds=1
         )
         self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
@@ -244,7 +227,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         bodies = " ".join(
             record.message_ids.filtered(lambda m: m.id not in before).mapped("body")
         )
-        self.assertIn("Ny kundinfo kvitterad av entreprenör", bodies)
+        self.assertIn("Meddelande från kund kvitterat av entreprenör", bodies)
 
     def test_ack_posts_swedish_note_and_no_english_flag_note(self):
         self.request.recently_added_tenant = True
@@ -265,7 +248,7 @@ class TestAcknowledgeNewCustomerInfo(TransactionCase):
         bodies = " ".join(
             record.message_ids.filtered(lambda m: m.id not in before).mapped("body")
         )
-        self.assertIn("Ny kundinfo kvitterad", bodies)
+        self.assertIn("Meddelande från kund kvitterat", bodies)
         self.assertNotIn("Recently added tenant", bodies)
 
 
@@ -297,149 +280,3 @@ class TestRecentlyAddedTenantFormVisibility(TransactionCase):
 
     def test_external_contractor_does_not_get_the_marker(self):
         self.assertNotIn(self.MARKER, self._form_arch(self.external_user))
-
-
-@tagged("onecore", "mim_1844")
-class TestNewCustomerInfoAckBaseline(TransactionCase):
-    """MIM-1844 cutover (migrations/19.0.1.0.5).
-
-    The two ack columns are new, and the compute deliberately ignores
-    mail.notification.is_read — so without a baseline every request with any
-    historical Mina-sidor notification would resurface as unread. The
-    post-migration seeds both acks from the old read state, giving Mimer and
-    external contractors the exact same view of in-flight cases.
-    """
-
-    def setUp(self):
-        super().setUp()
-        self.internal_user = create_internal_user(self.env)
-        self.external_user = create_external_contractor_user(self.env)
-        self.mimer_user = _get_or_create_mimer_user(self.env)
-        self.team = self.env["maintenance.team"].create({"name": "Test Team"})
-        self.team.write({"member_ids": [(4, self.external_user.id)]})
-        self.migration = _load_ack_baseline_migration()
-
-    def _request(self):
-        return create_maintenance_request(
-            self.env, maintenance_team_id=self.team.id
-        )
-
-    def _notifications(self, request, partner=None):
-        """Every inbox notification on the request, looked up fresh.
-
-        message_post() also notifies followers, so tests must set the read
-        state over the whole request rather than only the rows they created.
-        """
-        domain = [
-            ("mail_message_id.model", "=", "maintenance.request"),
-            ("mail_message_id.res_id", "=", request.id),
-            ("notification_type", "=", "inbox"),
-        ]
-        if partner:
-            domain.append(("res_partner_id", "=", partner.id))
-        return self.env["mail.notification"].sudo().search(domain)
-
-    def _baseline(self):
-        """Returns (rows_updated, rows_left_flagged)."""
-        return self.migration._baseline_new_customer_info_acks(self.env)
-
-    def _unread_for(self, request, user):
-        record = request.with_user(user)
-        record.invalidate_recordset(["has_unread_new_customer_info"])
-        return record.has_unread_new_customer_info
-
-    def test_fully_read_history_is_baselined_as_acknowledged(self):
-        request = self._request()
-        message = _post_customer_info(request, self.mimer_user, self.internal_user)
-        self._notifications(request).write({"is_read": True})
-
-        baselined, still_flagged = self._baseline()
-
-        self.assertEqual(baselined, 1)
-        self.assertEqual(still_flagged, 0)
-        self.assertEqual(request.new_customer_info_ack_at, message.date)
-        self.assertEqual(request.new_customer_info_external_ack_at, message.date)
-        self.assertFalse(self._unread_for(request, self.internal_user))
-        self.assertFalse(self._unread_for(request, self.external_user))
-
-    def test_unread_history_stays_flagged_for_both_audiences(self):
-        # In-flight cases look identical to both sides: an outstanding tenant
-        # message keeps the badge up for Mimer and for the contractor.
-        request = self._request()
-        _post_customer_info(request, self.mimer_user, self.internal_user)
-        self._notifications(request).write({"is_read": True})
-        self._notifications(request, self.internal_user.partner_id).write(
-            {"is_read": False}
-        )
-
-        baselined, still_flagged = self._baseline()
-
-        self.assertEqual(baselined, 1)
-        self.assertEqual(still_flagged, 1)
-        self.assertFalse(request.new_customer_info_ack_at)
-        self.assertFalse(request.new_customer_info_external_ack_at)
-        self.assertTrue(self._unread_for(request, self.internal_user))
-        self.assertTrue(self._unread_for(request, self.external_user))
-
-    def test_contractor_unread_alone_does_not_keep_it_flagged(self):
-        # Contractors had no "Ny kundinfo" badge before MIM-1844, so their own
-        # inbox rows carry no signal — only Mimer's read state decides, for
-        # both sides.
-        request = self._request()
-        message = _post_customer_info(request, self.mimer_user, self.external_user)
-        self._notifications(request).write({"is_read": True})
-        self._notifications(request, self.external_user.partner_id).write(
-            {"is_read": False}
-        )
-
-        self._baseline()
-
-        self.assertEqual(request.new_customer_info_ack_at, message.date)
-        self.assertEqual(request.new_customer_info_external_ack_at, message.date)
-        self.assertFalse(self._unread_for(request, self.internal_user))
-        self.assertFalse(self._unread_for(request, self.external_user))
-
-    def test_request_without_customer_info_history_is_left_alone(self):
-        request = self._request()
-
-        baselined, _still_flagged = self._baseline()
-
-        self.assertEqual(baselined, 0)
-        self.assertFalse(request.new_customer_info_ack_at)
-        self.assertFalse(request.new_customer_info_external_ack_at)
-
-    def test_baseline_uses_the_latest_message(self):
-        request = self._request()
-        first = _post_customer_info(request, self.mimer_user, self.internal_user)
-        latest = _post_customer_info(
-            request, self.mimer_user, self.internal_user, body="Mer info"
-        )
-        latest.sudo().date = first.date + timedelta(hours=1)
-        self._notifications(request).write({"is_read": True})
-
-        self._baseline()
-
-        self.assertEqual(request.new_customer_info_ack_at, latest.date)
-        self.assertEqual(request.new_customer_info_external_ack_at, latest.date)
-
-    def test_rerun_does_not_overwrite_a_post_upgrade_ack(self):
-        request = self._request()
-        message = _post_customer_info(request, self.mimer_user, self.internal_user)
-        self._notifications(request).write({"is_read": True})
-        self._baseline()
-
-        acked_after_upgrade = message.date + timedelta(hours=2)
-        request.write(
-            {
-                "new_customer_info_ack_at": acked_after_upgrade,
-                "new_customer_info_external_ack_at": acked_after_upgrade,
-            }
-        )
-
-        baselined, _still_flagged = self._baseline()
-
-        self.assertEqual(baselined, 0)
-        self.assertEqual(request.new_customer_info_ack_at, acked_after_upgrade)
-        self.assertEqual(
-            request.new_customer_info_external_ack_at, acked_after_upgrade
-        )

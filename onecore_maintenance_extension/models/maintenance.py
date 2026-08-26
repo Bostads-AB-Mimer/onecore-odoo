@@ -186,16 +186,17 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_master_key_change",
         store=False,
     )
-    new_customer_info_ack_at = fields.Datetime(
-        string="Ny kundinfo kvitterad",
-        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ny kundinfo. "
-        "Delas av alla Mimer-användare som har tillgång till ärendet.",
+    customer_message_ack_at = fields.Datetime(
+        string="Meddelande från kund kvitterat",
+        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ett "
+        "meddelande från kund. Delas av alla Mimer-användare som har "
+        "tillgång till ärendet.",
     )
-    new_customer_info_external_ack_at = fields.Datetime(
-        string="Ny kundinfo kvitterad av entreprenör",
-        help="Senaste tidpunkt en extern entreprenör kvitterade ny kundinfo. "
-        "Delas av alla entreprenörer som har tillgång till ärendet, och påverkar "
-        "aldrig Mimers egen kvittering.",
+    customer_message_external_ack_at = fields.Datetime(
+        string="Meddelande från kund kvitterat av entreprenör",
+        help="Senaste tidpunkt en extern entreprenör kvitterade ett meddelande "
+        "från kund. Delas av alla entreprenörer som har tillgång till ärendet, "
+        "och påverkar aldrig Mimers egen kvittering.",
     )
     has_unread_new_customer_info = fields.Boolean(
         string="Okvitterad ny kundinfo",
@@ -628,8 +629,8 @@ class OneCoreMaintenanceRequest(
         "message_ids.date",
         "message_ids.author_id",
         "message_ids.notification_ids",
-        "new_customer_info_ack_at",
-        "new_customer_info_external_ack_at",
+        "customer_message_ack_at",
+        "customer_message_external_ack_at",
         "recently_added_tenant",
     )
     @api.depends_context("uid")
@@ -649,9 +650,9 @@ class OneCoreMaintenanceRequest(
 
         is_external = ExternalContractorService(self.env).is_external_contractor()
         ack_field = (
-            "new_customer_info_external_ack_at"
+            "customer_message_external_ack_at"
             if is_external
-            else "new_customer_info_ack_at"
+            else "customer_message_ack_at"
         )
 
         # No strict separation on the Mimer side: a freshly-added tenant also
@@ -754,9 +755,9 @@ class OneCoreMaintenanceRequest(
         self.ensure_one()
         now = fields.Datetime.now()
         if ExternalContractorService(self.env).is_external_contractor():
-            self.new_customer_info_external_ack_at = now
+            self.customer_message_external_ack_at = now
         else:
-            self.new_customer_info_ack_at = now
+            self.customer_message_ack_at = now
             # Per "no strict separation", the tenant-onboarding flag is cleared
             # too so the badge fully disappears. Internal side only: it is a
             # Mimer data-quality flag and it drives _order for everyone.
