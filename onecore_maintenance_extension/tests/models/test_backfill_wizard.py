@@ -5,10 +5,9 @@ from odoo.tests import tagged
 from odoo.exceptions import UserError
 
 from ..utils.test_utils import create_maintenance_request
+from ...models.services.management_area_service import ManagementAreaService
 
 SOFT_RELOAD = {"type": "ir.actions.client", "tag": "soft_reload"}
-
-WIZARD_PATH = "odoo.addons.onecore_maintenance_extension.models.backfill_wizard"
 
 
 def _residence(rental_id, code):
@@ -452,6 +451,57 @@ class TestBackfillWizard(TransactionCase):
         self.assertIn("Hyresobjekt", body)
         self.assertIn("Hyresgäst", body)
 
+    def test_attach_refreshes_the_district_snapshot(self):
+        # Distrikt/kvartersvärdsområde are snapshotted from the attached object's
+        # property, on create and on the option onchange. The wizard swaps that
+        # object on an already-saved ärende, where neither runs — so without an
+        # explicit refresh the snapshot keeps describing the previous object.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        request.sudo().write(
+            {"cost_center_code": "GAMMAL", "cost_center_name": "Gammalt distrikt"}
+        )
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        area = {
+            "kvv_area_code": "K1",
+            "kvv_area_name": "Område 1",
+            "cost_center_code": "NY",
+            "cost_center_name": "Nytt distrikt",
+        }
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            with patch.object(
+                ManagementAreaService, "fetch_for_property", return_value=(True, area)
+            ):
+                wiz.action_search()
+                wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertEqual(reloaded.cost_center_code, "NY")
+        self.assertEqual(reloaded.kvv_area_code, "K1")
+
+    def test_attach_survives_a_failed_district_refresh(self):
+        # The refresh is best-effort: OneCore being unreachable must not undo the
+        # attach the user just confirmed.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            with patch.object(
+                ManagementAreaService,
+                "fetch_for_property",
+                side_effect=ConnectionError("boom"),
+            ):
+                wiz.action_search()
+                wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.rental_property_id)
+        self.assertTrue(reloaded.lease_id)
+
     def test_empty_value_raises(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
         wiz = self._wizard(request, "tenant")
@@ -500,8 +550,8 @@ class TestBackfillWizard(TransactionCase):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
         wiz = self._wizard(request, "rental_object")
         wiz.lookup_value = "216-034-03-0101"
-        with patch(
-            f"{WIZARD_PATH}.core_api.CoreApi", side_effect=ConnectionError("boom")
+        with patch.object(
+            type(request), "get_core_api", side_effect=ConnectionError("boom")
         ):
             with self.assertRaises(UserError) as caught:
                 wiz.action_search()

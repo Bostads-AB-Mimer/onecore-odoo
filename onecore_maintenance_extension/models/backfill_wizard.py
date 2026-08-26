@@ -11,9 +11,9 @@ from .services.direct_lookup_service import (
     route_for_object_option,
     all_routes,
 )
+from .services.management_area_service import ManagementAreaService
 from .services.record_management_service import RecordManagementService
 from .utils.helpers import select_active_lease
-from ...onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
 
@@ -72,12 +72,14 @@ class MaintenanceBackfillWizard(models.TransientModel):
     def _get_core_api(self):
         """The client, with a failed authentication reported like a failed lookup.
 
-        ``CoreApi`` authenticates in its constructor when no token is cached, so
-        an outage can surface here rather than on the call itself — raw, and
-        outside the caller's ``LookupFailed`` guard.
+        Built through the request's ``get_core_api()``, which is how every other
+        caller in the module constructs one. ``CoreApi`` authenticates in its
+        constructor when no token is cached, so an outage can surface here rather
+        than on the call itself — raw, and outside the caller's ``LookupFailed``
+        guard.
         """
         try:
-            return core_api.CoreApi(self.env)
+            return self.maintenance_request_id.get_core_api()
         except Exception as err:
             raise LookupFailed(str(err)) from err
 
@@ -286,7 +288,36 @@ class MaintenanceBackfillWizard(models.TransientModel):
         self._unlink_replaced(old_lease, request.lease_id)
         self._unlink_replaced(old_tenant, request.tenant_id)
 
+        self._refresh_management_area(request)
         self._post_attach_note(request, before)
+
+    def _refresh_management_area(self, request):
+        """Re-snapshot distrikt/kvartersvärdsområde for the object just attached.
+
+        The snapshot is taken from the object's property, by ``create`` and by
+        the option onchange (``ManagementAreaService.preview``). Neither runs
+        here — this is a saved ärende whose object we just replaced — so without
+        this the request keeps describing the previous object's distrikt.
+        ``force`` because the request already carries one.
+
+        Only the snapshot fields are written. Resursgrupp is deliberately left
+        alone: pairing a team to the district is an explicit user action
+        ("Tilldela resursgrupp"), and the create-time prefill exists only because
+        the field is required to save at all.
+
+        Best-effort, with the same savepoint reasoning as ``_unlink_replaced``:
+        the attach is what the user confirmed, and a OneCore outage must not
+        undo it.
+        """
+        try:
+            with self.env.cr.savepoint():
+                ManagementAreaService(self.env).populate(request, force=True)
+        except Exception as err:
+            _logger.warning(
+                "Could not refresh the management area for request %s: %s",
+                request.id,
+                err,
+            )
 
     def _attached_labels(self, request):
         """Display names of what this wizard attaches, plus the space type.
