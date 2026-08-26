@@ -393,3 +393,50 @@ class TestAcknowledgeCustomerMessage(CustomerMessageCase):
             ).mapped("body")
         )
         self.assertIn("Meddelande från kund kvitterat", bodies)
+
+
+@tagged("onecore")
+class TestCustomerMessageOrdering(CustomerMessageCase):
+    """"Ärende med statusen 'meddelande från kund' ska sorteras högst upp i
+    kanban vyn." _order can only read stored columns, hence the two booleans.
+    """
+
+    def _ordered_ids(self):
+        return self.env["maintenance.request"].search(
+            [("id", "in", (self.request.id, self.other.id))]
+        ).ids
+
+    def setUp(self):
+        super().setUp()
+        self.other = create_maintenance_request(
+            self.env, maintenance_team_id=self.team.id
+        )
+        # request_date is a Date defaulting to today
+        # (odoo/addons/maintenance/models/maintenance.py:211), so two requests
+        # made in one test share it and the _order tie-break is undefined.
+        # Age self.request explicitly: plain date order then puts self.other
+        # first, which is what makes the promotion assertions meaningful.
+        today = fields.Date.context_today(self.request)
+        self.other.request_date = today
+        self.request.request_date = today - timedelta(days=1)
+
+    def test_unread_customer_message_sorts_first(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.assertEqual(self._ordered_ids()[0], self.request.id)
+
+    def test_acknowledging_drops_it_back(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        # The contractor side is still unread, which also sorts above plain
+        # date order — so acknowledge both sides to fall all the way back.
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+        self.assertEqual(self._ordered_ids()[0], self.other.id)
+
+    def test_recently_added_tenant_still_sorts_below_customer_messages(self):
+        self.other.recently_added_tenant = True
+        _post_tenant_message(self.request, self.mimer_user)
+        self.assertEqual(self._ordered_ids()[0], self.request.id)

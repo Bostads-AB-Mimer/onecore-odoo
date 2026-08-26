@@ -62,7 +62,14 @@ class OneCoreMaintenanceRequest(
     models.Model,
 ):
     _inherit = "maintenance.request"
-    _order = "recently_added_tenant desc, request_date desc"
+    # Customer messages first — "ska sorteras högst upp i kanban vyn". _order
+    # takes stored columns only, so both audience columns appear here; a case
+    # unread only by the other side sorts just below your own unread ones.
+    _order = (
+        "customer_message_unread_internal desc, "
+        "customer_message_unread_external desc, "
+        "recently_added_tenant desc, request_date desc"
+    )
     _unaccent = True
 
     # ============================================================================
