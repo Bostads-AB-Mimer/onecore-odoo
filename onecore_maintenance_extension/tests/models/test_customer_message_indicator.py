@@ -440,3 +440,82 @@ class TestCustomerMessageOrdering(CustomerMessageCase):
         self.other.recently_added_tenant = True
         _post_tenant_message(self.request, self.mimer_user)
         self.assertEqual(self._ordered_ids()[0], self.request.id)
+
+
+@tagged("onecore")
+class TestCustomerMessageReceipt(CustomerMessageCase):
+    """"Visa 'Mimer/leverantörens namn har mottagit ditt meddelande' för kunden
+    i mina sidor och i händelseloggen i Odoo."
+
+    Mina sidor renders any message_type other than 'from_tenant' as a message
+    from Mimer, so the type only has to be allowlisted in the work-order
+    service's MESSAGE_DOMAIN. It must never fire an SMS or an email.
+    """
+
+    def _receipts(self):
+        return self.request.message_ids.filtered(
+            lambda m: m.message_type == "receipt_to_tenant"
+        )
+
+    def test_internal_ack_posts_a_receipt_naming_mimer(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+
+        receipts = self._receipts()
+        self.assertEqual(len(receipts), 1)
+        self.assertIn("Mimer har mottagit ditt meddelande", receipts.body)
+
+    def test_contractor_ack_posts_a_receipt_naming_the_team(self):
+        # The ticket asks for the *supplier's* name, not the individual's.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+
+        receipts = self._receipts()
+        self.assertEqual(len(receipts), 1)
+        self.assertIn("Test Team har mottagit ditt meddelande", receipts.body)
+
+    def test_ack_with_nothing_unread_posts_no_receipt(self):
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        self.assertFalse(self._receipts())
+
+    def test_receipt_type_is_not_an_outbound_tenant_dispatch(self):
+        # Every tenant_* type sends a real SMS/email in mail.message.create.
+        # The receipt must not be one of them.
+        self.assertFalse("receipt_to_tenant".startswith("tenant_"))
+
+    def test_receipt_type_is_registered_on_mail_message(self):
+        selection = dict(
+            self.env["mail.message"]._fields["message_type"].selection
+        )
+        self.assertIn("receipt_to_tenant", selection)
+
+    def test_receipt_does_not_re_raise_the_customer_message_flag(self):
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        record = self.request.with_user(self.internal_user)
+        record.invalidate_recordset(["has_unread_customer_message"])
+        self.assertFalse(record.has_unread_customer_message)
+
+    def test_contractor_receipt_does_not_trip_the_supplier_dialog_badge(self):
+        # The receipt is a note authored by a contractor, and
+        # _dialog_unread_message_ids looks at notes from the opposite party.
+        # It is excluded because that pre-filter requires
+        # message_type == "comment" AND informs_opposite_party, and the receipt
+        # has neither. Pinned here so a future change to either cannot silently
+        # start raising "Meddelande från leverantör" on every ack.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+
+        record = self.request.with_user(self.internal_user)
+        record.invalidate_recordset(["has_unread_supplier_dialog"])
+        self.assertFalse(record.has_unread_supplier_dialog)

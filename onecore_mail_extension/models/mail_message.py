@@ -140,6 +140,10 @@ class OneCoreMailMessage(models.Model):
     message_type = fields.Selection(
         selection_add=[
             ("from_tenant", "From tenant"),
+            # MIM-1960 — our confirmation that a Mina-sidor message was read.
+            # Deliberately NOT prefixed tenant_: create() treats every tenant_*
+            # type as an outbound SMS/email dispatch, and this must stay silent.
+            ("receipt_to_tenant", "Kvittens till hyresgäst"),
             ("tenant_sms", "Sent to tenant by SMS"),
             ("tenant_mail", "Sent to tenant by email"),
             ("tenant_mail_and_sms", "Sent to tenant by email and SMS"),
@@ -160,6 +164,7 @@ class OneCoreMailMessage(models.Model):
         ],
         ondelete={
             "from_tenant": "set default",
+            "receipt_to_tenant": "set default",
             "tenant_sms": "set default",
             "tenant_mail": "set default",
             "tenant_mail_and_sms": "set default",

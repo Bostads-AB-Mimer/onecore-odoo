@@ -26,6 +26,7 @@ from .constants import (
     CREATION_ORIGINS,
     FORM_STATES,
     CUSTOMER_MESSAGE_TYPE,
+    RECEIPT_TO_TENANT_MESSAGE_TYPE,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -741,15 +742,39 @@ class OneCoreMaintenanceRequest(
         if not self.has_unread_customer_message:
             return True
         now = fields.Datetime.now()
-        if ExternalContractorService(self.env).is_external_contractor():
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        if is_external:
             self.customer_message_external_ack_at = now
         else:
             self.customer_message_ack_at = now
+        self._post_customer_message_receipt(is_external)
         # Non-stored computed field — writing the stored ack does not invalidate
         # it automatically, so force a recompute for the chatter button and the
         # kanban chip.
         self.invalidate_recordset(["has_unread_customer_message"])
         return True
+
+    def _post_customer_message_receipt(self, is_external):
+        """Confirm to the tenant that their message was read.
+
+        Lands in the Odoo händelselogg immediately, and on Mina sidor once
+        receipt_to_tenant is allowlisted in the work-order service's
+        MESSAGE_DOMAIN — that is a read filter, so earlier receipts appear
+        retroactively.
+
+        Posted as the acking user, so the audit log records who acknowledged.
+        Mina sidor shows only a first name beside the body, and the body carries
+        the organisation name the tenant needs.
+        """
+        self.ensure_one()
+        sender = "Mimer"
+        if is_external and self.maintenance_team_id:
+            sender = self.maintenance_team_id.name
+        return self.message_post(
+            body=f"{sender} har mottagit ditt meddelande",
+            message_type=RECEIPT_TO_TENANT_MESSAGE_TYPE,
+            subtype_xmlid="mail.mt_note",
+        )
 
     def action_acknowledge_master_key_change(self):
         """Mark the master-key change read for every viewer of the request.
