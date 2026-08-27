@@ -291,6 +291,85 @@ class TestAckRenameMigration(CustomerMessageCase):
         self.assertEqual(stored_ack, seeded_ack)
 
 
+def _load_old_ack_baseline_migration():
+    """Load migrations/19.0.1.0.5/post-migration.py by path.
+
+    Same idiom as _load_ack_rename_migration(): the directory name is not a
+    valid Python identifier.
+    """
+    module_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    path = os.path.join(module_root, "migrations", "19.0.1.0.5", "post-migration.py")
+    spec = importlib.util.spec_from_file_location("mim_1844_post_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@tagged("onecore")
+class TestOldAckBaselineMigrationGuard(CustomerMessageCase):
+    """Covers migrations/19.0.1.0.5/post-migration.py's column guard.
+
+    MIM-1960 renamed the two columns this script writes
+    (new_customer_info_ack_at / new_customer_info_external_ack_at ->
+    customer_message_ack_at / customer_message_external_ack_at). Odoo runs
+    every version's pre-migration, then init_models(), then every version's
+    post-migration in version order — so by the time this script's
+    migrate() runs, init_models() has already applied the current field
+    definitions, which only know the new column names. On every reachable
+    database the old column is gone by then, so the guard must fire and the
+    body must never execute (see the script's own docstring).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.migration = _load_old_ack_baseline_migration()
+
+    def test_guard_is_a_no_op_on_the_natural_test_schema(self):
+        # The test database's schema already matches every reachable
+        # post-upgrade state: only the new columns exist. migrate() must
+        # return immediately and leave a seeded ack untouched.
+        #
+        # Seed a real odoo@mimer.nu inbox notification so the migration's own
+        # early returns (no integration user / no matching rows) cannot be
+        # the reason nothing happens — production has 558 notification-
+        # bearing requests, so this script's UPDATE is genuinely reached
+        # there. Without the column guard, this would hit the UPDATE on the
+        # renamed columns and raise a ProgrammingError.
+        message = self.request.with_user(self.mimer_user).message_post(
+            body="Ny info från hyresgäst",
+            message_type="comment",
+            subtype_xmlid="mail.mt_comment",
+        )
+        self.env["mail.notification"].sudo().create(
+            {
+                "mail_message_id": message.id,
+                "res_partner_id": self.internal_user.partner_id.id,
+                "notification_type": "inbox",
+                "is_read": True,
+            }
+        )
+        seeded_ack = fields.Datetime.now()
+        self.request.customer_message_ack_at = seeded_ack
+        self.env.flush_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.5")
+
+        # Assert on the raw column, not through the ORM: env.invalidate_all()
+        # defaults to flush=True, which would push the cached value back into
+        # the database *after* migrate() ran and mask a real unconditional
+        # wipe (or a crash the ORM never surfaces). Reading straight from
+        # Postgres is the only way this test can actually fail if the guard
+        # regresses. Same trap documented on TestAckRenameMigration.
+        self.env.cr.execute(
+            "SELECT customer_message_ack_at FROM maintenance_request WHERE id = %s",
+            (self.request.id,),
+        )
+        (stored_ack,) = self.env.cr.fetchone()
+        self.assertEqual(stored_ack, seeded_ack)
+
+
 @tagged("onecore")
 class TestHasUnreadCustomerMessage(CustomerMessageCase):
     def _refresh(self, user):
