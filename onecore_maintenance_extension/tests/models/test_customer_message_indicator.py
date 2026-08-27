@@ -10,7 +10,6 @@ acknowledgement posts a receipt to the tenant.
 
 import importlib.util
 import os
-import unittest
 
 from datetime import timedelta
 from unittest.mock import patch
@@ -804,31 +803,6 @@ def _load_customer_message_migration():
 
 
 @tagged("onecore", "mim_1960")
-@unittest.skip(
-    "migrations/19.0.1.0.6/post-migration.py is off-limits for MIM-1960 (see "
-    "'Do not touch' in the handoff doc), but it can no longer run against the "
-    "post-MIM-1960 model: its raw SQL writes to the now-dropped-from-the-model "
-    "customer_message_external_ack_at column (which does not exist at all on "
-    "a fresh test database, since the ORM never creates a column for a field "
-    "that no longer exists), and its SORT_FIELDS tuple looks up "
-    "model._fields['customer_message_unread_internal'] / "
-    "['customer_message_unread_external'], both removed in favour of the "
-    "single customer_message_unread. Either lookup raises before this test's "
-    "assertions would run. This is a real landmine for the follow-up "
-    "migrations/19.0.1.0.7 task, not a test-authoring problem: on any "
-    "database still below 19.0.1.0.6 that upgrades straight through 1.0.7, "
-    "Odoo's migration ordering (all pre-migrations, then init_models() with "
-    "the FINAL current field set, then all post-migrations, in version "
-    "order — odoo/modules/loading.py:174,194,230) means 19.0.1.0.6's "
-    "post-migration always runs after 19.0.1.0.7's pre-migration has already "
-    "dropped/renamed these columns and after init_models() has already "
-    "removed these fields. It will raise on every such upgrade, not just in "
-    "this test. Flagged in the MIM-1960 model/tests task report; the "
-    "migration task must resolve it (very likely requiring an edit to "
-    "19.0.1.0.6/post-migration.py despite the 'do not touch' instruction, "
-    "or an equivalent compensating guard) before this class can be "
-    "re-enabled."
-)
 class TestCustomerMessageAckBaseline(CustomerMessageCase):
     """MIM-1960 cutover (migrations/19.0.1.0.6/post-migration.py).
 
@@ -838,7 +812,16 @@ class TestCustomerMessageAckBaseline(CustomerMessageCase):
     re-baseline, historical tenant messages that never produced an inbox
     notification resurface as unread and get promoted to the top of the kanban.
 
-    Skipped — see the class-level skip reason above.
+    Was skipped: this script's raw SQL used to also write the now-removed
+    customer_message_external_ack_at column and its SORT_FIELDS tuple used to
+    look up the now-removed customer_message_unread_internal /
+    customer_message_unread_external fields, both of which the MIM-1960 model
+    change dropped in favour of one shared customer_message_ack_at /
+    customer_message_unread. The follow-up migrations/19.0.1.0.7 task
+    collapsed this script's writes onto the single column (see its own
+    docstring), so it runs cleanly again against the current model — this
+    class's assertions never referenced the removed columns in the first
+    place, so re-enabling it required no assertion changes.
     """
 
     def setUp(self):
@@ -1053,3 +1036,181 @@ class TestCustomerMessageAckBaseline(CustomerMessageCase):
         self.assertEqual(self.request.last_customer_message_at, newer.date)
         self.assertFalse(self.request.customer_message_ack_at)
         self.assertTrue(self._unread_for(self.request, self.internal_user))
+
+
+def _load_ack_merge_migration():
+    """Load migrations/19.0.1.0.7/pre-migration.py by path.
+
+    Same idiom as _load_ack_rename_migration(): the directory name is not a
+    valid Python identifier.
+    """
+    module_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    path = os.path.join(module_root, "migrations", "19.0.1.0.7", "pre-migration.py")
+    spec = importlib.util.spec_from_file_location("mim_1960_ack_merge_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@tagged("onecore", "mim_1960")
+class TestAckMergeMigration(CustomerMessageCase):
+    """Covers migrations/19.0.1.0.7/pre-migration.py: merging
+    customer_message_external_ack_at into customer_message_ack_at (earliest
+    non-null wins — the first acknowledger, matching the new shared
+    semantics) and dropping that column plus the two orphaned sort booleans
+    customer_message_unread_internal / customer_message_unread_external.
+
+    Only a test/dev database still on 19.0.1.0.6 (state T in the handoff doc)
+    carries the external column and the orphan columns; a real 1.0.4 -> 1.0.7
+    production upgrade (state P) never creates them — see the migration's own
+    docstring for why Odoo's migration ordering guarantees that. Both shapes
+    are covered here.
+
+    TransactionCase rolls back and Postgres DDL is transactional, so adding
+    and dropping maintenance_request's columns inside a test is safe (same
+    reasoning TestAckRenameMigration documents).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.migration = _load_ack_merge_migration()
+
+    def _add_external_ack_column(self):
+        """Simulate state T: a database still on 19.0.1.0.6, which has both
+        ack columns."""
+        self.env.cr.execute(
+            "ALTER TABLE maintenance_request "
+            'ADD COLUMN "customer_message_external_ack_at" timestamp'
+        )
+
+    def _add_orphan_sort_columns(self):
+        self.env.cr.execute(
+            "ALTER TABLE maintenance_request "
+            'ADD COLUMN "customer_message_unread_internal" boolean'
+        )
+        self.env.cr.execute(
+            "ALTER TABLE maintenance_request "
+            'ADD COLUMN "customer_message_unread_external" boolean'
+        )
+
+    def _set_raw(self, request, column, value):
+        self.env.cr.execute(
+            f"UPDATE maintenance_request SET {column} = %s WHERE id = %s",
+            (value, request.id),
+        )
+
+    def _raw_ack(self, request):
+        # Not an ORM field read: the ORM cache could serve a stale value and
+        # hide a real database change (the trap this suite documents
+        # elsewhere — see TestAckRenameMigration).
+        self.env.cr.execute(
+            "SELECT customer_message_ack_at FROM maintenance_request WHERE id = %s",
+            (request.id,),
+        )
+        (value,) = self.env.cr.fetchone()
+        return value
+
+    def test_merge_keeps_the_earliest_non_null_ack(self):
+        # All four NULL combinations of (customer_message_ack_at,
+        # customer_message_external_ack_at) in one pass. earlier/later are
+        # built two days apart so LEAST/GREATEST can never tie.
+        self._add_external_ack_column()
+
+        earlier = fields.Datetime.now() - timedelta(days=2)
+        later = fields.Datetime.now() - timedelta(days=1)
+
+        both_null = create_maintenance_request(self.env)
+        ack_only = create_maintenance_request(self.env)
+        ext_only = create_maintenance_request(self.env)
+        ack_acked_first = create_maintenance_request(self.env)
+        ext_acked_first = create_maintenance_request(self.env)
+
+        self._set_raw(ack_only, "customer_message_ack_at", earlier)
+        self._set_raw(ext_only, "customer_message_external_ack_at", earlier)
+        self._set_raw(ack_acked_first, "customer_message_ack_at", earlier)
+        self._set_raw(ack_acked_first, "customer_message_external_ack_at", later)
+        self._set_raw(ext_acked_first, "customer_message_ack_at", later)
+        self._set_raw(ext_acked_first, "customer_message_external_ack_at", earlier)
+        self.env.flush_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+
+        self.assertIsNone(self._raw_ack(both_null))
+        self.assertEqual(self._raw_ack(ack_only), earlier)
+        self.assertEqual(self._raw_ack(ext_only), earlier)
+        self.assertEqual(self._raw_ack(ack_acked_first), earlier)
+        self.assertEqual(self._raw_ack(ext_acked_first), earlier)
+
+    def test_merge_drops_the_external_and_orphan_columns(self):
+        self._add_external_ack_column()
+        self._add_orphan_sort_columns()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+
+        self.assertFalse(
+            column_exists(
+                self.env.cr,
+                "maintenance_request",
+                "customer_message_external_ack_at",
+            )
+        )
+        self.assertFalse(
+            column_exists(
+                self.env.cr,
+                "maintenance_request",
+                "customer_message_unread_internal",
+            )
+        )
+        self.assertFalse(
+            column_exists(
+                self.env.cr,
+                "maintenance_request",
+                "customer_message_unread_external",
+            )
+        )
+
+    def test_natural_schema_is_a_no_op_and_leaves_a_seeded_ack_untouched(self):
+        # State P: the natural fresh-database schema has neither the
+        # external column nor the orphan sort columns — nothing must raise,
+        # and a real ack already in place must be left alone.
+        #
+        # flush_all() first: stored-field writes through the ORM only dirty
+        # the cache, so the column would not genuinely hold the seeded value
+        # when the migration runs otherwise (same trap TestAckRenameMigration
+        # documents).
+        seeded_ack = fields.Datetime.now()
+        self.request.customer_message_ack_at = seeded_ack
+        self.env.flush_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+
+        self.assertEqual(self._raw_ack(self.request), seeded_ack)
+
+    def test_second_run_changes_nothing(self):
+        self._add_external_ack_column()
+        self._add_orphan_sort_columns()
+
+        earlier = fields.Datetime.now() - timedelta(days=2)
+        later = fields.Datetime.now() - timedelta(days=1)
+        self._set_raw(self.request, "customer_message_ack_at", earlier)
+        self._set_raw(self.request, "customer_message_external_ack_at", later)
+        self.env.flush_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+        after_first_run = self._raw_ack(self.request)
+        self.assertEqual(after_first_run, earlier)
+
+        # Second run: the columns dropped by the first run are gone, so
+        # every guard is False and nothing should change.
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+
+        self.assertEqual(self._raw_ack(self.request), after_first_run)
+        self.assertFalse(
+            column_exists(
+                self.env.cr,
+                "maintenance_request",
+                "customer_message_external_ack_at",
+            )
+        )

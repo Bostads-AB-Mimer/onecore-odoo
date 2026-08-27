@@ -21,9 +21,14 @@ Rule, per request:
     ack = NULL               when stays_flagged  -- outstanding, keep it visible
         = latest_from_tenant otherwise           -- already read, stays quiet
 
-Both columns take the same verdict, matching MIM-1844's final decision: an
-in-flight case must look identical to Mimer handlers and to contractors. Only
-rows where both columns are still NULL are touched, so a re-run cannot clobber
+customer_message_ack_at is the only column this script writes now. MIM-1960
+(commit 906947c, after this script was first written) collapsed the
+per-audience ack pair into that single shared column, so there is no second
+verdict to keep in lockstep any more — see
+`migrations/19.0.1.0.7/pre-migration.py` for the follow-up that merges
+whatever a pre-1.0.6 test database already holds in the now-dropped
+customer_message_external_ack_at into this same column. Only rows where
+customer_message_ack_at is still NULL are touched, so a re-run cannot clobber
 an acknowledgement made after the upgrade.
 
 Contractor inbox rows are excluded from the unread test for the reason MIM-1844
@@ -31,9 +36,9 @@ documents: their read state says nothing about whether the tenant's message is
 still outstanding on the case.
 
 last_customer_message_at is backfilled over the full history regardless of the
-verdict, and the two stored sort booleans are recomputed from it. Because the
-acks are baselined in the same pass, they land False — history does not affect
-the sort. The datetime exists so a future reply on an old thread sorts correctly.
+verdict, and the stored sort boolean is recomputed from it. Because the acks
+are baselined in the same pass, it lands False — history does not affect the
+sort. The datetime exists so a future reply on an old thread sorts correctly.
 """
 
 import logging
@@ -41,10 +46,7 @@ import logging
 _logger = logging.getLogger(__name__)
 
 CUSTOMER_MESSAGE_TYPE = "from_tenant"
-SORT_FIELDS = (
-    "customer_message_unread_internal",
-    "customer_message_unread_external",
-)
+SORT_FIELDS = ("customer_message_unread",)
 
 
 def migrate(cr, version):
@@ -62,7 +64,7 @@ def migrate(cr, version):
 
 
 def _baseline_customer_message_acks(env):
-    """Seed the ack pair and the sort inputs from the pre-MIM-1960 read state.
+    """Seed the shared ack and the sort input from the pre-MIM-1960 read state.
 
     Returns ``(rows_updated, rows_left_flagged)``.
     """
@@ -129,9 +131,6 @@ def _baseline_customer_message_acks(env):
         UPDATE maintenance_request mr
         SET customer_message_ack_at = CASE
                 WHEN v.internal_unread THEN NULL ELSE v.latest
-            END,
-            customer_message_external_ack_at = CASE
-                WHEN v.internal_unread THEN NULL ELSE v.latest
             END
         FROM (
             SELECT *
@@ -140,7 +139,6 @@ def _baseline_customer_message_acks(env):
         ) v
         WHERE mr.id = v.id
           AND mr.customer_message_ack_at IS NULL
-          AND mr.customer_message_external_ack_at IS NULL
         RETURNING mr.id, mr.customer_message_ack_at
         """,
         (request_ids, latest_dates, internal_unread),
