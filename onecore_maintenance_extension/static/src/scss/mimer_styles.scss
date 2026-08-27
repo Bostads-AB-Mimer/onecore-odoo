@@ -25,6 +25,14 @@ $mimer-orange-text: #E65100;
     color: $mimer-orange-text;
 }
 
+// Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
+$mimer-address-blue: #1D4ED8;
+
+.mimer-address {
+    color: $mimer-address-blue;
+    font-weight: 600;
+}
+
 /* Component wizard - component list table styling */
 .o_maintenance_component_wizard_form {
     .o_field_one2many {

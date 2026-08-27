@@ -253,6 +253,124 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
 
 
 @tagged("onecore")
+class TestNewRequestFormOnchange(StageTestMixin, TransactionCase):
+    """Opening the new-request form must never raise.
+
+    On a brand new record Odoo runs the onchange of every field in the view,
+    not just the ones that got a default. A prefilled assignee therefore hit
+    the MIM-1873 priority validation before the form had rendered, leaving
+    the user with an error they could not act on: the dialog told them to
+    set Prioritet, but the field was in a form that never opened.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.internal_user = create_internal_user(self.env)
+        self._setup_common_stages()
+        self.team = self.env["maintenance.team"].create(
+            {
+                "name": "Testresursgrupp",
+                "member_ids": [(6, 0, [self.internal_user.id])],
+            }
+        )
+
+    def _first_onchange(self, fields_spec, **context):
+        """Run the first onchange for a new request, the way the client does."""
+        return (
+            self.env["maintenance.request"]
+            .with_user(self.internal_user)
+            .with_context(**context)
+            .onchange({}, [], fields_spec)
+        )
+
+    def _stage_id(self, result):
+        """Pull stage_id out of an onchange result — Odoo returns a bare id."""
+        return result["value"]["stage_id"]
+
+    def test_request_action_does_not_prefill_assignee(self):
+        """The all-requests action must not seed user_id.
+
+        Stock Odoo ships 'default_user_id': uid on this action; the override
+        in mobile_view.xml drops it. Without that, every new request arrives
+        with a resource already set and auto-transitions on sight.
+        """
+        context = self.env.ref("maintenance.hr_equipment_request_action").context
+
+        self.assertNotIn("default_user_id", context)
+        self.assertIn("search_default_active", context)
+
+    def test_prefilled_assignee_does_not_block_the_form(self):
+        """A seeded assignee must not raise while the form is being built."""
+        result = self._first_onchange(
+            {
+                "name": {},
+                "maintenance_team_id": {},
+                "user_id": {},
+                "stage_id": {},
+                "priority_expanded": {},
+            },
+            default_maintenance_team_id=self.team.id,
+            default_user_id=self.internal_user.id,
+        )
+
+        self.assertEqual(
+            self._stage_id(result),
+            self.stage_vantar.id,
+            "no priority is set, so the request must stay in Väntar på handläggning",
+        )
+
+    def test_assignee_before_team_in_view_order_does_not_block(self):
+        """The form must open regardless of the order of the two fields.
+
+        _onchange_maintenance_team_id clears an assignee who is not a member
+        of the request's team, which used to shield non-members from the
+        error by accident — it only worked because Odoo runs onchanges in
+        view order and maintenance_team_id happens to sit above user_id.
+        Reordering the form would have exposed everyone. Pin that the order
+        no longer decides whether the form opens.
+        """
+        result = self._first_onchange(
+            {
+                "name": {},
+                "user_id": {},
+                "maintenance_team_id": {},
+                "stage_id": {},
+                "priority_expanded": {},
+            },
+            default_maintenance_team_id=self.team.id,
+            default_user_id=self.internal_user.id,
+        )
+
+        self.assertEqual(self._stage_id(result), self.stage_vantar.id)
+
+    def test_team_scoped_form_is_unaffected(self):
+        """Creating from inside a resursgrupp keeps working unchanged."""
+        result = self._first_onchange(
+            {
+                "name": {},
+                "maintenance_team_id": {},
+                "user_id": {},
+                "stage_id": {},
+                "priority_expanded": {},
+            },
+            default_maintenance_team_id=self.team.id,
+        )
+
+        self.assertFalse(result["value"].get("user_id"))
+        self.assertEqual(self._stage_id(result), self.stage_vantar.id)
+
+    def test_saving_assignee_without_priority_is_still_blocked(self):
+        """MIM-1873 must not regress: the save still refuses a bare resource."""
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            create_maintenance_request(
+                self.env,
+                stage_id=self.stage_vantar.id,
+                user_id=self.internal_user.id,
+                priority_expanded=False,
+            )
+
+
+@tagged("onecore")
 class TestFieldChangeTracker(TransactionCase):
     def setUp(self):
         super().setUp()

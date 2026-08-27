@@ -938,8 +938,14 @@ class OneCoreMaintenanceRequest(
     def _onchange_user_id(self):
         stage_manager = MaintenanceStageManager(self.env)
         for record in self:
+            # validate=False: this runs while the form is still being built —
+            # on a brand new record Odoo fires every onchange in the view — so
+            # raising here would block the form from ever rendering. The save
+            # still validates.
             updates = stage_manager.handle_resource_assignment(
-                record, record.user_id.id if record.user_id else False
+                record,
+                record.user_id.id if record.user_id else False,
+                validate=False,
             )
             if "stage_id" in updates:
                 record.stage_id = updates["stage_id"]

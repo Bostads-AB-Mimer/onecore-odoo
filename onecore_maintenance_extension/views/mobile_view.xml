@@ -7,6 +7,12 @@
     <field name="res_model">maintenance.request</field>
     <field name="view_mode">kanban,mobile,list,form,pivot,graph,calendar,activity</field>
     <field name="mobile_view_mode">mobile</field>
+    <!-- Drops 'default_user_id': uid from the stock Odoo context. It prefilled
+         the assignee on every new request, which auto-moved the request to
+         "Resurs tilldelad" during the very first onchange and raised the
+         MIM-1873 priority error before the form had rendered. Keep
+         search_default_active: it is the "Aktiva ärenden" facet users expect. -->
+    <field name="context">{'search_default_active': True}</field>
   </record>
 
   <!-- Extension: does the same as above but for when selecting a team from the dashboard -->
