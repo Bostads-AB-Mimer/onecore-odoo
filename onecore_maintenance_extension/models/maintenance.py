@@ -64,12 +64,10 @@ class OneCoreMaintenanceRequest(
 ):
     _inherit = "maintenance.request"
     # Customer messages first — "ska sorteras högst upp i kanban vyn". _order
-    # takes stored columns only, so both audience columns appear here; a case
-    # unread only by the other side sorts just below your own unread ones.
+    # takes stored columns only, hence the stored customer_message_unread
+    # boolean rather than the non-stored has_unread_customer_message.
     _order = (
-        "customer_message_unread_internal desc, "
-        "customer_message_unread_external desc, "
-        "recently_added_tenant desc, request_date desc"
+        "customer_message_unread desc, " "recently_added_tenant desc, request_date desc"
     )
     _unaccent = True
 
@@ -196,15 +194,9 @@ class OneCoreMaintenanceRequest(
     )
     customer_message_ack_at = fields.Datetime(
         string="Meddelande från kund kvitterat",
-        help="Senaste tidpunkt någon Mimer-handläggare kvitterade ett "
-        "meddelande från kund. Delas av alla Mimer-användare som har "
-        "tillgång till ärendet.",
-    )
-    customer_message_external_ack_at = fields.Datetime(
-        string="Meddelande från kund kvitterat av entreprenör",
-        help="Senaste tidpunkt en extern entreprenör kvitterade ett meddelande "
-        "från kund. Delas av alla entreprenörer som har tillgång till ärendet, "
-        "och påverkar aldrig Mimers egen kvittering.",
+        help="Senaste tidpunkt någon kvitterade ett meddelande från kund. "
+        "Delas av alla användare — Mimer-handläggare och externa "
+        "entreprenörer — som har tillgång till ärendet (MIM-1960).",
     )
     has_unread_new_customer_info = fields.Boolean(
         string="Okvitterad ny kundinfo",
@@ -217,15 +209,10 @@ class OneCoreMaintenanceRequest(
         "Mina sidor. Driver sorteringen i kanbanvyn.",
     )
     # Stored, so _order can promote requests with an outstanding customer
-    # message. One column per audience: has_unread_customer_message picks the
-    # matching one per viewer, which _order cannot do.
-    customer_message_unread_internal = fields.Boolean(
-        string="Okvitterat kundmeddelande (Mimer)",
-        compute="_compute_customer_message_unread",
-        store=True,
-    )
-    customer_message_unread_external = fields.Boolean(
-        string="Okvitterat kundmeddelande (entreprenör)",
+    # message — a non-stored computed field cannot be ordered on. Shared
+    # across audiences (MIM-1960): one boolean, not one per side.
+    customer_message_unread = fields.Boolean(
+        string="Okvitterat kundmeddelande",
         compute="_compute_customer_message_unread",
         store=True,
     )
@@ -342,8 +329,10 @@ class OneCoreMaintenanceRequest(
         codes = {record.cost_center_code for record in self if record.cost_center_code}
         by_code = {}
         if codes:
-            districts = self.env["maintenance.cost.center"].sudo().search(
-                [("code", "in", list(codes))]
+            districts = (
+                self.env["maintenance.cost.center"]
+                .sudo()
+                .search([("code", "in", list(codes))])
             )
             by_code = {district.code: district for district in districts}
         for record in self:
@@ -367,8 +356,10 @@ class OneCoreMaintenanceRequest(
         codes = {record.kvv_area_code for record in self if record.kvv_area_code}
         by_code = {}
         if codes:
-            areas = self.env["maintenance.kvv.area"].sudo().search(
-                [("code", "in", list(codes))]
+            areas = (
+                self.env["maintenance.kvv.area"]
+                .sudo()
+                .search([("code", "in", list(codes))])
             )
             by_code = {area.code: area.responsible_name for area in areas}
         for record in self:
@@ -466,10 +457,10 @@ class OneCoreMaintenanceRequest(
                 if api is None:
                     api = record.get_core_api()
                 data = api.fetch_residence(rental_id, timeout=5)
-                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                value = any(
-                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
-                )
+                blocks = (data or {}).get("propertyObject", {}).get(
+                    "rentalBlocks"
+                ) or []
+                value = any((b or {}).get("blockReason") == "SKADEDJUR" for b in blocks)
                 _pest_control_cache[rental_id] = (
                     time.monotonic() + PEST_CONTROL_CACHE_TTL,
                     value,
@@ -526,7 +517,9 @@ class OneCoreMaintenanceRequest(
         # Mimer notes.
         is_external = ExternalContractorService(self.env).is_external_contractor()
         indicator_field = (
-            "has_unread_internal_dialog" if is_external else "has_unread_supplier_dialog"
+            "has_unread_internal_dialog"
+            if is_external
+            else "has_unread_supplier_dialog"
         )
         unread_res_ids = set(
             messages.filtered(lambda m: m.id in unread_ids).mapped("res_id")
@@ -609,7 +602,9 @@ class OneCoreMaintenanceRequest(
             return set()
 
         is_external = ExternalContractorService(self.env).is_external_contractor()
-        ack_field = "internal_dialog_ack_at" if is_external else "supplier_dialog_ack_at"
+        ack_field = (
+            "internal_dialog_ack_at" if is_external else "supplier_dialog_ack_at"
+        )
 
         # Per-request acknowledgement timestamp.
         request_ids = list(set(candidates.mapped("res_id")))
@@ -673,47 +668,23 @@ class OneCoreMaintenanceRequest(
                 False if is_external else record.recently_added_tenant
             )
 
-    @api.depends(
-        "last_customer_message_at",
-        "customer_message_ack_at",
-        "customer_message_external_ack_at",
-    )
+    @api.depends("last_customer_message_at", "customer_message_ack_at")
     def _compute_customer_message_unread(self):
-        # Stored, so no depends_context: these are the two audience-independent
-        # facts, and the per-user pick happens in
-        # _compute_has_unread_customer_message.
+        # Stored, so no depends_context: one shared fact, not one per
+        # audience (MIM-1960) — the first acknowledger from either side
+        # silences it for everyone.
         for record in self:
             latest = record.last_customer_message_at
-            if not latest:
-                record.customer_message_unread_internal = False
-                record.customer_message_unread_external = False
-                continue
-            internal_ack = record.customer_message_ack_at
-            external_ack = record.customer_message_external_ack_at
-            record.customer_message_unread_internal = (
-                not internal_ack or latest > internal_ack
-            )
-            record.customer_message_unread_external = (
-                not external_ack or latest > external_ack
-            )
+            ack = record.customer_message_ack_at
+            record.customer_message_unread = bool(latest) and (not ack or latest > ack)
 
-    @api.depends(
-        "customer_message_unread_internal", "customer_message_unread_external"
-    )
-    @api.depends_context("uid")
+    @api.depends("customer_message_unread")
     def _compute_has_unread_customer_message(self):
-        # Each side acknowledges separately, mirroring the audience split in
-        # _compute_dialog_indicators: an external contractor reads the tenant's
-        # message in the same chatter, but their ack must never suppress it for
-        # Mimer. depends_context("uid") keeps the cache keyed per user so the
-        # two sides cannot read each other's value.
-        is_external = ExternalContractorService(self.env).is_external_contractor()
+        # Non-stored mirror of the stored boolean — kept as a separate field
+        # (rather than having views/JS read customer_message_unread directly)
+        # so the name views and JS already use needs no changes.
         for record in self:
-            record.has_unread_customer_message = (
-                record.customer_message_unread_external
-                if is_external
-                else record.customer_message_unread_internal
-            )
+            record.has_unread_customer_message = record.customer_message_unread
 
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
@@ -739,40 +710,23 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_customer_message(self):
-        """Mark the tenant's Mina-sidor message read for the acking user's side.
+        """Mark the tenant's Mina-sidor message read for everyone (MIM-1960).
 
-        One shared timestamp per side, like action_acknowledge_dialog: the first
-        Mimer handler to click clears it for all of Mimer, the first contractor
-        for all contractors. The sides are independent — a contractor's ack must
-        never suppress the tenant's message for Mimer.
+        One shared timestamp: the first person to acknowledge — from either
+        Mimer or an external contractor's side — silences the status for
+        both. The no-op guard below is what stops a second acknowledger: by
+        the time anyone else clicks, has_unread_customer_message is already
+        False, so reaching the write below means the acking user is first,
+        and posting the receipt unconditionally there is correct — no
+        "other side" guard is needed any more.
         """
         self.ensure_one()
         if not self.has_unread_customer_message:
             return True
         now = fields.Datetime.now()
         is_external = ExternalContractorService(self.env).is_external_contractor()
-        # Capture the OTHER side's unread flag before writing our own timestamp
-        # — writing recomputes both customer_message_unread_* booleans, so the
-        # pre-write value has to be read into a local first. If the other side
-        # still has this message unread, it hasn't acknowledged (or posted a
-        # receipt for) it yet, so we are first and should post. Guarding on
-        # "both ack columns are still NULL" instead would only work for the
-        # very first tenant message: after that message is acknowledged by
-        # both sides, neither ack column is NULL any more, so the guard would
-        # permanently suppress the receipt for every later tenant message even
-        # though last_customer_message_at — and thus both unread flags — have
-        # moved on.
-        other_side_unread = (
-            self.customer_message_unread_internal
-            if is_external
-            else self.customer_message_unread_external
-        )
-        if is_external:
-            self.customer_message_external_ack_at = now
-        else:
-            self.customer_message_ack_at = now
-        if other_side_unread:
-            self._post_customer_message_receipt(is_external)
+        self.customer_message_ack_at = now
+        self._post_customer_message_receipt(is_external)
         # Non-stored computed field — writing the stored ack does not invalidate
         # it automatically, so force a recompute for the chatter button and the
         # kanban chip.
@@ -1300,9 +1254,7 @@ class OneCoreMaintenanceRequest(
                 # switch. web_save re-reads the record in the same
                 # transaction; without follower access the read raises
                 # AccessError and rolls back the whole return.
-                self.sudo().message_subscribe(
-                    partner_ids=self.env.user.partner_id.ids
-                )
+                self.sudo().message_subscribe(partner_ids=self.env.user.partner_id.ids)
 
         # Handle resource assignment workflow (always run, even during creation).
         # Skipped when entering Återsänd: the injected user_id=False would
@@ -1377,9 +1329,7 @@ class OneCoreMaintenanceRequest(
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():
-                self.browse(record_ids).sudo().write(
-                    {"maintenance_team_id": team_id}
-                )
+                self.browse(record_ids).sudo().write({"maintenance_team_id": team_id})
 
         return result
 
@@ -1566,7 +1516,7 @@ class OneCoreMaintenanceRequest(
     # ============================================================================
 
     def action_assign_district_team(self):
-        """"Tilldela resursgrupp": set the team paired with the request's
+        """ "Tilldela resursgrupp": set the team paired with the request's
         district (OneCore cost center), fetching the district first when the
         request doesn't carry one yet (legacy requests)."""
         self.ensure_one()
