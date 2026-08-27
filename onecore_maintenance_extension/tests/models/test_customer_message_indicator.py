@@ -555,6 +555,10 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
         )
 
     def test_internal_ack_posts_a_receipt_naming_mimer(self):
+        # Sole-acker case: the contractor side never acks this message, so its
+        # unread flag stays True and Mimer's ack is the first (and only) one —
+        # exactly one receipt, per the product decision "one receipt per
+        # message, from whichever side acknowledges first" (MIM-1960).
         _post_tenant_message(self.request, self.mimer_user)
         self.request.with_user(
             self.internal_user
@@ -566,6 +570,8 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
 
     def test_contractor_ack_posts_a_receipt_naming_the_team(self):
         # The ticket asks for the *supplier's* name, not the individual's.
+        # Sole-acker case, mirroring the internal test above: the internal
+        # side never acks this message, so the contractor is first.
         _post_tenant_message(self.request, self.mimer_user)
         self.request.with_user(
             self.external_user
@@ -574,6 +580,79 @@ class TestCustomerMessageReceipt(CustomerMessageCase):
         receipts = self._receipts()
         self.assertEqual(len(receipts), 1)
         self.assertIn("Test Team har mottagit ditt meddelande", receipts.body)
+
+    def test_second_ack_after_internal_posts_no_extra_receipt(self):
+        # Mimer acks first -> posts, naming Mimer. The contractor's later ack
+        # on the SAME message must not post a second receipt.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+
+        receipts = self._receipts()
+        self.assertEqual(len(receipts), 1)
+        self.assertIn("Mimer har mottagit ditt meddelande", receipts.body)
+
+    def test_second_ack_after_contractor_posts_no_extra_receipt(self):
+        # Contractor acks first -> posts, naming the team. Mimer's later ack
+        # on the SAME message must not post a second receipt.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+
+        receipts = self._receipts()
+        self.assertEqual(len(receipts), 1)
+        self.assertIn("Test Team har mottagit ditt meddelande", receipts.body)
+
+    def test_new_message_after_both_acked_gets_its_own_receipt(self):
+        # THE case a NULL-based ("has either side ever acked") guard breaks:
+        # after message A is acknowledged by both sides, neither ack column
+        # is NULL any more, so that guard would permanently suppress the
+        # receipt for every later tenant message. The correct guard rereads
+        # the per-message unread flags, which both flip back to True once
+        # last_customer_message_at advances past both acks — so the next
+        # acknowledgement must post a receipt again.
+        _post_tenant_message(self.request, self.mimer_user)
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_customer_message()
+        self.assertEqual(len(self._receipts()), 1)
+
+        # fields.Datetime truncates to whole seconds, so a message posted in
+        # the same wall-clock second as both acks above would not compare as
+        # newer than them (last_customer_message_at > ack_at would be False),
+        # and the unread flags would not flip back to True. Force the new
+        # message strictly past both acks, same as
+        # test_newer_message_re_raises_it_after_ack does.
+        later = _post_tenant_message(
+            self.request, self.mimer_user, body="En till fråga"
+        )
+        later.date = (
+            max(
+                self.request.customer_message_ack_at,
+                self.request.customer_message_external_ack_at,
+            )
+            + timedelta(seconds=1)
+        )
+        self.request.sudo().write({"last_customer_message_at": later.date})
+
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_customer_message()
+
+        receipts = self._receipts().sorted("id")
+        self.assertEqual(len(receipts), 2)
+        self.assertIn("Mimer har mottagit ditt meddelande", receipts[-1].body)
 
     def test_ack_with_nothing_unread_posts_no_receipt(self):
         self.request.with_user(

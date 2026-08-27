@@ -751,11 +751,28 @@ class OneCoreMaintenanceRequest(
             return True
         now = fields.Datetime.now()
         is_external = ExternalContractorService(self.env).is_external_contractor()
+        # Capture the OTHER side's unread flag before writing our own timestamp
+        # — writing recomputes both customer_message_unread_* booleans, so the
+        # pre-write value has to be read into a local first. If the other side
+        # still has this message unread, it hasn't acknowledged (or posted a
+        # receipt for) it yet, so we are first and should post. Guarding on
+        # "both ack columns are still NULL" instead would only work for the
+        # very first tenant message: after that message is acknowledged by
+        # both sides, neither ack column is NULL any more, so the guard would
+        # permanently suppress the receipt for every later tenant message even
+        # though last_customer_message_at — and thus both unread flags — have
+        # moved on.
+        other_side_unread = (
+            self.customer_message_unread_internal
+            if is_external
+            else self.customer_message_unread_external
+        )
         if is_external:
             self.customer_message_external_ack_at = now
         else:
             self.customer_message_ack_at = now
-        self._post_customer_message_receipt(is_external)
+        if other_side_unread:
+            self._post_customer_message_receipt(is_external)
         # Non-stored computed field — writing the stored ack does not invalidate
         # it automatically, so force a recompute for the chatter button and the
         # kanban chip.
