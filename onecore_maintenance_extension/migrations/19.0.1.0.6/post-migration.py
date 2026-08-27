@@ -57,7 +57,7 @@ def migrate(cr, version):
     env.registry.clear_cache()
     _logger.info(
         "MIM-1960 migration complete: re-baselined customer-message "
-        "acknowledgements on %d request(s); %d kept flagged for both audiences.",
+        "acknowledgements on %d request(s); %d kept flagged as unread.",
         baselined,
         still_flagged,
     )

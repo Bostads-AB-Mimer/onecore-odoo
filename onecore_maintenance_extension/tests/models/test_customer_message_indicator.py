@@ -485,13 +485,25 @@ class TestAcknowledgeCustomerMessage(CustomerMessageCase):
         # stops a second acknowledger — this is the reported bug: previously
         # each audience had its own timestamp, so a second person from the
         # OTHER audience could still write one.
+        #
+        # fields.Datetime.now() truncates to whole seconds, so asserting
+        # equality against "the first ack" is not reliable — an unguarded
+        # second ack made within the same second would coincide with the
+        # first and the assertion would still pass. Overwrite the ack with a
+        # value the acknowledgement code could never produce on its own (ten
+        # days in the future, which also keeps it past
+        # last_customer_message_at so the guard still reads False), so only
+        # the guard — not clock resolution — can keep the timestamp
+        # byte-identical afterwards.
         _post_tenant_message(self.request, self.mimer_user)
         self.request.with_user(self.internal_user).action_acknowledge_customer_message()
-        first_ack = self.request.customer_message_ack_at
+
+        distinctive_ack = fields.Datetime.now() + timedelta(days=10)
+        self.request.sudo().write({"customer_message_ack_at": distinctive_ack})
 
         self.request.with_user(self.external_user).action_acknowledge_customer_message()
 
-        self.assertEqual(self.request.customer_message_ack_at, first_ack)
+        self.assertEqual(self.request.customer_message_ack_at, distinctive_ack)
 
     def test_newer_message_re_raises_it_after_ack(self):
         _post_tenant_message(self.request, self.mimer_user)
@@ -1057,9 +1069,10 @@ def _load_ack_merge_migration():
 @tagged("onecore", "mim_1960")
 class TestAckMergeMigration(CustomerMessageCase):
     """Covers migrations/19.0.1.0.7/pre-migration.py: merging
-    customer_message_external_ack_at into customer_message_ack_at (earliest
-    non-null wins — the first acknowledger, matching the new shared
-    semantics) and dropping that column plus the two orphaned sort booleans
+    customer_message_external_ack_at into customer_message_ack_at (the
+    furthest-advanced non-null watermark wins — one audience's
+    acknowledgement counts for both under the new shared semantics) and
+    dropping that column plus the two orphaned sort booleans
     customer_message_unread_internal / customer_message_unread_external.
 
     Only a test/dev database still on 19.0.1.0.6 (state T in the handoff doc)
@@ -1112,7 +1125,7 @@ class TestAckMergeMigration(CustomerMessageCase):
         (value,) = self.env.cr.fetchone()
         return value
 
-    def test_merge_keeps_the_earliest_non_null_ack(self):
+    def test_merge_keeps_the_furthest_advanced_watermark(self):
         # All four NULL combinations of (customer_message_ack_at,
         # customer_message_external_ack_at) in one pass. earlier/later are
         # built two days apart so LEAST/GREATEST can never tie.
@@ -1124,15 +1137,15 @@ class TestAckMergeMigration(CustomerMessageCase):
         both_null = create_maintenance_request(self.env)
         ack_only = create_maintenance_request(self.env)
         ext_only = create_maintenance_request(self.env)
-        ack_acked_first = create_maintenance_request(self.env)
-        ext_acked_first = create_maintenance_request(self.env)
+        ack_is_later = create_maintenance_request(self.env)
+        ext_is_later = create_maintenance_request(self.env)
 
         self._set_raw(ack_only, "customer_message_ack_at", earlier)
         self._set_raw(ext_only, "customer_message_external_ack_at", earlier)
-        self._set_raw(ack_acked_first, "customer_message_ack_at", earlier)
-        self._set_raw(ack_acked_first, "customer_message_external_ack_at", later)
-        self._set_raw(ext_acked_first, "customer_message_ack_at", later)
-        self._set_raw(ext_acked_first, "customer_message_external_ack_at", earlier)
+        self._set_raw(ack_is_later, "customer_message_ack_at", later)
+        self._set_raw(ack_is_later, "customer_message_external_ack_at", earlier)
+        self._set_raw(ext_is_later, "customer_message_ack_at", earlier)
+        self._set_raw(ext_is_later, "customer_message_external_ack_at", later)
         self.env.flush_all()
 
         self.migration.migrate(self.env.cr, "19.0.1.0.6")
@@ -1140,8 +1153,41 @@ class TestAckMergeMigration(CustomerMessageCase):
         self.assertIsNone(self._raw_ack(both_null))
         self.assertEqual(self._raw_ack(ack_only), earlier)
         self.assertEqual(self._raw_ack(ext_only), earlier)
-        self.assertEqual(self._raw_ack(ack_acked_first), earlier)
-        self.assertEqual(self._raw_ack(ext_acked_first), earlier)
+        self.assertEqual(self._raw_ack(ack_is_later), later)
+        self.assertEqual(self._raw_ack(ext_is_later), later)
+
+    def test_merge_does_not_resurface_a_message_the_later_watermark_already_saw(self):
+        # The bug this migration exists to fix: a contractor acknowledges at
+        # t1, a tenant message arrives at t2, Mimer acknowledges at t3
+        # (t1 < t2 < t3). The watermarks straddle the message — the earlier
+        # one (contractor) predates it, the later one (Mimer) postdates it.
+        # LEAST(t3, t1) = t1 would leave t2 > ack, resurfacing the row as
+        # unread. GREATEST(t3, t1) = t3 correctly keeps it silent, because
+        # Mimer's watermark already covers that message.
+        self._add_external_ack_column()
+
+        t1 = fields.Datetime.now() - timedelta(days=3)
+        t2 = fields.Datetime.now() - timedelta(days=2)
+        t3 = fields.Datetime.now() - timedelta(days=1)
+
+        self._set_raw(self.request, "customer_message_external_ack_at", t1)
+        self._set_raw(self.request, "customer_message_ack_at", t3)
+        self._set_raw(self.request, "last_customer_message_at", t2)
+        self.env.flush_all()
+        self.env.invalidate_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.6")
+
+        self.assertEqual(self._raw_ack(self.request), t3)
+
+        self.env.invalidate_all()
+        model = self.env["maintenance.request"]
+        records = model.browse(self.request.ids)
+        self.env.add_to_compute(model._fields["customer_message_unread"], records)
+        self.env.flush_all()
+        self.env.invalidate_all()
+
+        self.assertFalse(self.request.customer_message_unread)
 
     def test_merge_drops_the_external_and_orphan_columns(self):
         self._add_external_ack_column()
@@ -1200,7 +1246,7 @@ class TestAckMergeMigration(CustomerMessageCase):
 
         self.migration.migrate(self.env.cr, "19.0.1.0.6")
         after_first_run = self._raw_ack(self.request)
-        self.assertEqual(after_first_run, earlier)
+        self.assertEqual(after_first_run, later)
 
         # Second run: the columns dropped by the first run are gone, so
         # every guard is False and nothing should change.

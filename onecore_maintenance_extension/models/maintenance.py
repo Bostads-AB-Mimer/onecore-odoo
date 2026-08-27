@@ -66,9 +66,7 @@ class OneCoreMaintenanceRequest(
     # Customer messages first — "ska sorteras högst upp i kanban vyn". _order
     # takes stored columns only, hence the stored customer_message_unread
     # boolean rather than the non-stored has_unread_customer_message.
-    _order = (
-        "customer_message_unread desc, " "recently_added_tenant desc, request_date desc"
-    )
+    _order = "customer_message_unread desc, recently_added_tenant desc, request_date desc"
     _unaccent = True
 
     # ============================================================================
@@ -329,10 +327,8 @@ class OneCoreMaintenanceRequest(
         codes = {record.cost_center_code for record in self if record.cost_center_code}
         by_code = {}
         if codes:
-            districts = (
-                self.env["maintenance.cost.center"]
-                .sudo()
-                .search([("code", "in", list(codes))])
+            districts = self.env["maintenance.cost.center"].sudo().search(
+                [("code", "in", list(codes))]
             )
             by_code = {district.code: district for district in districts}
         for record in self:
@@ -356,10 +352,8 @@ class OneCoreMaintenanceRequest(
         codes = {record.kvv_area_code for record in self if record.kvv_area_code}
         by_code = {}
         if codes:
-            areas = (
-                self.env["maintenance.kvv.area"]
-                .sudo()
-                .search([("code", "in", list(codes))])
+            areas = self.env["maintenance.kvv.area"].sudo().search(
+                [("code", "in", list(codes))]
             )
             by_code = {area.code: area.responsible_name for area in areas}
         for record in self:
@@ -457,10 +451,10 @@ class OneCoreMaintenanceRequest(
                 if api is None:
                     api = record.get_core_api()
                 data = api.fetch_residence(rental_id, timeout=5)
-                blocks = (data or {}).get("propertyObject", {}).get(
-                    "rentalBlocks"
-                ) or []
-                value = any((b or {}).get("blockReason") == "SKADEDJUR" for b in blocks)
+                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
+                value = any(
+                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
+                )
                 _pest_control_cache[rental_id] = (
                     time.monotonic() + PEST_CONTROL_CACHE_TTL,
                     value,
@@ -517,9 +511,7 @@ class OneCoreMaintenanceRequest(
         # Mimer notes.
         is_external = ExternalContractorService(self.env).is_external_contractor()
         indicator_field = (
-            "has_unread_internal_dialog"
-            if is_external
-            else "has_unread_supplier_dialog"
+            "has_unread_internal_dialog" if is_external else "has_unread_supplier_dialog"
         )
         unread_res_ids = set(
             messages.filtered(lambda m: m.id in unread_ids).mapped("res_id")
@@ -602,9 +594,7 @@ class OneCoreMaintenanceRequest(
             return set()
 
         is_external = ExternalContractorService(self.env).is_external_contractor()
-        ack_field = (
-            "internal_dialog_ack_at" if is_external else "supplier_dialog_ack_at"
-        )
+        ack_field = "internal_dialog_ack_at" if is_external else "supplier_dialog_ack_at"
 
         # Per-request acknowledgement timestamp.
         request_ids = list(set(candidates.mapped("res_id")))
@@ -1254,7 +1244,9 @@ class OneCoreMaintenanceRequest(
                 # switch. web_save re-reads the record in the same
                 # transaction; without follower access the read raises
                 # AccessError and rolls back the whole return.
-                self.sudo().message_subscribe(partner_ids=self.env.user.partner_id.ids)
+                self.sudo().message_subscribe(
+                    partner_ids=self.env.user.partner_id.ids
+                )
 
         # Handle resource assignment workflow (always run, even during creation).
         # Skipped when entering Återsänd: the injected user_id=False would
@@ -1329,7 +1321,9 @@ class OneCoreMaintenanceRequest(
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():
-                self.browse(record_ids).sudo().write({"maintenance_team_id": team_id})
+                self.browse(record_ids).sudo().write(
+                    {"maintenance_team_id": team_id}
+                )
 
         return result
 
@@ -1516,7 +1510,7 @@ class OneCoreMaintenanceRequest(
     # ============================================================================
 
     def action_assign_district_team(self):
-        """ "Tilldela resursgrupp": set the team paired with the request's
+        """"Tilldela resursgrupp": set the team paired with the request's
         district (OneCore cost center), fetching the district first when the
         request doesn't carry one yet (legacy requests)."""
         self.ensure_one()

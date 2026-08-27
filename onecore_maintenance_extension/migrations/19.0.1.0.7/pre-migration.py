@@ -30,16 +30,27 @@ actually has work to do on:
     the two now-orphaned sort booleans. This is the one place this script
     does real work: merge, then drop.
 
-The merge takes the EARLIEST non-null timestamp of the pair — the first
-acknowledger, matching the new shared semantics (whoever got there first
-silences it for everyone). Four NULL combinations, one expression:
+customer_message_ack_at is a WATERMARK, not a record of who clicked first:
+_compute_customer_message_unread (models/maintenance.py) reads it as
+`unread = last_customer_message_at > ack`, i.e. "everything dated at or
+before ack has been seen". Under the new shared semantics, one audience's
+acknowledgement counts for both, so merging the two per-audience watermarks
+must keep the FURTHEST ADVANCED one, not the earliest. Four NULL
+combinations, one expression:
 
-    LEAST(COALESCE(ack, ext), COALESCE(ext, ack))
+    GREATEST(COALESCE(ack, ext), COALESCE(ext, ack))
 
-    both NULL      -> LEAST(NULL, NULL)  = NULL   (still outstanding)
-    ack only       -> LEAST(ack, ack)    = ack
-    ext only       -> LEAST(ext, ext)    = ext
-    both non-null  -> LEAST(ack, ext)    = the earlier of the two
+    both NULL      -> GREATEST(NULL, NULL)  = NULL   (still outstanding)
+    ack only       -> GREATEST(ack, ack)    = ack
+    ext only       -> GREATEST(ext, ext)    = ext
+    both non-null  -> GREATEST(ack, ext)    = the later of the two
+
+Taking the earliest instead would be actively wrong on a database already at
+19.0.1.0.6: a contractor acknowledges at t1, a new tenant message arrives at
+t2, Mimer acknowledges at t3. LEAST(t3, t1) = t1, so t2 > t1 and the row
+resurfaces as unread — and the next acknowledgement posts a second receipt
+for a message that was already receipted. GREATEST(t3, t1) = t3 gives
+t2 > t3 false, correctly silent.
 
 This MUST be a pre-migration, not a post-migration:
 
@@ -80,8 +91,8 @@ def migrate(cr, version):
 
 def _merge_external_ack(cr):
     """Fold customer_message_external_ack_at into customer_message_ack_at,
-    keeping the earliest non-null timestamp, then drop the now-redundant
-    column.
+    keeping the furthest-advanced (latest) non-null watermark, then drop the
+    now-redundant column.
 
     Guarded on the external column existing at all — absent on a production
     upgrade from 1.0.4, since neither column has been created yet at this
@@ -97,14 +108,14 @@ def _merge_external_ack(cr):
 
     cr.execute("""
         UPDATE maintenance_request
-        SET customer_message_ack_at = LEAST(
+        SET customer_message_ack_at = GREATEST(
                 COALESCE(customer_message_ack_at, customer_message_external_ack_at),
                 COALESCE(customer_message_external_ack_at, customer_message_ack_at))
         WHERE customer_message_ack_at IS NOT NULL
            OR customer_message_external_ack_at IS NOT NULL
         """)
     _logger.info(
-        "MIM-1960: merged %d row(s) of %s.%s into %s (earliest non-null wins).",
+        "MIM-1960: merged %d row(s) of %s.%s into %s (furthest-advanced watermark wins).",
         cr.rowcount,
         TABLE,
         EXTERNAL_ACK_COLUMN,
