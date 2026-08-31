@@ -47,5 +47,40 @@
             <field name="interval_type">hours</field>
             <field name="active" eval="True"/>
         </record>
+
+        <!--
+        Spärr skadedjur on open requests. Cost per run is ONE call to
+        /residences/rental-blocks/rental-ids regardless of how many cases are
+        open, and only requests whose value actually changed are written - so a
+        quiet run is a single SELECT. Short interval because the badge is a
+        safety warning for whoever is sent to the address.
+        -->
+        <record id="ir_cron_sync_pest_control" model="ir.cron">
+            <field name="name">Ärenden: synka spärr skadedjur från OneCore</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_pest_control()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">15</field>
+            <field name="interval_type">minutes</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!--
+        Viktig kundinfo on the tenants of open requests. specialAttention is
+        snapshotted when the case is created and would otherwise never pick up
+        a change made in Xpand afterwards. Hourly: the flag is set by hand and
+        changes very rarely, and a run costs one call per 200 contact codes.
+        -->
+        <record id="ir_cron_sync_special_attention" model="ir.cron">
+            <field name="name">Ärenden: synka viktig kundinfo från OneCore</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_special_attention()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
     </data>
 </odoo>

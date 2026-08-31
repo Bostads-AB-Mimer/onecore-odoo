@@ -458,3 +458,51 @@ class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
             )
 
         self.assertTrue(request.requires_pest_control)
+
+
+@tagged("onecore")
+class TestFlagSyncCrons(FlagSyncTestMixin, TransactionCase):
+    def test_pest_cron_delegates_to_the_service(self):
+        request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            self.env["maintenance.request"]._cron_sync_pest_control()
+
+        self.assertTrue(request.requires_pest_control)
+
+    def test_special_attention_cron_delegates_to_the_service(self):
+        request = self._apartment_request(rental_id=FREE_RENTAL_ID)
+        tenant = create_tenant(
+            self.env,
+            maintenance_request_id=request.id,
+            contact_code="P123456",
+        )
+        request.sudo().write({"tenant_id": tenant.id})
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                {
+                    "contactCode": "P123456",
+                    "communication": {"specialAttention": True},
+                }
+            ]
+            self.env["maintenance.request"]._cron_sync_special_attention()
+
+        self.assertTrue(tenant.special_attention)
+
+    def test_cron_records_exist_and_are_active(self):
+        pest = self.env.ref("onecore_maintenance_extension.ir_cron_sync_pest_control")
+        kundinfo = self.env.ref(
+            "onecore_maintenance_extension.ir_cron_sync_special_attention"
+        )
+
+        self.assertTrue(pest.active)
+        self.assertEqual(pest.interval_number, 15)
+        self.assertEqual(pest.interval_type, "minutes")
+
+        self.assertTrue(kundinfo.active)
+        self.assertEqual(kundinfo.interval_number, 1)
+        self.assertEqual(kundinfo.interval_type, "hours")

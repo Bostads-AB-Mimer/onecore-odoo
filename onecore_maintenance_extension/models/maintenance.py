@@ -1556,3 +1556,23 @@ class OneCoreMaintenanceRequest(
         The batch is large because the cost is the cost-center trees, fetched
         once per run, not per request."""
         return ManagementAreaService(self.env).backfill_batch(limit=limit)
+
+    @api.model
+    def _cron_sync_pest_control(self):
+        """Refresh "Spärr skadedjur" on every open request.
+
+        One OneCore call per run regardless of case volume, so the interval can
+        be short: a spärr added after the case was created has to reach the
+        case (MIM-1959).
+        """
+        return OneCoreFlagSyncService(self.env).sync_pest_control()
+
+    @api.model
+    def _cron_sync_special_attention(self):
+        """Refresh "Viktig kundinfo" on the tenants of every open request.
+
+        Hourly rather than quarter-hourly: specialAttention is a hand-set flag
+        in Xpand that changes very rarely, and this run costs one call per 200
+        distinct contact codes.
+        """
+        return OneCoreFlagSyncService(self.env).sync_special_attention()
