@@ -29,7 +29,16 @@ PEST_BLOCK_REASON = "SKADEDJUR"
 # so a worker serving several databases must not hand a staging answer to a
 # production request.
 PEST_SET_CACHE_TTL = 300  # seconds
-_pest_set_cache = {}  # dbname -> (expires_at_monotonic, frozenset)
+
+# A failure must stop being believed sooner than a success: while OneCore is
+# down, a burst of case creations should pay the timeout once per minute, not
+# once per case - but it must not go on believing "down" for as long as it
+# would have believed a real answer.
+PEST_SET_FAILURE_TTL = 60  # seconds
+
+_PEST_SET_FAILURE = object()  # sentinel: "recently failed", distinct from a set
+
+_pest_set_cache = {}  # dbname -> (expires_at_monotonic, frozenset | _PEST_SET_FAILURE)
 
 # Codes per /v1/contacts/batch call. The endpoint takes a repeated ?code=
 # param, so the practical ceiling is URL length, not a documented limit.
@@ -100,26 +109,42 @@ class OneCoreFlagSyncService:
     # ------------------------------------------------------------------
     # Spärr skadedjur
     # ------------------------------------------------------------------
-    def fetch_pest_blocked_rental_ids(self, api=None):
+    def fetch_pest_blocked_rental_ids(self, api=None, verify_reason=True):
         """Every rental id with an active SKADEDJUR block, as a set.
 
-        Raises on failure and on a missing SKADEDJUR caption. An empty set is
-        indistinguishable from "nothing is blocked", so a partial or
-        accidentally-empty answer would clear the badge on genuinely blocked
-        objects. All-or-nothing, like ManagementAreaService.build_property_map.
+        Raises on failure, on a ``None`` payload, and (when ``verify_reason``)
+        on a missing SKADEDJUR caption. All-or-nothing, like
+        ManagementAreaService.build_property_map: a genuinely empty list is a
+        valid "nothing is blocked" answer and must NOT raise, but ``None`` -
+        which ``CoreApi._get_json`` returns for a 200 whose body lacks
+        ``content`` - must never be silently coerced into "nothing is
+        blocked", or it would clear the badge on every request.
+
+        ``verify_reason=False`` skips the block-reason-captions call. That
+        guard exists only to stop an estate-wide clear when SKADEDJUR has been
+        renamed upstream in Xpand; a caller that can only ever SET the flag on
+        one record (the create path) can never clear anything, so the guard
+        buys it nothing and would cost a second 15-second call. The cron must
+        keep the guard and therefore never passes this.
         """
         api = self._api(api)
-        captions = api.fetch_block_reason_captions(timeout=LOOKUP_TIMEOUT)
-        if PEST_BLOCK_REASON not in captions:
-            raise ValueError(
-                "OneCore does not know the block reason %s (got %s); refusing "
-                "to clear the pest flag on every request"
-                % (PEST_BLOCK_REASON, captions)
-            )
+        if verify_reason:
+            captions = api.fetch_block_reason_captions(timeout=LOOKUP_TIMEOUT)
+            if PEST_BLOCK_REASON not in captions:
+                raise ValueError(
+                    "OneCore does not know the block reason %s (got %s); "
+                    "refusing to clear the pest flag on every request"
+                    % (PEST_BLOCK_REASON, captions)
+                )
         rental_ids = api.fetch_pest_blocked_rental_ids(
             block_reason=PEST_BLOCK_REASON, timeout=LOOKUP_TIMEOUT
         )
-        return {rental_id for rental_id in (rental_ids or []) if rental_id}
+        if rental_ids is None:
+            raise ValueError(
+                "OneCore returned no content for the pest-blocked rental ids "
+                "lookup; refusing to treat that as an empty set"
+            )
+        return {rental_id for rental_id in rental_ids if rental_id}
 
     def cached_pest_blocked_rental_ids(self, api=None):
         """TTL-cached blocked set, for the create path only.
@@ -127,13 +152,38 @@ class OneCoreFlagSyncService:
         A burst of case creations shares one OneCore call. The cron must never
         use this: a stale set is harmless for one new case, but a run that
         clears badges across the estate has to see current truth.
+
+        Skips the caption guard (``verify_reason=False``) since a single
+        create can only ever set the flag, never clear one - see
+        ``fetch_pest_blocked_rental_ids``.
+
+        A failure is cached too, for the much shorter ``PEST_SET_FAILURE_TTL``:
+        while OneCore is down, a burst of creations should pay the timeout
+        once, not once per case. Raises ``LookupError`` when a recent failure
+        is still within its TTL, and re-raises the original error on a fresh
+        failure - callers (``populate_pest_control``) are expected to catch
+        both and never let them reach the caller of ``create()``.
         """
         key = self.env.cr.dbname
         cached = _pest_set_cache.get(key)
         if cached and time.monotonic() < cached[0]:
+            if cached[1] is _PEST_SET_FAILURE:
+                raise LookupError(
+                    "Pest-blocked lookup failed recently; not retrying yet"
+                )
             return cached[1]
 
-        blocked = frozenset(self.fetch_pest_blocked_rental_ids(api=api))
+        try:
+            blocked = frozenset(
+                self.fetch_pest_blocked_rental_ids(api=api, verify_reason=False)
+            )
+        except Exception:
+            _pest_set_cache[key] = (
+                time.monotonic() + PEST_SET_FAILURE_TTL,
+                _PEST_SET_FAILURE,
+            )
+            raise
+
         _pest_set_cache[key] = (time.monotonic() + PEST_SET_CACHE_TTL, blocked)
         return blocked
 

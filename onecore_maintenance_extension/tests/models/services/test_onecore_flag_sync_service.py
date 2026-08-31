@@ -245,6 +245,35 @@ class TestSyncPestControl(FlagSyncTestMixin, TransactionCase):
         self.assertEqual(len(request.message_ids), before)
 
 
+@tagged("onecore")
+class TestFetchPestBlockedRentalIds(FlagSyncTestMixin, TransactionCase):
+    """Fix 2: the all-or-nothing contract must be explicit, not a falsy
+    coercion. ``CoreApi._get_json`` returns ``None`` for a 200 whose body
+    lacks "content" - that must raise, never be read as "nothing is
+    blocked". A genuinely empty list must still mean a genuinely empty set.
+    """
+
+    def test_none_payload_raises(self):
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_block_reason_captions.return_value = [
+                "SKADEDJUR"
+            ]
+            MockApi.return_value.fetch_pest_blocked_rental_ids.return_value = None
+            with self.assertRaises(ValueError):
+                self.service.fetch_pest_blocked_rental_ids()
+
+    def test_empty_list_is_a_valid_empty_set(self):
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[])
+            result = self.service.fetch_pest_blocked_rental_ids()
+
+        self.assertEqual(result, set())
+
+
 def _contact(code, special_attention):
     """Shape of one item in GET /v1/contacts/batch ``content``."""
     return {
@@ -441,6 +470,38 @@ class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
 
         api.fetch_pest_blocked_rental_ids.assert_called_once()
         self.assertFalse(request.requires_pest_control)
+
+    def test_create_path_skips_the_caption_guard(self):
+        """Fix 1a: a single create can only ever SET the flag, never clear
+        one, so the caption guard buys it nothing and would cost a whole
+        extra 15-second call. The cron must keep the guard."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+            self.service.populate_pest_control(request)
+            api.fetch_block_reason_captions.assert_not_called()
+
+            self.service.sync_pest_control()
+            api.fetch_block_reason_captions.assert_called_once()
+
+    def test_a_failed_fetch_is_negative_cached(self):
+        """Fix 1b: a burst of creations during an outage should pay the
+        timeout once, not once per case - and stop believing "down" much
+        sooner than it would have believed a real answer."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            api.fetch_pest_blocked_rental_ids.side_effect = Exception("boom")
+
+            request_one = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+            request_two = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+
+        self.assertEqual(api.fetch_pest_blocked_rental_ids.call_count, 1)
+        self.assertFalse(request_one.requires_pest_control)
+        self.assertFalse(request_two.requires_pest_control)
 
     def test_create_populates_without_an_explicit_call(self):
         """The hook in create() is what makes this work in production."""

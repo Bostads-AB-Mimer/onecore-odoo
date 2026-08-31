@@ -1561,9 +1561,10 @@ class OneCoreMaintenanceRequest(
     def _cron_sync_pest_control(self):
         """Refresh "Spärr skadedjur" on every open request.
 
-        One OneCore call per run regardless of case volume, so the interval can
-        be short: a spärr added after the case was created has to reach the
-        case (MIM-1959).
+        Two fixed OneCore calls per run regardless of case volume - flat API
+        cost, so the interval can be short, though the run itself is still one
+        wide SELECT over all open requests: a spärr added after the case was
+        created has to reach the case (MIM-1959).
         """
         return OneCoreFlagSyncService(self.env).sync_pest_control()
 

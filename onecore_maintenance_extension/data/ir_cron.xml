@@ -49,11 +49,13 @@
         </record>
 
         <!--
-        Spärr skadedjur on open requests. Cost per run is ONE call to
-        /residences/rental-blocks/rental-ids regardless of how many cases are
-        open, and only requests whose value actually changed are written - so a
-        quiet run is a single SELECT. Short interval because the badge is a
-        safety warning for whoever is sent to the address.
+        Spärr skadedjur on open requests. Cost per run is two fixed OneCore
+        calls (block-reason captions, then rental-ids) regardless of how many
+        cases are open - flat API cost, though the run is still one wide
+        SELECT over all open requests, and only requests whose value actually
+        changed are written, so a quiet run issues no UPDATE at all. Short
+        interval because the badge is a safety warning for whoever is sent to
+        the address.
         -->
         <record id="ir_cron_sync_pest_control" model="ir.cron">
             <field name="name">Ärenden: synka spärr skadedjur från OneCore</field>

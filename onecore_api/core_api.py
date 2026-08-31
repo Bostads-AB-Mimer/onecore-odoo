@@ -304,12 +304,8 @@ class CoreApi:
         call per card (MIM-1869), so the caller snapshots this set instead of
         asking per request.
         """
-        query = urllib.parse.urlencode(
-            {"blockReason": block_reason, "active": "true"}
-        )
-        return self._get_json(
-            f"/residences/rental-blocks/rental-ids?{query}", **kwargs
-        )
+        query = urllib.parse.urlencode({"blockReason": block_reason, "active": "true"})
+        return self._get_json(f"/residences/rental-blocks/rental-ids?{query}", **kwargs)
 
     def fetch_block_reason_captions(self, **kwargs):
         """Known block-reason captions.
