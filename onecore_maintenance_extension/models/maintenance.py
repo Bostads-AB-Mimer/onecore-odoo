@@ -17,6 +17,7 @@ from .services import (
     ExternalContractorService,
     MaintenanceStageManager,
     ManagementAreaService,
+    OneCoreFlagSyncService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -1106,6 +1107,7 @@ class OneCoreMaintenanceRequest(
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
+        flag_sync_service = OneCoreFlagSyncService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -1124,6 +1126,10 @@ class OneCoreMaintenanceRequest(
             # effort (never blocks creation); skipped when the caller already
             # stamped the fields (core does for mimer.nu requests).
             management_area_service.populate(request)
+            # Spärr skadedjur, from the same TTL-cached set the cron refreshes.
+            # Without this a case opened on a blocked flat shows no warning
+            # until the next cron run (MIM-1959).
+            flag_sync_service.populate_pest_control(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 

@@ -121,6 +121,53 @@ class OneCoreFlagSyncService:
         )
         return {rental_id for rental_id in (rental_ids or []) if rental_id}
 
+    def cached_pest_blocked_rental_ids(self, api=None):
+        """TTL-cached blocked set, for the create path only.
+
+        A burst of case creations shares one OneCore call. The cron must never
+        use this: a stale set is harmless for one new case, but a run that
+        clears badges across the estate has to see current truth.
+        """
+        key = self.env.cr.dbname
+        cached = _pest_set_cache.get(key)
+        if cached and time.monotonic() < cached[0]:
+            return cached[1]
+
+        blocked = frozenset(self.fetch_pest_blocked_rental_ids(api=api))
+        _pest_set_cache[key] = (time.monotonic() + PEST_SET_CACHE_TTL, blocked)
+        return blocked
+
+    def populate_pest_control(self, request):
+        """Stamp the pest flag on a freshly created request.
+
+        Best effort, and never raises: OneCore being unreachable must not stop
+        a handläggare - or an inbound mimer.nu request - from creating a case.
+        The flag stays False and the next cron run heals it.
+        """
+        if not self.is_configured():
+            return False
+        rental_id = self.get_rental_id(request)
+        if not rental_id:
+            return False
+
+        try:
+            blocked = self.cached_pest_blocked_rental_ids()
+        except Exception as err:
+            _logger.warning(
+                "Could not fetch pest blocks for new request %s: %s",
+                request.id,
+                err,
+            )
+            return False
+
+        if rental_id not in blocked:
+            return False
+
+        request.sudo().with_context(skip_change_tracking=True).write(
+            {"requires_pest_control": True}
+        )
+        return True
+
     def sync_pest_control(self, api=None):
         """Refresh requires_pest_control on every open request.
 

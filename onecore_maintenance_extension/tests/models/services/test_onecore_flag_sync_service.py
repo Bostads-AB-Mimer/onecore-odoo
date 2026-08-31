@@ -376,3 +376,85 @@ class TestSyncSpecialAttention(FlagSyncTestMixin, TransactionCase):
             self.assertEqual(self.service.sync_special_attention(), 0)
 
         MockApi.assert_not_called()
+
+
+@tagged("onecore")
+class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
+    def test_new_case_on_a_blocked_object_is_flagged_immediately(self):
+        """Waiting up to a cron interval is exactly the window where the badge
+        would have protected whoever is sent to the flat."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+            self.service.populate_pest_control(request)
+
+        self.assertTrue(request.requires_pest_control)
+
+    def test_new_case_on_a_free_object_is_not_flagged(self):
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            request = self._apartment_request(rental_id=FREE_RENTAL_ID)
+            self.service.populate_pest_control(request)
+
+        self.assertFalse(request.requires_pest_control)
+
+    def test_onecore_failure_never_blocks_creation(self):
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_block_reason_captions.side_effect = Exception(
+                "boom"
+            )
+            request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+            self.assertFalse(self.service.populate_pest_control(request))
+
+        self.assertFalse(request.requires_pest_control)
+
+    def test_a_burst_of_creations_shares_one_call(self):
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            for _ in range(3):
+                request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+                self.service.populate_pest_control(request)
+
+        self.assertEqual(api.fetch_pest_blocked_rental_ids.call_count, 1)
+
+    def test_the_cron_never_reads_the_create_cache(self):
+        """A stale set is fine for one new case; it is not fine for a run that
+        clears badges across the estate."""
+        request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+        self._configure_onecore()
+        sync_module._pest_set_cache[self.env.cr.dbname] = (
+            time.monotonic() + 300,
+            frozenset({BLOCKED_RENTAL_ID}),
+        )
+
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_api(MockApi, blocked=[])
+            self.service.sync_pest_control()
+
+        api.fetch_pest_blocked_rental_ids.assert_called_once()
+        self.assertFalse(request.requires_pest_control)
+
+    def test_create_populates_without_an_explicit_call(self):
+        """The hook in create() is what makes this work in production."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            rental_property = create_rental_property(
+                self.env, rental_property_id=BLOCKED_RENTAL_ID
+            )
+            request = create_maintenance_request(
+                self.env,
+                space_caption="Lägenhet",
+                rental_property_id=rental_property.id,
+            )
+
+        self.assertTrue(request.requires_pest_control)
