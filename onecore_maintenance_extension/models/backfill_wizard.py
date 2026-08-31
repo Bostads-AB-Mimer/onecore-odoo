@@ -1,0 +1,445 @@
+import logging
+
+from markupsafe import Markup, escape
+
+from odoo import models, fields, api, exceptions, _
+
+from .services.direct_lookup_service import (
+    DirectLookupService,
+    LookupFailed,
+    route_for_lease_option,
+    route_for_object_option,
+    all_routes,
+)
+from .services.management_area_service import ManagementAreaService
+from .services.record_management_service import RecordManagementService
+from .utils.helpers import select_active_lease
+
+_logger = logging.getLogger(__name__)
+
+# Dialog title per entry point (used both when opening and when re-rendering).
+_TITLES = {
+    "rental_object": "Lägg till / ändra hyresobjekt",
+    "tenant": "Lägg till / ändra hyresgäst",
+}
+
+
+class MaintenanceBackfillWizard(models.TransientModel):
+    _name = "maintenance.backfill.wizard"
+    _description = "Lägg till/ändra hyresobjekt och hyresgäst"
+
+    maintenance_request_id = fields.Many2one(
+        "maintenance.request", string="Ärende", required=True, readonly=True
+    )
+    # Which id the user pastes (drives the OneCore lookup); both entry points end
+    # up attaching object + contract + tenant together.
+    lookup_kind = fields.Selection(
+        [("rental_object", "Hyresobjekt"), ("tenant", "Hyresgäst")],
+        string="Typ",
+        required=True,
+    )
+    lookup_value = fields.Char(string="Nummer")
+    state = fields.Selection(
+        [("input", "input"), ("preview", "preview")], default="input"
+    )
+    # The contracts found by Sök; the chosen one drives what gets attached.
+    lease_option_id = fields.Many2one("maintenance.lease.option", string="Kontrakt")
+    # Vacant-object case (object found but no contract): the object option to attach.
+    object_option_ref = fields.Reference(
+        selection=[
+            ("maintenance.rental.property.option", "Lägenhet"),
+            ("maintenance.parking.space.option", "Bilplats"),
+            ("maintenance.facility.option", "Lokal"),
+        ],
+        string="Hyresobjekt (utan kontrakt)",
+        readonly=True,
+    )
+    # True when the search resolved an object OneCore reports no contract for →
+    # attached as vacant.
+    is_vacant = fields.Boolean(readonly=True)
+    # True when the object does have contracts, but none of a type that maps to an
+    # object kind. The object is attached on its own like the vacant case, but the
+    # ärende must not be flagged tomställd — it is let, just not by a contract we
+    # can resolve.
+    has_unsupported_contract = fields.Boolean(readonly=True)
+    # Read-only preview of what will be attached (kept in sync with the contract).
+    prev_object_id = fields.Char(string="Hyresobjekt", readonly=True)
+    prev_object_address = fields.Char(string="Adress", readonly=True)
+    prev_object_property = fields.Char(string="Fastighet", readonly=True)
+    prev_tenant_name = fields.Char(string="Hyresgäst", readonly=True)
+    prev_tenant_contact = fields.Char(string="Kundnummer", readonly=True)
+
+    def _get_core_api(self):
+        """The client, with a failed authentication reported like a failed lookup.
+
+        Built through the request's ``get_core_api()``, which is how every other
+        caller in the module constructs one. ``CoreApi`` authenticates in its
+        constructor when no token is cached, so an outage can surface here rather
+        than on the call itself — raw, and outside the caller's ``LookupFailed``
+        guard.
+        """
+        try:
+            return self.maintenance_request_id.get_core_api()
+        except Exception as err:
+            raise LookupFailed(str(err)) from err
+
+    @property
+    def _value_label(self):
+        return "objektnummer" if self.lookup_kind == "rental_object" else "kundnummer"
+
+    # ------------------------------------------------------------------ search
+    def action_search(self):
+        self.ensure_one()
+        value = (self.lookup_value or "").strip()
+        if not value:
+            raise exceptions.UserError(_("Ange ett %s.") % self._value_label)
+
+        try:
+            service = DirectLookupService(self.env, self._get_core_api())
+            if self.lookup_kind == "tenant":
+                result = service.load_contact_contracts(
+                    self.maintenance_request_id, value
+                )
+            else:
+                result = service.load_object_contracts(
+                    self.maintenance_request_id, value
+                )
+        except LookupFailed as err:
+            # A failed call is not a wrong number — say so rather than blaming the
+            # value the user pasted.
+            _logger.warning("Backfill lookup failed for %s: %s", value, err)
+            raise exceptions.UserError(
+                _(
+                    "Uppslagningen mot OneCore misslyckades. Försök igen om en "
+                    "stund, eller kontakta support om felet kvarstår."
+                )
+            ) from err
+        if not result:
+            raise exceptions.UserError(self._not_found_message(value))
+
+        vals = {
+            "state": "preview",
+            "lease_option_id": False,
+            "object_option_ref": False,
+            "is_vacant": False,
+            "has_unsupported_contract": False,
+        }
+        lease_options = result.get("lease_options")
+        if lease_options:
+            active = select_active_lease(lease_options)
+            vals["lease_option_id"] = active.id
+            vals.update(
+                self._preview_vals(self._object_option_of(active), self._tenant_of(active))
+            )
+        else:
+            # Objektnummer with no contract to attach: offer the object on its own.
+            # Genuinely vacant and "has contracts, none of a type we can map" look
+            # the same here but must not be treated the same — only the former may
+            # flag the ärende tomställt.
+            obj = result["object_option"]
+            unsupported = result.get("unsupported_contract", False)
+            vals["object_option_ref"] = f"{obj._name},{obj.id}"
+            vals["is_vacant"] = not unsupported
+            vals["has_unsupported_contract"] = unsupported
+            vals.update(self._preview_vals(obj, None))
+        self.write(vals)
+        return self.action_window()
+
+    def _not_found_message(self, value):
+        if self.lookup_kind == "rental_object":
+            return _(
+                "Inget hyresobjekt hittades för objektnummer %s. "
+                "Kontrollera att numret är korrekt."
+            ) % value
+        return _(
+            "Ingen hyresgäst hittades för kundnummer %s. "
+            "Kontrollera numret eller att kunden har ett avtal."
+        ) % value
+
+    @api.onchange("lease_option_id")
+    def _onchange_lease_option_id(self):
+        # Keep the preview in sync with the contract the user picks.
+        if self.state == "preview" and self.lease_option_id:
+            for field, val in self._preview_vals(
+                self._object_option_of(self.lease_option_id),
+                self._tenant_of(self.lease_option_id),
+            ).items():
+                self[field] = val
+
+    # ----------------------------------------------------------------- confirm
+    def action_confirm(self):
+        self.ensure_one()
+        request = self.maintenance_request_id
+
+        if self.lease_option_id and self.lease_option_id.exists():
+            lease_option = self.lease_option_id
+            self._check_own_option(lease_option)
+            route = route_for_lease_option(lease_option)
+            if not route:
+                raise exceptions.UserError(
+                    _("Kunde inte avgöra hyresobjektets typ för det valda kontraktet.")
+                )
+            self._attach(request, route, lease_option[route["option_field"]], lease_option)
+        elif self.object_option_ref:
+            object_option = self.object_option_ref
+            if not object_option.exists():
+                raise exceptions.UserError(
+                    _("Resultatet är inte längre giltigt. Sök igen.")
+                )
+            self._check_own_option(object_option)
+            route = route_for_object_option(object_option)
+            if not route:
+                raise exceptions.UserError(
+                    _("Kunde inte avgöra hyresobjektets typ.")
+                )
+            self._attach(request, route, object_option, None, vacant=self.is_vacant)
+        else:
+            raise exceptions.UserError(_("Sök fram ett resultat först."))
+
+        # Close the dialog AND reload the underlying form so the newly attached
+        # data shows immediately (act_window_close alone leaves the stale form).
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def _check_own_option(self, option):
+        """Refuse an option row this user's own search did not create.
+
+        The option models carry a group-level ACL and no record rule, so the ids
+        posted back from the dialog are whatever the client sent. Everything the
+        wizard attaches is materialized from them, on an already-saved ärende.
+        """
+        if option.user_id != self.env.user:
+            raise exceptions.UserError(
+                _("Resultatet är inte längre giltigt. Sök igen.")
+            )
+
+    def _attach(self, request, route, object_option, lease_option, vacant=False):
+        """Materialize object (+ contract + tenant), align the space type to the
+        object's kind, and delete whatever we replaced (including a different-typed
+        object left over from a previous attach).
+
+        ``vacant`` says whether an attach without a contract is a real vacancy.
+        Only then is the ärende flagged ``manually_vacated`` — that flag is
+        permanent, so an object whose contracts we merely could not map must not
+        get it.
+
+        Every write runs with change tracking suppressed and one summary note is
+        posted at the end: the attach touches half a dozen fields, and a
+        ``message_post`` per write made confirming both slow and noisy in the log.
+        """
+        record_service = RecordManagementService(self.env)
+        old_objects = {
+            r["record_field"]: request[r["record_field"]] for r in all_routes()
+        }
+        old_lease = request.lease_id
+        old_tenant = request.tenant_id
+        before = self._attached_labels(request)
+
+        # Everything that is a plain field write goes in one write: the space type,
+        # the object fields of other types, and (vacant case) the cleared contract.
+        vals = {}
+        if request.space_caption != route["space"]:
+            vals["space_caption"] = route["space"]
+        for r in all_routes():
+            field = r["record_field"]
+            if field != route["record_field"] and request[field]:
+                vals[field] = False
+        if lease_option:
+            if request.manually_vacated:
+                vals["manually_vacated"] = False
+        else:
+            # No contract attached — the old one belongs to whatever object was
+            # attached before, so it goes either way.
+            vals.update({"lease_id": False, "tenant_id": False})
+            if vacant:
+                # Genuinely vacant: flag it so the empty-tenant compute won't
+                # silently refetch a tenant who moves in later.
+                vals["manually_vacated"] = True
+            elif request.manually_vacated:
+                # The object IS let, we just cannot resolve its contract. Leaving
+                # the flag on would permanently suppress the refetch.
+                vals["manually_vacated"] = False
+
+        untracked = request.with_context(skip_change_tracking=True)
+        if vals:
+            untracked.write(vals)
+
+        if object_option:
+            getattr(record_service, route["save_method"])(
+                untracked, {route["option_field"]: object_option.id}
+            )
+
+        if lease_option:
+            record_service._save_lease(untracked, {"lease_option_id": lease_option.id})
+            tenant_option = self._tenant_of(lease_option)
+            if tenant_option:
+                record_service._save_tenant(
+                    untracked, {"tenant_option_id": tenant_option.id}
+                )
+            elif request.tenant_id:
+                # Contract with no tenant → don't keep the previously attached one.
+                untracked.write({"tenant_id": False})
+
+        # Delete every replaced record. Always reconcile lease/tenant too: covers
+        # replace, vacant clear, and empty-tenant contract (no-op when the record
+        # is unchanged or was never set).
+        for r in all_routes():
+            field = r["record_field"]
+            self._unlink_replaced(old_objects[field], request[field])
+        self._unlink_replaced(old_lease, request.lease_id)
+        self._unlink_replaced(old_tenant, request.tenant_id)
+
+        self._refresh_management_area(request)
+        self._post_attach_note(request, before)
+
+    def _refresh_management_area(self, request):
+        """Re-snapshot distrikt/kvartersvärdsområde for the object just attached.
+
+        The snapshot is taken from the object's property, by ``create`` and by
+        the option onchange (``ManagementAreaService.preview``). Neither runs
+        here — this is a saved ärende whose object we just replaced — so without
+        this the request keeps describing the previous object's distrikt.
+        ``force`` because the request already carries one.
+
+        Only the snapshot fields are written. Resursgrupp is deliberately left
+        alone: pairing a team to the district is an explicit user action
+        ("Tilldela resursgrupp"), and the create-time prefill exists only because
+        the field is required to save at all.
+
+        Best-effort, with the same savepoint reasoning as ``_unlink_replaced``:
+        the attach is what the user confirmed, and a OneCore outage must not
+        undo it.
+        """
+        try:
+            with self.env.cr.savepoint():
+                ManagementAreaService(self.env).populate(request, force=True)
+        except Exception as err:
+            _logger.warning(
+                "Could not refresh the management area for request %s: %s",
+                request.id,
+                err,
+            )
+
+    def _attached_labels(self, request):
+        """Display names of what this wizard attaches, plus the space type.
+
+        The space type is in here because the attach realigns it (a Lägenhet
+        request can end up a Bilplats) under ``skip_change_tracking``, so this
+        summary note is the only place that change is recorded.
+        """
+        objects = [request[r["record_field"]] for r in all_routes()]
+        current = next((o for o in objects if o), None)
+        return {
+            "Utrymme": request.space_caption,
+            "Hyresobjekt": current.display_name if current else None,
+            "Kontrakt": request.lease_id.display_name if request.lease_id else None,
+            "Hyresgäst": request.tenant_id.display_name if request.tenant_id else None,
+        }
+
+    def _post_attach_note(self, request, before):
+        """One chatter note describing the whole attach."""
+        after = self._attached_labels(request)
+        lines = [
+            Markup("%s: %s → %s")
+            % (label, escape(before[label] or "–"), escape(after[label] or "–"))
+            for label in before
+            if before[label] != after[label]
+        ]
+        if not lines:
+            return
+        request.message_post(
+            body=Markup("<div>") + Markup("<br/>").join(lines) + Markup("</div>"),
+            message_type="notification",
+            subtype_xmlid="mail.mt_note",
+        )
+
+    def _unlink_replaced(self, old_record, new_record):
+        """Delete a permanent record that was just replaced by ``new_record``.
+
+        Best-effort: if the delete is blocked (e.g. a reference elsewhere), log and
+        leave the old record unreferenced rather than failing the confirm.
+
+        A blocked delete is a foreign-key violation, which aborts the transaction,
+        so the savepoint is what keeps "best-effort" honest: without it the caught
+        exception would still take down the remaining unlinks and the chatter note,
+        rolling back the attach the user just confirmed.
+        """
+        if not old_record or old_record == new_record or not old_record.exists():
+            return
+        try:
+            with self.env.cr.savepoint():
+                old_record.unlink()
+        except Exception as err:
+            _logger.warning(
+                "Could not delete replaced %s record %s: %s",
+                old_record._name,
+                old_record.id,
+                err,
+            )
+
+    def action_window(self):
+        """The act_window that renders this wizard dialog — used both to open it
+        and to re-render it (to show the preview state)."""
+        self.ensure_one()
+        return {
+            "name": _TITLES[self.lookup_kind],
+            "type": "ir.actions.act_window",
+            "res_model": self._name,
+            "res_id": self.id,
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": dict(self.env.context, dialog_size="medium"),
+        }
+
+    # ----------------------------------------------------------------- preview
+    def _object_option_of(self, lease_option):
+        return (
+            lease_option.rental_property_option_id
+            or lease_option.parking_space_option_id
+            or lease_option.facility_option_id
+        )
+
+    def _tenant_of(self, lease_option):
+        """The tenant to attach for a contract.
+
+        On the kundnummer path a co-signed lease has several tenants; return the one
+        whose contact_code matches the searched number (a bare ``limit=1`` would pick
+        the primary tenant regardless of who was searched). Falls back to the first.
+        """
+        Tenant = self.env["maintenance.tenant.option"]
+        domain = [
+            ("lease_option_id", "=", lease_option.id),
+            ("user_id", "=", self.env.uid),
+        ]
+        if self.lookup_kind == "tenant" and self.lookup_value:
+            match = Tenant.search(
+                domain + [("contact_code", "=", self.lookup_value.strip())], limit=1
+            )
+            if match:
+                return match
+        return Tenant.search(domain, limit=1)
+
+    def _preview_vals(self, object_option, tenant_option):
+        """Values for the read-only preview fields (object identity + tenant)."""
+        vals = {
+            "prev_object_id": False,
+            "prev_object_address": False,
+            "prev_object_property": False,
+            "prev_tenant_name": False,
+            "prev_tenant_contact": False,
+        }
+        if object_option:
+            vals["prev_object_id"] = object_option.name
+            if object_option._name == "maintenance.rental.property.option":
+                vals["prev_object_address"] = object_option.address
+                vals["prev_object_property"] = object_option.estate
+            elif object_option._name == "maintenance.parking.space.option":
+                vals["prev_object_address"] = object_option.address
+                vals["prev_object_property"] = object_option.property_name
+            else:  # facility
+                vals["prev_object_address"] = object_option.building_name
+                vals["prev_object_property"] = object_option.property_name
+        if tenant_option:
+            vals["prev_tenant_name"] = tenant_option.name
+            vals["prev_tenant_contact"] = tenant_option.contact_code
+        return vals

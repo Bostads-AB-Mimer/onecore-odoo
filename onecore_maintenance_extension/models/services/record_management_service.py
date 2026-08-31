@@ -288,7 +288,15 @@ class RecordManagementService:
         else:
             record.recently_added_tenant = False
 
-        if record.rental_property_id and not record.lease_id:  # Empty tenant / lease
+        if (
+            record.rental_property_id
+            and not record.lease_id
+            # User deliberately left it vacant — and deliberately for good: the
+            # ärende was raised on a vacant object, so a tenant who moves in later
+            # must not be attached to it retroactively. Only the backfill wizard
+            # clears the flag, by attaching a contract.
+            and not record.manually_vacated
+        ):  # Empty tenant / lease
             self._create_missing_lease_and_tenant(record)
 
     def _create_missing_lease_and_tenant(self, record):
