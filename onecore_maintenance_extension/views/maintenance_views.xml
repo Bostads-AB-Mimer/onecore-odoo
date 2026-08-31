@@ -72,6 +72,15 @@
                             domain="[('message_needaction', '=', True)]"
                             groups="mail.group_mail_notification_type_inbox" />
                         <separator />
+                        <!-- special_attention is a related non-stored field and
+                             cannot be searched directly; go through the stored
+                             column on the tenant. requires_pest_control is
+                             stored on the request itself. -->
+                        <filter string="Viktig kundinfo" name="special_attention"
+                            domain="[('tenant_id.special_attention', '=', True)]" />
+                        <filter string="Spärr skadedjur" name="requires_pest_control"
+                            domain="[('requires_pest_control', '=', True)]" />
+                        <separator />
                         <filter invisible="1" string="Mina aktiviteter" name="filter_activities_my"
                             domain="[('activity_user_id', '=', uid)]" />
                         <separator invisible="1" />
@@ -944,6 +953,7 @@
                     <field name="hidden_from_my_pages" />
                     <field name="has_unread_new_customer_info" />
                     <field name="special_attention" />
+                    <field name="requires_pest_control" />
                     <field name="has_unread_supplier_dialog" />
                     <field name="has_unread_internal_dialog" />
                     <field name="has_unread_master_key_change" />
@@ -994,6 +1004,7 @@
                         <field name="phone_number" optional="hide" />
                         <field name="email_address" optional="hide" />
                         <field name="special_attention" optional="hide" />
+                        <field name="requires_pest_control" optional="hide" />
                         <field name="pet" optional="hide" />
                         <field name="call_between" optional="hide" />
                         <field name="hearing_impaired" optional="hide" />

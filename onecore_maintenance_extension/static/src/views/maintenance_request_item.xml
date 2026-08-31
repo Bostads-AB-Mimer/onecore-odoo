@@ -16,6 +16,11 @@
                         Viktig kundinfo
                     </span>
                 </div>
+                <div t-if="record.requires_pest_control.raw_value">
+                    <span class="mimer-badge bg-warning text-dark">
+                        Spärr skadedjur
+                    </span>
+                </div>
                 <div t-if="record.has_unread_supplier_dialog.raw_value">
                     <span class="mimer-badge mimer-badge-orange">
                         Meddelande från leverantör
