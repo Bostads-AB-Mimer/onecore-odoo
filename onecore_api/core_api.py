@@ -297,6 +297,42 @@ class CoreApi:
             f"/residences/by-rental-id/{urllib.parse.quote(str(id), safe='')}", **kwargs
         )
 
+    def fetch_pest_blocked_rental_ids(self, block_reason="SKADEDJUR", **kwargs):
+        """Every rental id carrying an active ``block_reason`` block.
+
+        One call for the whole estate. The kanban badge must never cost an API
+        call per card (MIM-1869), so the caller snapshots this set instead of
+        asking per request.
+        """
+        query = urllib.parse.urlencode(
+            {"blockReason": block_reason, "active": "true"}
+        )
+        return self._get_json(
+            f"/residences/rental-blocks/rental-ids?{query}", **kwargs
+        )
+
+    def fetch_block_reason_captions(self, **kwargs):
+        """Known block-reason captions.
+
+        The pest lookup filters on a caption, so a rename in Xpand would return
+        an empty set that is indistinguishable from "nothing is blocked".
+        Callers check this list before believing an empty result.
+        """
+        content = self._get_json("/residences/block-reasons", **kwargs) or []
+        return [item.get("caption") for item in content if item.get("caption")]
+
+    def fetch_contacts_batch(self, contact_codes, **kwargs):
+        """Lean batch contact lookup by contact code.
+
+        Returns the ``content`` list; codes OneCore does not know are simply
+        absent from it. Base contact columns only - no phone/email/address
+        joins are requested.
+        """
+        if not contact_codes:
+            return []
+        query = urllib.parse.urlencode([("code", code) for code in contact_codes])
+        return self._get_json(f"/v1/contacts/batch?{query}", **kwargs)
+
     # Fetch staircases for specified building code
     # Note: Fix the endpoint in OneCore so it follows the same naming structure?
     def fetch_staircases_for_building(self, code):
