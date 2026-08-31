@@ -227,20 +227,36 @@
                                     class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
                                     Objektsinformation
                                 </div>
-                                <!-- MIM-1841: add/change rental object (rentalId-bearing space types) -->
-                                <button name="open_backfill_rental_object_wizard"
-                                    type="object"
-                                    groups="maintenance.group_equipment_manager"
-                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3 o-section-edit-btn"
-                                    title="Lägg till / ändra hyresobjekt"
-                                    invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
-                                    <i class="fa fa-pencil" />
-                                </button>
+                                <!-- MIM-1841: add/change rental object (rentalId-bearing space types)
+                                     MIM-1840: remove rental object (object-only) -->
+                                <div
+                                    class="position-absolute top-50 end-0 translate-middle-y me-3 d-flex gap-2">
+                                    <button name="open_backfill_rental_object_wizard"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Lägg till / ändra hyresobjekt"
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
+                                        <i class="fa fa-pencil" />
+                                    </button>
+                                    <button name="action_remove_rental_object"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Ta bort hyresobjekt"
+                                        confirm="Ta bort hyresobjektet från ärendet? Detta kan inte ångras."
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal') or (not rental_property_id and not parking_space_id and not facility_id)">
+                                        <i class="fa fa-trash" />
+                                    </button>
+                                </div>
                             </h2>
                             <div id="flush-collapse1" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <field name="form_state" invisible="1" />
+                                    <!-- MIM-1840: the remove-object trash reads rental_property_id
+                                         (parking_space_id / facility_id are already in this view) -->
+                                    <field name="rental_property_id" invisible="1" />
                                     <group col="1"
                                         invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
@@ -557,15 +573,28 @@
                                     class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
                                     Hyresgäst
                                 </div>
-                                <!-- MIM-1841: add/change tenant -->
-                                <button name="open_backfill_tenant_wizard"
-                                    type="object"
-                                    groups="maintenance.group_equipment_manager"
-                                    class="btn btn-link p-0 position-absolute top-50 end-0 translate-middle-y me-3 o-section-edit-btn"
-                                    title="Lägg till / ändra hyresgäst"
-                                    invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
-                                    <i class="fa fa-pencil" />
-                                </button>
+                                <!-- MIM-1841: add/change tenant
+                                     MIM-1840: remove tenant + contract (vacate) -->
+                                <div
+                                    class="position-absolute top-50 end-0 translate-middle-y me-3 d-flex gap-2">
+                                    <button name="open_backfill_tenant_wizard"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Lägg till / ändra hyresgäst"
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
+                                        <i class="fa fa-pencil" />
+                                    </button>
+                                    <button name="action_remove_tenant"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Ta bort hyresgäst och kontrakt"
+                                        confirm="Ta bort hyresgästen och kontraktet från ärendet? Ärendet blir tomställt."
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal') or (not lease_id and not tenant_id)">
+                                        <i class="fa fa-trash" />
+                                    </button>
+                                </div>
                             </h2>
                             <div id="flush-collapse3" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
@@ -593,6 +622,8 @@
                                         <field name="empty_tenant" invisible="1" />
                                         <field name="recently_added_tenant" invisible="1" />
                                         <field name="tenant_id" invisible="1" />
+                                        <!-- MIM-1840: the remove-tenant trash reads lease_id -->
+                                        <field name="lease_id" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not lease_option_id or create_date"
