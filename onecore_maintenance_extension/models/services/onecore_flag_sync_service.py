@@ -31,6 +31,10 @@ PEST_BLOCK_REASON = "SKADEDJUR"
 PEST_SET_CACHE_TTL = 300  # seconds
 _pest_set_cache = {}  # dbname -> (expires_at_monotonic, frozenset)
 
+# Codes per /v1/contacts/batch call. The endpoint takes a repeated ?code=
+# param, so the practical ceiling is URL length, not a documented limit.
+CONTACT_BATCH_SIZE = 200
+
 
 class OneCoreFlagSyncService:
     """Batch refresh of the two OneCore flags the kanban badges read."""
@@ -150,6 +154,81 @@ class OneCoreFlagSyncService:
             "%s set, %s cleared",
             len(blocked),
             len(requests),
+            len(to_set),
+            len(to_clear),
+        )
+        return changed
+
+    # ------------------------------------------------------------------
+    # Viktig kundinfo
+    # ------------------------------------------------------------------
+    def fetch_special_attention(self, contact_codes, api=None):
+        """contact_code -> specialAttention, for the codes OneCore answered for.
+
+        Codes missing from the result are missing on purpose: "unknown" must
+        never be written as False. A chunk that fails is logged and skipped -
+        unlike the pest set, each code stands on its own, so a partial answer
+        is correct rather than dangerous.
+        """
+        codes = list(contact_codes)
+        if not codes:
+            return {}
+
+        api = self._api(api)
+        flags = {}
+        for start in range(0, len(codes), CONTACT_BATCH_SIZE):
+            chunk = codes[start : start + CONTACT_BATCH_SIZE]
+            try:
+                content = api.fetch_contacts_batch(chunk, timeout=LOOKUP_TIMEOUT)
+            except Exception as err:
+                _logger.warning(
+                    "Viktig kundinfo: could not fetch %s contacts (from %s): %s",
+                    len(chunk),
+                    chunk[0],
+                    err,
+                )
+                continue
+            for contact in content or []:
+                code = contact.get("contactCode")
+                if not code:
+                    continue
+                communication = contact.get("communication") or {}
+                flags[code] = bool(communication.get("specialAttention"))
+        return flags
+
+    def sync_special_attention(self, api=None):
+        """Refresh special_attention on the tenants of every open request.
+
+        The flag is snapshotted from the tenant payload when the case is
+        created; without this it would never pick up a change made in Xpand
+        afterwards. Returns the number of tenant records changed.
+        """
+        if not self.is_configured():
+            _logger.info("Viktig kundinfo-sync skipped: onecore_base_url is not set")
+            return 0
+
+        tenants = self.open_requests().mapped("tenant_id")
+        codes = sorted({t.contact_code for t in tenants if t.contact_code})
+        if not codes:
+            return 0
+
+        flags = self.fetch_special_attention(codes, api=api)
+
+        to_set, to_clear = [], []
+        for tenant in tenants:
+            desired = flags.get(tenant.contact_code)
+            if desired is None:
+                continue
+            if desired and not tenant.special_attention:
+                to_set.append(tenant.id)
+            elif not desired and tenant.special_attention:
+                to_clear.append(tenant.id)
+
+        changed = self._apply(tenants, "special_attention", to_set, to_clear)
+        _logger.info(
+            "Viktig kundinfo-sync: %s codes asked, %s answered, %s set, " "%s cleared",
+            len(codes),
+            len(flags),
             len(to_set),
             len(to_clear),
         )

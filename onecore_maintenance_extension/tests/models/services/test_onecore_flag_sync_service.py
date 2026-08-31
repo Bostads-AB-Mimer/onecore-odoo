@@ -18,6 +18,7 @@ from ...utils.test_utils import (
     create_maintenance_request,
     create_parking_space,
     create_rental_property,
+    create_tenant,
 )
 from ....models.services import onecore_flag_sync_service as sync_module
 from ....models.services.onecore_flag_sync_service import OneCoreFlagSyncService
@@ -242,3 +243,136 @@ class TestSyncPestControl(FlagSyncTestMixin, TransactionCase):
             self.service.sync_pest_control()
 
         self.assertEqual(len(request.message_ids), before)
+
+
+def _contact(code, special_attention):
+    """Shape of one item in GET /v1/contacts/batch ``content``."""
+    return {
+        "contactCode": code,
+        "communication": {
+            "phoneNumbers": [],
+            "emailAddresses": [],
+            "specialAttention": special_attention,
+        },
+    }
+
+
+@tagged("onecore")
+class TestSyncSpecialAttention(FlagSyncTestMixin, TransactionCase):
+    def _request_with_tenant(self, contact_code="P123456", **tenant_vals):
+        request = self._apartment_request(rental_id=FREE_RENTAL_ID)
+        tenant = create_tenant(
+            self.env,
+            maintenance_request_id=request.id,
+            contact_code=contact_code,
+            **tenant_vals,
+        )
+        request.sudo().write({"tenant_id": tenant.id})
+        return request, tenant
+
+    def test_flag_set_in_xpand_after_creation_reaches_the_tenant(self):
+        request, tenant = self._request_with_tenant("P123456")
+        self.assertFalse(tenant.special_attention)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                _contact("P123456", True)
+            ]
+            self.service.sync_special_attention()
+
+        self.assertTrue(tenant.special_attention)
+        self.assertTrue(request.special_attention)
+
+    def test_cleared_flag_is_cleared_locally(self):
+        _request, tenant = self._request_with_tenant("P123456")
+        tenant.sudo().write({"special_attention": True})
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                _contact("P123456", False)
+            ]
+            self.service.sync_special_attention()
+
+        self.assertFalse(tenant.special_attention)
+
+    def test_code_missing_from_the_answer_is_left_alone(self):
+        """Absent means unknown, not False."""
+        _request, tenant = self._request_with_tenant("P123456")
+        tenant.sudo().write({"special_attention": True})
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = []
+            self.service.sync_special_attention()
+
+        self.assertTrue(tenant.special_attention)
+
+    def test_codes_are_chunked(self):
+        """Patch the size rather than create 200 records — the boundary logic
+        is what matters, not the constant's value."""
+        self._request_with_tenant("P000001")
+        self._request_with_tenant("P000002")
+        self._request_with_tenant("P000003")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "CONTACT_BATCH_SIZE", 2
+        ):
+            MockApi.return_value.fetch_contacts_batch.return_value = []
+            self.service.sync_special_attention()
+
+        calls = MockApi.return_value.fetch_contacts_batch.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0][0], ["P000001", "P000002"])
+        self.assertEqual(calls[1][0][0], ["P000003"])
+
+    def test_a_failing_chunk_does_not_lose_the_others(self):
+        _r1, tenant_one = self._request_with_tenant("P000001")
+        _r2, tenant_two = self._request_with_tenant("P000002")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "CONTACT_BATCH_SIZE", 1
+        ):
+            MockApi.return_value.fetch_contacts_batch.side_effect = [
+                [_contact("P000001", True)],
+                Exception("boom"),
+            ]
+            self.service.sync_special_attention()
+
+        self.assertTrue(tenant_one.special_attention)
+        self.assertFalse(tenant_two.special_attention)
+
+    def test_closed_requests_are_excluded(self):
+        request, tenant = self._request_with_tenant("P123456")
+        request.sudo().write({"closed_date": fields.Datetime.now()})
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                _contact("P123456", True)
+            ]
+            self.service.sync_special_attention()
+
+        self.assertFalse(tenant.special_attention)
+
+    def test_unchanged_run_writes_nothing(self):
+        self._request_with_tenant("P123456")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                _contact("P123456", True)
+            ]
+            self.assertEqual(self.service.sync_special_attention(), 1)
+            self.assertEqual(self.service.sync_special_attention(), 0)
+
+    def test_unconfigured_onecore_is_a_no_op(self):
+        self._request_with_tenant("P123456")
+
+        with patch(CORE_API_PATH) as MockApi:
+            self.assertEqual(self.service.sync_special_attention(), 0)
+
+        MockApi.assert_not_called()
