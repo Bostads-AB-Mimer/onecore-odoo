@@ -2,7 +2,6 @@ import urllib.parse
 import uuid
 import logging
 import json
-import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
@@ -40,11 +39,6 @@ from .mixins import (
 )
 
 _logger = logging.getLogger(__name__)
-
-# Per-worker cache so the pest control badge doesn't trigger a OneCore call on
-# every form read (web_save re-reads included). Worst-case staleness = TTL.
-PEST_CONTROL_CACHE_TTL = 300  # seconds
-_pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
 
 
 class OneCoreMaintenanceRequest(
@@ -201,11 +195,14 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_new_customer_info",
         store=False,
     )
-    # Form-view only. Adding this to tree/kanban would fire one API call per row.
+    # Stored snapshot written only by OneCoreFlagSyncService (create path +
+    # cron). Computing it per record would fire one OneCore call per kanban
+    # card, which is why it used to be form-only (MIM-1959).
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
-        compute="_compute_requires_pest_control",
-        store=False,
+        store=True,
+        readonly=True,
+        default=False,
     )
     floor_plan_image_url = fields.Char(
         store=False, readonly=True, compute="_compute_floor_plan"
@@ -409,46 +406,6 @@ class OneCoreMaintenanceRequest(
         record_service = RecordManagementService(self.env)
         for record in self:
             record_service.handle_empty_tenant_logic(record)
-
-    @api.depends("rental_property_id", "rental_property_option_id")
-    def _compute_requires_pest_control(self):
-        api = None
-        for record in self:
-            rental_id = None
-            if record.rental_property_id:
-                rental_id = record.rental_property_id.rental_property_id
-            elif record.rental_property_option_id:
-                rental_id = record.rental_property_option_id.name
-
-            if not rental_id:
-                record.requires_pest_control = False
-                continue
-
-            cached = _pest_control_cache.get(rental_id)
-            if cached and time.monotonic() < cached[0]:
-                record.requires_pest_control = cached[1]
-                continue
-
-            try:
-                if api is None:
-                    api = record.get_core_api()
-                data = api.fetch_residence(rental_id, timeout=5)
-                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                value = any(
-                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
-                )
-                _pest_control_cache[rental_id] = (
-                    time.monotonic() + PEST_CONTROL_CACHE_TTL,
-                    value,
-                )
-                record.requires_pest_control = value
-            except Exception as err:
-                _logger.warning(
-                    "Could not fetch pest control status for rental_id %s: %s",
-                    rental_id,
-                    err,
-                )
-                record.requires_pest_control = False
 
     @api.depends(
         "message_ids.date",
