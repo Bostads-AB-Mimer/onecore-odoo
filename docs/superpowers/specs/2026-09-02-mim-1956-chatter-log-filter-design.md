@@ -160,10 +160,13 @@ Because both feed `fetchMessagesData`, this covers initial load,
 `fetchMoreMessages` ("Load More") and `fetchNewMessages`, so paging fetches 30
 more *of that category* rather than 30 messages that are then thinned out.
 
-`getFetchParams()` has one other caller, `store.searchMessagesInThread`. Pills
-are hidden during search so that path is not reachable today; if it ever is, it
-degrades gracefully — our route forwards `fetch_params` untouched, so filter and
-search would simply compose.
+`getFetchParams()` has one other caller, `store.searchMessagesInThread` — and
+it calls `thread.getFetchRoute()` too, so **both** hooks are on the search path.
+An active category would therefore silently scope the search to that category
+while the pills are hidden, leaving the user no way to see why a term is not
+found. Composing the two is a deliberate follow-up (risk 6), so opening search
+instead **clears** the filter: `Chatter.onClickSearch` is patched to reset the
+category and refetch. See risk 6 for the consequence.
 
 On pill click: clear `thread.messages`, reset `isLoaded` / `loadOlder` /
 `loadNewer`, refetch.
@@ -197,8 +200,10 @@ section. Guarded on `props.record?.resModel === "maintenance.request"`, in the
 same style as the existing acknowledge button and pinned section.
 
 Hidden while `state.isSearchOpen`: search swaps the `Thread` component out for
-`SearchMessageResult`, so visible-but-inert pills would be a lie. Closing
-search restores the pills with the previous filter intact.
+`SearchMessageResult`, so visible-but-inert pills would be a lie. And because
+search runs through the same two fetch hooks (see above), opening search clears
+the filter — so closing search returns the pills to *Alla*, not to the previous
+filter.
 
 Styling goes in the existing `tenant_message.scss`. Strings follow existing
 convention in this module — raw Swedish in the template (as "Fästa noteringar"
@@ -230,23 +235,25 @@ meddelanden av den här typen.").
 
 | File | Change |
 |------|--------|
-| `onecore_mail_extension/models/mail_message.py` | Category field + compute, shared rule table, `_onecore_log_category_domain`, `_message_fetch` override, one entry in the existing `_to_store_defaults` |
+| `onecore_mail_extension/models/mail_message.py` | Category field + compute, shared rule table, `_onecore_log_category_domain`, `_onecore_sanitize_log_category`, `_message_fetch` override, one entry in the existing `_to_store_defaults`, and the `EXPECTED_CATEGORIES` expectations map |
 | `onecore_mail_extension/controllers/thread.py` | New `/onecore/mail/thread/messages` route |
 | `onecore_mail_extension/static/src/tenant/tenant_thread_patch.js` (new) | Thread model patches (`fetchRouteChatter`, `getFetchParams`) and Thread component patches (`orderedMessages`, `onecoreShowContent`, `onecoreEmptyText`), all with no-op guards |
-| `onecore_mail_extension/static/src/tenant/tenant_thread.xml` (new) | `mail.Thread` inherit — filter-aware content condition and empty state |
-| `onecore_mail_extension/static/src/tenant/tenant_chatter_patch.js` | Pill state, click handler, reset-and-refetch, visibility getter |
-| `onecore_mail_extension/static/src/tenant/tenant_chatter.xml` | Pill row, filter-aware empty state |
+| `onecore_mail_extension/static/src/tenant/tenant_thread.xml` (new) | `mail.Thread` inherit — composes a filter-aware condition onto the content and empty-state nodes (see risk 3c) |
+| `onecore_mail_extension/static/src/tenant/tenant_chatter_patch.js` | Pill state, click handler, shared reset (`_onecoreSetLogCategory`), visibility getter, `onClickSearch` clearing the filter |
+| `onecore_mail_extension/static/src/tenant/tenant_chatter.xml` | Pill row (with `role="group"` / `aria-pressed`), filter-aware empty state |
 | `onecore_mail_extension/static/src/tenant/tenant_message.scss` | Pill styling |
 | `onecore_mail_extension/tests/test_log_category.py` (new) | See Testing |
-| `CLAUDE.md`, `README.md` | Documentation note — see below |
+| `README.md` | Documentation note — see below |
 
-Only `mail_message.py` collides with PR #280.
+Only `mail_message.py` collides with PR #280. `CLAUDE.md` is **not** in this
+table: it is gitignored in this repo (`.gitignore`) and has never been tracked,
+so it cannot ship with the PR — see Documentation.
 
 ## Documentation
 
 Risk 1 is a trap for the *next* developer, not for this implementation, so it
-needs to be written down where that developer will be standing. Three places,
-weighted by hit rate:
+needs to be written down where that developer will be standing. Three places
+that actually ship, weighted by hit rate:
 
 1. **An inline comment on the `message_type` `selection_add` list** in
    `mail_message.py` — canonical and detailed, because a developer adding a
@@ -255,12 +262,14 @@ weighted by hit rate:
    prefixed `tenant_`. The comment states that any type that is neither
    `comment` nor `notification` falls into the **Kommunikation** filter by
    default, that this makes it visible to anyone filtering the tenant
-   conversation, and that `test_log_category.py`'s expectations map must be
-   updated to classify it deliberately.
-2. **`CLAUDE.md` → "Important Notes"** — a one-line pointer. This is where the
-   repo's cross-cutting gotchas already live (transient option fields, the
-   `activity_update()` suppression), and it is what an AI agent reads before
-   touching the module.
+   conversation, and that the `EXPECTED_CATEGORIES` map must be updated to
+   classify it deliberately.
+2. **`EXPECTED_CATEGORIES` itself, at the bottom of `mail_message.py`** — the
+   build-failing half. It lives in the model file rather than in the test file
+   precisely so it sits next to the rule table it guards, in the file the
+   developer already has open;
+   `test_log_category.py::test_every_message_type_is_classified` imports it and
+   fails on any live `message_type` missing from it.
 3. **`README.md`** — a short "Message categories in händelseloggen" note. The
    README is otherwise operational (dev setup, deploy, migrations), so this
    stays brief and points at the inline comment rather than restating the rule
@@ -268,6 +277,12 @@ weighted by hit rate:
 
 Only item 1 carries the full explanation; the other two point at it, so there
 is one place to update if the rules ever change.
+
+**Not `CLAUDE.md`.** An earlier version of this spec listed a pointer in
+`CLAUDE.md` → "Important Notes" as one of the three places. That does not work
+here: `CLAUDE.md` is gitignored in this repo and has never been tracked, so a
+note added there is invisible in the PR and absent from every other machine and
+agent that checks the branch out. The three above are the ones that ship.
 
 ## Testing
 
@@ -282,11 +297,17 @@ is one place to update if the rules ever change.
    `user_notification`), post one message of each, assert every message lands
    in exactly one category and that the three domains together return all of
    them.
-4. **Exhaustive expectations map.** A hardcoded `{message_type: category}` dict
-   plus an assertion that every value in the live selection appears in it. A
-   new message type then *fails the build* until someone classifies it
-   deliberately. Without this, rule 3 would silently absorb new types — see
-   Risk 1.
+4. **Exhaustive expectations map.** `EXPECTED_CATEGORIES`, a hardcoded
+   `{message_type: category}` dict in `mail_message.py`, plus an assertion that
+   every value in the live selection appears in it. A new message type then
+   *fails the build* until someone classifies it deliberately. Without this,
+   rule 3 would silently absorb new types — see Risk 1. The assertion is
+   **one-directional**: `live_types - EXPECTED_CATEGORIES` must be empty, but
+   the reverse (a listed type that is not installed) is only logged. `sms` and
+   `snailmail` arrive through `auto_install`, not through the `-i` list, and
+   that list differs between `run_tests.sh` and `.github/workflows/test.yml` —
+   a set-equality assertion would make CI fragile for a reason unrelated to
+   what this test guards.
 5. **Compute-vs-domain agreement.** For a mixed set,
    `_onecore_log_category_domain(c).search()` must return exactly the messages
    whose computed category is `c`. Guards drift between the two consumers of
@@ -295,6 +316,13 @@ is one place to update if the rules ever change.
    communication with `limit=30`, expect 5. Fails under any client-side
    implementation; this is the concrete justification for decision 2.
 7. `_fetch_pinned_messages` returns the same set regardless of category.
+8. **Bogus category from the client.** `onecore_log_category` reaches the
+   server as a top-level route parameter, so
+   `_onecore_sanitize_log_category` validates it against the field's selection
+   and drops unknown values (the fetch then behaves as *Alla*). Without that,
+   `_onecore_log_category_domain`'s `ValueError` would turn a malformed request
+   into a 500 plus a traceback. The `ValueError` itself is kept, and still
+   tested, as the signal for a genuine programmer error in server code.
 
 ### JavaScript — no automated coverage available
 
@@ -311,7 +339,9 @@ manual pass against local Odoo, seeding a long log via `odoo shell`:
    (Gate 2.)
 5. Inverse: send SMS / Mina sidor while *Interna noteringar* is active.
 6. Pinned section visible under every filter.
-7. Open search → pills hide; close → filter intact.
+7. Open search under an active filter → pills hide, the filter is cleared, and
+   the search covers the whole log (not just that category); close search →
+   pills are back on *Alla* and the full log is loaded. See risk 6.
 8. Empty category shows the Swedish line, not "conversation is empty" — test
    both the no-messages case and the case in step 4.
 9. External contractor login — pills work, record rules still govern what is
@@ -355,14 +385,39 @@ small, adjacent to base in the same file, and exercised by the Python tests.
 
 **3b. `subtype_id.internal` negation must be verified, not assumed.** The
 Kommunikation domain is `~event & ~internal_note`, and `internal_note` contains
-a related-field condition. `DomainNot._to_sql` renders `(...) IS NOT TRUE`,
-which *should* be NULL-safe and therefore include messages with no subtype at
-all — but `_optimize_step` may rewrite the negation before it reaches
-`_to_sql`. This is pinned by a dedicated test (a `subtype_id = False` message
-must classify *and* be returned by the communication domain). If that test
-fails, the fallback is to resolve internal subtypes to ids first
+a related-field condition. **Verified during implementation, and not the way
+this risk originally guessed:** `DomainNot._to_sql` (which renders
+`(...) IS NOT TRUE`) is never reached, because `DomainNot._optimize_step`
+applies De Morgan first (`odoo/orm/domains.py`). `~internal_note` therefore
+becomes `message_type != "comment" OR subtype_id NOT ANY (internal = True)`,
+and the NULL-safety comes from `Many2one.condition_to_sql`, which wraps a
+negated `any` as `(field IS NULL OR field NOT IN (...))` whenever
+`can_be_null` (`odoo/orm/fields_relational.py`). `mail.message.subtype_id` is
+nullable, so `can_be_null` holds and subtype-less messages stay in
+Kommunikation. Pinned by `test_compute_and_domain_agree` and
+`test_categories_partition_all_messages`, which both include a subtype-less
+`comment` — the only case where that relational branch decides on its own. If
+those ever fail, the fallback is to resolve internal subtypes to ids first
 (`Domain("subtype_id", "in", internal_subtype_ids)`), which negates over a plain
 column instead of a join.
+
+**3c. The `mail.Thread` template inherit is global.**
+`t-inherit-mode="extension"` mutates `mail.Thread` itself, so
+`tenant_thread.xml` reaches every thread render in the app — Discuss, chat
+windows, mailboxes, livechat — not just ärende. The mitigation is that both
+xpaths **compose** rather than replace: `<attribute name="t-if"
+add="..." separator="and"/>` AND-s our condition onto whatever is already
+there (`odoo/tools/template_inheritance.py`, `t-if` being one of
+`PYTHON_ATTRIBUTES`). A `position="replace"` of the `t-if` would instead freeze
+a copy of base's expression in this repo, and an upstream tweak to it would
+silently keep the old behaviour app-wide. Composition also means the getter can
+return `true` outside ärende and leave base untouched by construction, with no
+duplicated expression to go stale. Residual exposure: the xpaths still depend on
+base's `name="content"` / `name="empty-message"` markers, and the
+`empty-message` one resolves against the *post-patch* tree, since base's own
+`mail/static/src/core/web/thread_patch.xml` replaces that node and re-emits it
+inside a `<t t-else="">` — asset-order-dependent and not visible from our file,
+so it is called out in a comment there.
 
 **4. Acknowledge refetch only refreshes the filtered subset.**
 `_acknowledgeSignals` calls `thread.fetchMessages()` to re-serialise
@@ -376,11 +431,20 @@ returns to the newest 30 of the new category. Expected behaviour, but a user
 who has scrolled far back under *Kommunikation* and switches to *Alla* starts
 over at the top.
 
-**6. Search and filter do not compose.** Pills hide during search, so a user
-cannot search *within* Kommunikation. Composing them would be nearly free —
-both paths go through `_message_fetch`, and the search flow already carries an
+**6. Search and filter do not compose — and had to be actively prevented.** A
+user cannot search *within* Kommunikation. Composing them would be nearly free
+— both paths go through `_message_fetch`, and the search flow already carries an
 `is_notification` filter param — but it is deliberately out of scope here. Most
 likely first follow-up request once handläggare use this.
+
+Note that "do not compose" is not the default: `store.searchMessagesInThread`
+calls **both** `thread.getFetchRoute()` and `thread.getFetchParams()`, the two
+hooks gate 1 patches, so leaving a category set would have scoped the search to
+it silently — with the pills hidden, so the user could not see why their term
+was not found. `Chatter.onClickSearch` therefore clears the category and
+refetches. The visible consequence: **closing search leaves the pills on
+*Alla*** rather than restoring the previous filter. Accepted as the smaller
+surprise of the two, and it disappears when composition is implemented.
 
 **7. No count badges on the pills.** A user cannot tell a category is empty
 without clicking it. Would require extra count RPCs; judged not worth it for a
