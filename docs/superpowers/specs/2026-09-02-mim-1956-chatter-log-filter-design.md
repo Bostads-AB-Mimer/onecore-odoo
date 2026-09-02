@@ -105,11 +105,35 @@ def _message_fetch(self, domain, *, onecore_log_category=None, **kwargs):
 
 `Domain` is imported from `odoo.fields`, as base `mail.message` does.
 
-**No controller change is needed.** Base `mail_thread_messages` forwards
-`**fetch_params` straight into `_message_fetch`, so adding a keyword-only
-argument is the entire server-side plumbing. This deliberately keeps MIM-1956
-out of `onecore_mail_extension/controllers/thread.py`, which the pinned-message
-feature owns.
+### A dedicated route, for testability
+
+**Superseded during planning:** an earlier version of this spec claimed no
+controller change was needed, because base `mail_thread_messages` forwards
+`**fetch_params` straight into `_message_fetch`. That is true, but there is no
+clean JS hook that adds a key *inside* `fetch_params`:
+`Thread.fetchMessagesData` builds the whole `rpc()` call in one expression, so
+injecting a key means copying its ~12 lines into our patch — duplicated
+upstream logic in the one layer this repo has no automated tests for.
+
+`Thread.rpcParams` looked like the intended extension point (portal overrides
+it for tokens) and is spread in at top level, but it is **rejected**: it is also
+spread into `/mail/message/update_content` (`message_model.js:582`) and other
+message-action RPCs, where an unknown top-level kwarg would raise. Using it
+would break message editing.
+
+So the category travels as a **top-level** parameter to a dedicated route:
+
+- `POST /onecore/mail/thread/messages` in
+  `onecore_mail_extension/controllers/thread.py`, accepting
+  `(thread_model, thread_id, fetch_params=None, onecore_log_category=None)`,
+  mirroring base `mail_thread_messages` — same `_get_thread_with_access` check,
+  same `set_message_done`, same `Store` serialisation — and passing the
+  category into `_message_fetch`.
+
+This trades ~12 lines of copied *JavaScript* for ~8 lines of copied *Python*.
+Worth it: the Python half is covered by the test suite, the JS half would not
+be. It does mean re-entering `controllers/thread.py`, which the pinned-message
+feature owns, but the addition is a separate route rather than a modification.
 
 The filter is applied through a normal `search()` as the requesting user, with
 no `sudo()` anywhere, so mail.message ACLs and record rules still govern
@@ -124,10 +148,22 @@ by construction.
 ### Two gates, and why both are needed
 
 **Gate 1 — fetch.** The active category is stored on the Thread record as
-`thread.onecoreLogCategory`. `Thread.prototype.fetchMessagesData` is patched to
-inject it into `fetch_params`. That single hook covers initial load,
+`thread.onecoreLogCategory`. Two small `Thread.prototype` patches, neither
+containing copied upstream logic:
+
+- `get fetchRouteChatter()` — returns `/onecore/mail/thread/messages` when a
+  category is set, otherwise `super`.
+- `getFetchParams()` — adds `onecore_log_category` when a category is set,
+  otherwise `super`.
+
+Because both feed `fetchMessagesData`, this covers initial load,
 `fetchMoreMessages` ("Load More") and `fetchNewMessages`, so paging fetches 30
 more *of that category* rather than 30 messages that are then thinned out.
+
+`getFetchParams()` has one other caller, `store.searchMessagesInThread`. Pills
+are hidden during search so that path is not reachable today; if it ever is, it
+degrades gracefully — our route forwards `fetch_params` untouched, so filter and
+search would simply compose.
 
 On pill click: clear `thread.messages`, reset `isLoaded` / `loadOlder` /
 `loadNewer`, refetch.
@@ -195,7 +231,9 @@ meddelanden av den här typen.").
 | File | Change |
 |------|--------|
 | `onecore_mail_extension/models/mail_message.py` | Category field + compute, shared rule table, `_onecore_log_category_domain`, `_message_fetch` override, one entry in the existing `_to_store_defaults` |
-| `onecore_mail_extension/static/src/tenant/tenant_thread_patch.js` (new) | The two Thread patches (`fetchMessagesData`, `orderedMessages`) with their no-op guards |
+| `onecore_mail_extension/controllers/thread.py` | New `/onecore/mail/thread/messages` route |
+| `onecore_mail_extension/static/src/tenant/tenant_thread_patch.js` (new) | Thread model patches (`fetchRouteChatter`, `getFetchParams`) and Thread component patches (`orderedMessages`, `onecoreShowContent`, `onecoreEmptyText`), all with no-op guards |
+| `onecore_mail_extension/static/src/tenant/tenant_thread.xml` (new) | `mail.Thread` inherit — filter-aware content condition and empty state |
 | `onecore_mail_extension/static/src/tenant/tenant_chatter_patch.js` | Pill state, click handler, reset-and-refetch, visibility getter |
 | `onecore_mail_extension/static/src/tenant/tenant_chatter.xml` | Pill row, filter-aware empty state |
 | `onecore_mail_extension/static/src/tenant/tenant_message.scss` | Pill styling |
@@ -306,11 +344,25 @@ accepted cost of decision 8 — it is what makes "Load More" respect the filter.
 Believed to be unreachable today because the ärende chatter is single-instance,
 but it is an assumption about the view layer, not an invariant.
 
-**3. `_message_fetch` is upstream-private.** We add a keyword-only argument and
-forward `**kwargs`, relying on the base signature and on the controller
-forwarding `fetch_params` blindly. Both are internal Odoo details that could
-change on a version upgrade. Cheap to fix if it happens, but it will break
-silently at fetch time rather than at import time.
+**3. Two upstream-private surfaces are being extended.** We add a keyword-only
+argument to `_message_fetch` and forward `**kwargs`, relying on the base
+signature. And `/onecore/mail/thread/messages` mirrors the body of base
+`mail_thread_messages` — if upstream changes that route (an extra access check,
+a different serialisation), our copy silently keeps the old behaviour. Both are
+internal Odoo details that could shift on a version upgrade, and both will fail
+at fetch time rather than at import time. The mitigation is that the copy is
+small, adjacent to base in the same file, and exercised by the Python tests.
+
+**3b. `subtype_id.internal` negation must be verified, not assumed.** The
+Kommunikation domain is `~event & ~internal_note`, and `internal_note` contains
+a related-field condition. `DomainNot._to_sql` renders `(...) IS NOT TRUE`,
+which *should* be NULL-safe and therefore include messages with no subtype at
+all — but `_optimize_step` may rewrite the negation before it reaches
+`_to_sql`. This is pinned by a dedicated test (a `subtype_id = False` message
+must classify *and* be returned by the communication domain). If that test
+fails, the fallback is to resolve internal subtypes to ids first
+(`Domain("subtype_id", "in", internal_subtype_ids)`), which negates over a plain
+column instead of a join.
 
 **4. Acknowledge refetch only refreshes the filtered subset.**
 `_acknowledgeSignals` calls `thread.fetchMessages()` to re-serialise
