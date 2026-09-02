@@ -40,13 +40,34 @@ patch(Chatter.prototype, {
       .sort((a, b) => b.id - a.id);
   },
 
-  async load(thread, requestList) {
-    // Every record opens on "Alla" (MIM-1956). The Thread record is a store
-    // singleton that outlives this component, so a stale category would
-    // otherwise survive navigation between ärenden.
-    if (thread) {
+  // Every record opens on "Alla" (MIM-1956). The Thread record is a store
+  // singleton that outlives this component, so a stale category would
+  // otherwise survive navigation between ärenden.
+  //
+  // changeThread — not load — is the hook for that reset. Base calls load()
+  // after EVERY post and after the full composer closes as well
+  // (mail/static/src/chatter/web_portal/chatter.js: onPostCallback,
+  // onCloseFullComposerCallback), so resetting in load() threw the user's
+  // filter away mid-session: logging an intern notering under Kommunikation
+  // snapped the pills back to "Alla" while the log still held only the
+  // previous category's page. changeThread runs exactly on chatter mount and
+  // on a record switch, which is what "opens on Alla" means.
+  changeThread(threadModel, threadId) {
+    super.changeThread(threadModel, threadId);
+    const thread = this.state.thread;
+    if (thread?.onecoreLogCategory) {
       thread.onecoreLogCategory = undefined;
+      // Drop the filtered window together with the filter — same reset as
+      // onClickLogFilter. Without it the reopened log renders the previous
+      // category's page under an active "Alla" pill.
+      thread.messages = [];
+      thread.isLoaded = false;
+      thread.loadOlder = false;
+      thread.loadNewer = false;
     }
+  },
+
+  async load(thread, requestList) {
     await super.load(thread, requestList);
     await this._fetchPinnedMessages(thread);
   },
