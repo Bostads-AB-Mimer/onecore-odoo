@@ -27,6 +27,22 @@
         </button>
     </xpath>
 
+    <!-- Händelselogg filter (MIM-1956). Between the topbar and the log, so it
+         reads as belonging to the list it filters. Hidden while search is open,
+         since search replaces the message list with SearchMessageResult and
+         inert pills would be a lie. -->
+    <xpath expr="//div[hasclass('o-mail-Chatter-content')]" position="before">
+        <div class="o-mimer-LogFilter d-flex flex-shrink-0 overflow-x-auto"
+             t-if="showLogFilter()">
+            <button t-foreach="onecoreLogFilters" t-as="logFilter" t-key="logFilter.label"
+                    class="o-mimer-LogFilter-pill btn btn-sm text-nowrap"
+                    t-att-class="isActiveLogFilter(logFilter.id) ? 'active' : ''"
+                    t-on-click="() => this.onClickLogFilter(logFilter.id)">
+                <t t-esc="logFilter.label"/>
+            </button>
+        </div>
+    </xpath>
+
     <!-- Pinned messages section ("Fästa") at the top of the chatter content -->
     <xpath expr="//div[hasclass('o-mail-Chatter-content')]/t[1]" position="before">
         <div class="o-mimer-PinnedMessages" t-if="pinnedMessages.length">

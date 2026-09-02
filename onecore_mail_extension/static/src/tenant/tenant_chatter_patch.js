@@ -38,6 +38,12 @@ patch(Chatter.prototype, {
   },
 
   async load(thread, requestList) {
+    // Every record opens on "Alla" (MIM-1956). The Thread record is a store
+    // singleton that outlives this component, so a stale category would
+    // otherwise survive navigation between ärenden.
+    if (thread) {
+      thread.onecoreLogCategory = undefined;
+    }
     await super.load(thread, requestList);
     await this._fetchPinnedMessages(thread);
   },
@@ -55,6 +61,46 @@ patch(Chatter.prototype, {
       thread_id: thread.id,
     });
     this.store.insert(result.data);
+  },
+
+  // MIM-1956 — händelselogg filter. Single-select, reset to "Alla" on every
+  // record open: the filter is component state only, deliberately not
+  // persisted, so nobody comes back tomorrow to a log that looks truncated.
+  get onecoreLogFilters() {
+    return [
+      { id: undefined, label: _t("Alla") },
+      { id: "event", label: _t("Händelser") },
+      { id: "internal_note", label: _t("Interna noteringar") },
+      { id: "communication", label: _t("Kommunikation") },
+    ];
+  },
+
+  showLogFilter() {
+    return (
+      this.props.record?.resModel === "maintenance.request" &&
+      !!this.state.thread?.id &&
+      !this.state.isSearchOpen
+    );
+  },
+
+  isActiveLogFilter(categoryId) {
+    return (this.state.thread?.onecoreLogCategory ?? undefined) === categoryId;
+  },
+
+  async onClickLogFilter(categoryId) {
+    const thread = this.state.thread;
+    if (!thread || this.isActiveLogFilter(categoryId)) {
+      return;
+    }
+    thread.onecoreLogCategory = categoryId;
+    // Drop the loaded window and re-page from the newest message of the new
+    // category. Without the reset, fetchNewMessages would ask for messages
+    // after the newest id it already holds — an id from the previous category.
+    thread.messages = [];
+    thread.isLoaded = false;
+    thread.loadOlder = false;
+    thread.loadNewer = false;
+    await thread.fetchNewMessages();
   },
 
   _isUnsavedMaintenanceRequest() {
