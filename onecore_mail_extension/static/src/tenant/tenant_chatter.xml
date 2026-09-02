@@ -37,6 +37,7 @@
             <button t-foreach="onecoreLogFilters" t-as="logFilter" t-key="logFilter.label"
                     class="o-mimer-LogFilter-pill btn btn-sm text-nowrap"
                     t-att-class="isActiveLogFilter(logFilter.id) ? 'active' : ''"
+                    t-att-disabled="state.onecoreLogFilterBusy"
                     t-on-click="() => this.onClickLogFilter(logFilter.id)">
                 <t t-esc="logFilter.label"/>
             </button>

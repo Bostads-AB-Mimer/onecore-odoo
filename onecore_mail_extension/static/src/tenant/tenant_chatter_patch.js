@@ -19,6 +19,9 @@ patch(Chatter.prototype, {
   setup() {
     super.setup();
     this.dialogService = this.env.services.dialog;
+    // MIM-1956 — guards the pill row against a second click landing while a
+    // filter-triggered fetch is already in flight (see onClickLogFilter).
+    this.state.onecoreLogFilterBusy = false;
   },
 
   get pinnedMessages() {
@@ -89,18 +92,34 @@ patch(Chatter.prototype, {
 
   async onClickLogFilter(categoryId) {
     const thread = this.state.thread;
-    if (!thread || this.isActiveLogFilter(categoryId)) {
+    if (
+      !thread ||
+      this.isActiveLogFilter(categoryId) ||
+      this.state.onecoreLogFilterBusy
+    ) {
       return;
     }
-    thread.onecoreLogCategory = categoryId;
-    // Drop the loaded window and re-page from the newest message of the new
-    // category. Without the reset, fetchNewMessages would ask for messages
-    // after the newest id it already holds — an id from the previous category.
-    thread.messages = [];
-    thread.isLoaded = false;
-    thread.loadOlder = false;
-    thread.loadNewer = false;
-    await thread.fetchNewMessages();
+    // Busy-guard against rapid pill-switching (MIM-1956 review): base
+    // fetchNewMessages silently no-ops while thread.status === "loading", so
+    // a second click landing mid-fetch would set onecoreLogCategory to the
+    // new pill without ever sending its RPC — leaving the active pill and
+    // thread.messages out of sync. Disabling the row for the duration of the
+    // fetch (see the template's t-att-disabled) makes that click impossible
+    // rather than racing it.
+    this.state.onecoreLogFilterBusy = true;
+    try {
+      thread.onecoreLogCategory = categoryId;
+      // Drop the loaded window and re-page from the newest message of the new
+      // category. Without the reset, fetchNewMessages would ask for messages
+      // after the newest id it already holds — an id from the previous category.
+      thread.messages = [];
+      thread.isLoaded = false;
+      thread.loadOlder = false;
+      thread.loadNewer = false;
+      await thread.fetchNewMessages();
+    } finally {
+      this.state.onecoreLogFilterBusy = false;
+    }
   },
 
   _isUnsavedMaintenanceRequest() {
