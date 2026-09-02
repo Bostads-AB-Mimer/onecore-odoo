@@ -200,8 +200,36 @@ meddelanden av den här typen.").
 | `onecore_mail_extension/static/src/tenant/tenant_chatter.xml` | Pill row, filter-aware empty state |
 | `onecore_mail_extension/static/src/tenant/tenant_message.scss` | Pill styling |
 | `onecore_mail_extension/tests/test_log_category.py` (new) | See Testing |
+| `CLAUDE.md`, `README.md` | Documentation note — see below |
 
 Only `mail_message.py` collides with PR #280.
+
+## Documentation
+
+Risk 1 is a trap for the *next* developer, not for this implementation, so it
+needs to be written down where that developer will be standing. Three places,
+weighted by hit rate:
+
+1. **An inline comment on the `message_type` `selection_add` list** in
+   `mail_message.py` — canonical and detailed, because a developer adding a
+   type is literally editing that list. MIM-1960 already set this precedent
+   with its comment explaining why `receipt_to_tenant` is deliberately not
+   prefixed `tenant_`. The comment states that any type that is neither
+   `comment` nor `notification` falls into the **Kommunikation** filter by
+   default, that this makes it visible to anyone filtering the tenant
+   conversation, and that `test_log_category.py`'s expectations map must be
+   updated to classify it deliberately.
+2. **`CLAUDE.md` → "Important Notes"** — a one-line pointer. This is where the
+   repo's cross-cutting gotchas already live (transient option fields, the
+   `activity_update()` suppression), and it is what an AI agent reads before
+   touching the module.
+3. **`README.md`** — a short "Message categories in händelseloggen" note. The
+   README is otherwise operational (dev setup, deploy, migrations), so this
+   stays brief and points at the inline comment rather than restating the rule
+   table.
+
+Only item 1 carries the full explanation; the other two point at it, so there
+is one place to update if the rules ever change.
 
 ## Testing
 
@@ -262,10 +290,12 @@ communication nor event silently becomes Kommunikation. Concretely: if someone
 later adds an internal integration message with a custom `message_type` (not
 `comment`, not `notification`), it lands in a tenant-facing filter. The
 partition test cannot catch this — the message is still in exactly one bucket.
-Mitigated by the exhaustive expectations map (test 4), which converts silent
-misfiling into a failing build. That mitigation is the only thing standing
-between rule 3 and a confidentiality-shaped bug, so it should not be dropped as
-"just a test".
+Mitigated on two fronts: the exhaustive expectations map (test 4), which
+converts silent misfiling into a failing build, and the documentation note (see
+Documentation), which warns the developer *before* they add the type rather
+than after CI rejects it. The test is the load-bearing half — it is the only
+thing standing between rule 3 and a confidentiality-shaped bug, so it should
+not be dropped later as "just a test".
 
 **2. Filter state on the Thread record is shared state.** The Thread is a store
 singleton per record. Two `Chatter` components mounted on the same ärende
