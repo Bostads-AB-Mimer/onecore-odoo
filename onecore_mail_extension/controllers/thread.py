@@ -36,14 +36,27 @@ class OneCoreThreadController(ThreadController):
         # access check, same set_message_done, same Store serialization. Keep it
         # in step with base on Odoo upgrades.
         thread = self._get_thread_with_access(thread_model, thread_id, mode="read")
-        res = request.env["mail.message"]._message_fetch(
+        MailMessage = request.env["mail.message"]
+        res = MailMessage._message_fetch(
             domain=None,
             thread=thread,
-            onecore_log_category=onecore_log_category,
+            # onecore_log_category comes straight from the browser, so it is
+            # validated against the field's selection here rather than letting
+            # _onecore_log_category_domain's ValueError become a 500 plus a
+            # traceback. Unknown values are dropped -> unfiltered log.
+            onecore_log_category=MailMessage._onecore_sanitize_log_category(
+                onecore_log_category
+            ),
             **(fetch_params or {}),
         )
         messages = res.pop("messages")
         if not request.env.user._is_public():
+            # Marks only the FETCHED subset as read, so under an active filter
+            # the needs-action counter drops by the messages of that category
+            # only. Base /mail/thread/messages has the same property with
+            # pagination (it only ever marks the current 30), so this is a
+            # difference in degree, not in kind — noted so nobody debugs a
+            # stubborn unread counter cold.
             messages.set_message_done()
         return {
             **res,

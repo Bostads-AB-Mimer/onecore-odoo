@@ -1,57 +1,22 @@
+import logging
+
 from odoo import fields
 from odoo.fields import Domain
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.mail.tools.discuss import Store
 
+# EXPECTED_CATEGORIES lives next to the rule table it guards, in
+# models/mail_message.py, because a developer adding a message_type is already
+# editing that file and has no reason to open this one.
 from ..models.mail_message import (
+    EXPECTED_CATEGORIES,
     LOG_CATEGORY_COMMUNICATION,
     LOG_CATEGORY_EVENT,
     LOG_CATEGORY_INTERNAL_NOTE,
 )
 
-# Every message_type the chatter can show, mapped to the category it MUST fall
-# into. `user_notification` is excluded because base _message_fetch filters it
-# out before it can reach the chatter.
-#
-# This map is deliberately exhaustive: test_every_message_type_is_classified
-# fails when a new type is added to the selection without being listed here.
-# That is the guard against a new type silently landing in Kommunikation, i.e.
-# in the filter a handläggare reads as "the tenant conversation".
-EXPECTED_CATEGORIES = {
-    # Base Odoo types (addons/mail/models/mail_message.py:119)
-    "email": LOG_CATEGORY_COMMUNICATION,
-    "comment": LOG_CATEGORY_COMMUNICATION,  # public subtype; see note below
-    "email_outgoing": LOG_CATEGORY_COMMUNICATION,
-    "notification": LOG_CATEGORY_EVENT,
-    "auto_comment": LOG_CATEGORY_COMMUNICATION,
-    "out_of_office": LOG_CATEGORY_COMMUNICATION,
-    # ONECore types (onecore_mail_extension)
-    "from_tenant": LOG_CATEGORY_COMMUNICATION,
-    "receipt_to_tenant": LOG_CATEGORY_COMMUNICATION,
-    "tenant_sms": LOG_CATEGORY_COMMUNICATION,
-    "tenant_mail": LOG_CATEGORY_COMMUNICATION,
-    "tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
-    "failed_tenant_sms": LOG_CATEGORY_COMMUNICATION,
-    "failed_tenant_mail": LOG_CATEGORY_COMMUNICATION,
-    "failed_tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
-    "tenant_mail_ok_and_sms_failed": LOG_CATEGORY_COMMUNICATION,
-    "tenant_mail_failed_and_sms_ok": LOG_CATEGORY_COMMUNICATION,
-    # base `sms` and `snailmail` addons (auto_install=True on `mail`+`iap_mail`,
-    # both already satisfied here) add these two selection values even though
-    # onecore doesn't use either module directly. Neither is "comment" nor
-    # "notification", so the rule table's catch-all already puts them in
-    # Kommunikation — correct, since both represent outbound communication to
-    # a partner.
-    "sms": LOG_CATEGORY_COMMUNICATION,
-    "snailmail": LOG_CATEGORY_COMMUNICATION,
-}
-
-# `comment` is the one type whose category depends on the subtype: with an
-# internal subtype (mail.mt_note = "Logga notering") it is an intern notering,
-# with a public one (mail.mt_comment) it is kommunikation. EXPECTED_CATEGORIES
-# lists its public reading; the internal one is covered by
-# test_log_note_is_internal_note.
+_logger = logging.getLogger(__name__)
 
 
 @tagged("onecore", "post_install", "-at_install")
@@ -98,6 +63,27 @@ class TestOneCoreLogCategory(TransactionCase):
             message.write({"message_type": message_type})
         return message
 
+    def _live_message_types(self):
+        """The message_type selection as installed, minus user_notification.
+
+        get_values() is the documented accessor and returns the selection AFTER
+        selection_add merging, which is what we need here.
+        """
+        return set(
+            self.env["mail.message"]._fields["message_type"].get_values(self.env)
+        ) - {"user_notification"}
+
+    def _live_expected_categories(self):
+        """EXPECTED_CATEGORIES restricted to types this database actually has.
+
+        `sms` and `snailmail` arrive through auto_install, not through the -i
+        list, which differs between run_tests.sh and the CI workflow. Writing a
+        message_type that is not in the live selection raises, so every test
+        that iterates the map has to iterate this instead.
+        """
+        live = self._live_message_types()
+        return {k: v for k, v in EXPECTED_CATEGORIES.items() if k in live}
+
     def test_notification_is_event(self):
         message = self._message("notification", self.note_subtype)
         self.assertEqual(message.onecore_log_category, LOG_CATEGORY_EVENT)
@@ -129,25 +115,52 @@ class TestOneCoreLogCategory(TransactionCase):
         message = self._message("from_tenant")
         self.assertEqual(message.onecore_log_category, LOG_CATEGORY_COMMUNICATION)
 
+    def test_comment_without_subtype_is_communication(self):
+        """The one cell the matrix was missing, and the only case where the
+        relational half of the rule decides on its own.
+
+        Every other subtype-less case here uses a non-"comment" type, where
+        `message_type == "comment"` short-circuits the internal-note rule (and,
+        in the domain, satisfies the negation through the plain column). A
+        subtype-less *comment* is the case that actually exercises
+        `subtype_id.internal` against NULL. The domain half is covered by
+        test_compute_and_domain_agree and test_categories_partition_all_messages,
+        which both include this message.
+        """
+        message = self._message("comment")
+        self.assertEqual(message.onecore_log_category, LOG_CATEGORY_COMMUNICATION)
+
     def test_every_message_type_is_classified(self):
         """Fails the build when a new message_type is added without a
-        deliberate category. See the EXPECTED_CATEGORIES comment."""
-        # get_values() is the documented accessor and returns the selection
-        # AFTER selection_add merging, which is what we need here.
-        live_types = set(
-            self.env["mail.message"]._fields["message_type"].get_values(self.env)
-        ) - {"user_notification"}
-        self.assertEqual(
-            live_types,
-            set(EXPECTED_CATEGORIES),
-            "A message_type was added or removed without updating "
-            "EXPECTED_CATEGORIES. A new type that is neither 'comment' nor "
+        deliberate category. See the EXPECTED_CATEGORIES comment.
+
+        One-directional on purpose. The guard that matters is "no live type is
+        missing from the map"; asserting set equality would also fail when a
+        type present in the map is not installed, and `sms`/`snailmail` arrive
+        via auto_install rather than this repo's -i list, which differs between
+        run_tests.sh and .github/workflows/test.yml. That direction is logged,
+        not asserted, so the build only breaks for the reason this test exists.
+        """
+        live_types = self._live_message_types()
+        unclassified = live_types - set(EXPECTED_CATEGORIES)
+        self.assertFalse(
+            unclassified,
+            f"message_type(s) {sorted(unclassified)} are not in "
+            "EXPECTED_CATEGORIES (onecore_mail_extension/models/"
+            "mail_message.py). A new type that is neither 'comment' nor "
             "'notification' falls into Kommunikation by default — decide "
-            "whether that is correct, then list it here.",
+            "whether that is correct, then list it there.",
         )
+        not_installed = set(EXPECTED_CATEGORIES) - live_types
+        if not_installed:
+            _logger.info(
+                "EXPECTED_CATEGORIES lists message_type(s) that are not "
+                "installed in this database, skipped: %s",
+                sorted(not_installed),
+            )
 
     def test_expected_categories_match_the_rule_table(self):
-        for message_type, expected in EXPECTED_CATEGORIES.items():
+        for message_type, expected in self._live_expected_categories().items():
             subtype = (
                 self.comment_subtype if message_type == "comment" else self.note_subtype
             )
@@ -169,6 +182,10 @@ class TestOneCoreLogCategory(TransactionCase):
             + self._message("tenant_sms", self.comment_subtype)
             + self._message("receipt_to_tenant", self.note_subtype)
             + self._message("from_tenant")
+            # Subtype-less comment: the only case where the negated
+            # subtype_id.internal condition decides the outcome on its own, so
+            # this is what pins the domain's NULL-safety.
+            + self._message("comment")
         )
         MailMessage = self.env["mail.message"]
         for category in (
@@ -191,13 +208,14 @@ class TestOneCoreLogCategory(TransactionCase):
         """The three filters must sum to Alla, with no overlap: every message
         visible under exactly one filter, none invisible under all three."""
         messages = self.env["mail.message"]
-        for message_type in EXPECTED_CATEGORIES:
+        for message_type in self._live_expected_categories():
             subtype = (
                 self.comment_subtype if message_type == "comment" else self.note_subtype
             )
             messages += self._message(message_type, subtype)
         messages += self._message("comment", self.note_subtype)  # intern notering
         messages += self._message("from_tenant")  # no subtype
+        messages += self._message("comment")  # comment, no subtype at all
 
         MailMessage = self.env["mail.message"]
         seen = []
@@ -217,8 +235,54 @@ class TestOneCoreLogCategory(TransactionCase):
         self.assertEqual(len(seen), len(set(seen)), "a message matched two categories")
 
     def test_unknown_category_raises(self):
+        """The domain builder keeps raising, so a genuine programmer error in
+        server code still surfaces loudly. Client input never reaches it — see
+        test_sanitize_drops_unknown_category."""
         with self.assertRaises(ValueError):
             self.env["mail.message"]._onecore_log_category_domain("nonsense")
+
+    def test_sanitize_drops_unknown_category(self):
+        """onecore_log_category arrives from the browser through
+        /onecore/mail/thread/messages, so a bogus value must not become a 500
+        (plus a traceback in the log) via the ValueError above. Unknown values
+        are dropped, which makes the fetch behave as Alla."""
+        MailMessage = self.env["mail.message"]
+        for bogus in ("nonsense", "EVENT", "event; drop table", 42):
+            self.assertIsNone(
+                MailMessage._onecore_sanitize_log_category(bogus),
+                f"{bogus!r} should have been dropped",
+            )
+
+    def test_sanitize_keeps_known_categories(self):
+        MailMessage = self.env["mail.message"]
+        for category in (
+            LOG_CATEGORY_EVENT,
+            LOG_CATEGORY_INTERNAL_NOTE,
+            LOG_CATEGORY_COMMUNICATION,
+        ):
+            self.assertEqual(
+                MailMessage._onecore_sanitize_log_category(category), category
+            )
+
+    def test_sanitize_treats_empty_as_no_filter(self):
+        """None / False / "" all mean Alla, and must not be logged as bogus."""
+        MailMessage = self.env["mail.message"]
+        for empty in (None, False, ""):
+            self.assertIsNone(MailMessage._onecore_sanitize_log_category(empty))
+
+    def test_message_fetch_with_bogus_category_is_unfiltered(self):
+        """End-to-end on the client-facing path: a bogus category from the
+        browser yields the unfiltered log rather than an error."""
+        MailMessage = self.env["mail.message"]
+        event_msg = self._message("notification", self.note_subtype)
+        sms_msg = self._message("tenant_sms", self.comment_subtype)
+        fetched = MailMessage._message_fetch(
+            domain=None,
+            thread=self.thread,
+            onecore_log_category=MailMessage._onecore_sanitize_log_category("nonsense"),
+        )["messages"]
+        self.assertIn(event_msg.id, fetched.ids)
+        self.assertIn(sms_msg.id, fetched.ids)
 
     def test_category_is_serialized_to_the_store(self):
         """Gate 2 in the browser compares msg.onecore_log_category, so the field
@@ -260,8 +324,8 @@ class TestOneCoreLogCategory(TransactionCase):
     def test_message_fetch_without_category_is_unchanged(self):
         """Alla must stay byte-identical to today's behaviour."""
         MailMessage = self.env["mail.message"]
-        note = self._message("notification", self.note_subtype)
-        comment = self._message("comment", self.note_subtype)
+        event_msg = self._message("notification", self.note_subtype)
+        internal_note_msg = self._message("comment", self.note_subtype)
         with_none = MailMessage._message_fetch(
             domain=None, thread=self.thread, onecore_log_category=None
         )["messages"]
@@ -280,8 +344,8 @@ class TestOneCoreLogCategory(TransactionCase):
         # in Händelse, not Intern notering, because _onecore_log_category_for
         # checks message_type before subtype. Expected, and not asserted on
         # here.)
-        self.assertIn(note.id, baseline.ids)
-        self.assertIn(comment.id, baseline.ids)
+        self.assertIn(event_msg.id, baseline.ids)
+        self.assertIn(internal_note_msg.id, baseline.ids)
 
     def test_pagination_applies_after_filtering(self):
         """The reason this filter is server-side. With 40 events ahead of 5

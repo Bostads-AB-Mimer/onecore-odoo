@@ -65,5 +65,5 @@ filter handläggare read as the tenant conversation.
 
 Before adding a `message_type`, read the comment on the `message_type` field in
 `onecore_mail_extension/models/mail_message.py` and classify the new type in
-`EXPECTED_CATEGORIES` (`onecore_mail_extension/tests/test_log_category.py`).
-The test suite fails until you do.
+`EXPECTED_CATEGORIES` at the bottom of that same file. The test suite
+(`onecore_mail_extension/tests/test_log_category.py`) fails until you do.
