@@ -18,6 +18,7 @@ from .services import (
     MaintenanceStageManager,
     ManagementAreaService,
     OneCoreFlagSyncService,
+    OrderingTeamService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -268,6 +269,46 @@ class OneCoreMaintenanceRequest(
         help="Senaste lyckade uppslag av distrikt/kvartersvärdsområde i OneCore "
         "(även när fastigheten saknar koppling). Tomt = aldrig uppslaget eller "
         "misslyckat — backfill-jobbet försöker igen.",
+    )
+
+    # ============================================================================
+    # ORDERING TEAM — beställande resursgrupp (MIM-1970)
+    # ============================================================================
+    # Who ordered the request, as opposed to who it currently sits with
+    # (maintenance_team_id). Stamped by OrderingTeamService on the write path
+    # only — create and the backfill cron — and deliberately never derived on
+    # read. Three reasons it has to be stored:
+    #   1. create_uid names a person, not a resource group, and a person can
+    #      belong to several teams and move between them.
+    #   2. Deriving at read time rewrites history: "ordered by the district in
+    #      March" must not become another answer in May.
+    #   3. Mina sidor-ärenden arrive over XML-RPC with a technical integration
+    #      user as create_uid, so a derivation is meaningless for the largest
+    #      inflow. Those resolve to Kundcenter from creation_origin instead.
+    ordering_team_id = fields.Many2one(
+        "maintenance.team",
+        string="Beställande resursgrupp",
+        readonly=True,
+        # Not indexed by default in Odoo 19. This is the backfill cron's only
+        # filter column and the group-by key behind MIM-1975/1976/1977.
+        index=True,
+        help="Resursgruppen som beställde ärendet, registrerad när ärendet "
+        "skapades. Skiljer sig från Resursgrupp, som är den grupp ärendet "
+        "ligger hos just nu.",
+    )
+    ordering_cost_center_code = fields.Char(
+        "Beställande distrikt (kod)",
+        readonly=True,
+        index=True,
+        help="Kostnadsstället för den beställande resursgruppen, kopierat när "
+        "ärendet skapades så distriktsfiltret slipper joina mot resursgruppen.",
+    )
+    ordering_backfilled_at = fields.Datetime(
+        "Beställare gissad (backfill)",
+        readonly=True,
+        help="Satt av backfill-jobbet: beställaren är härledd i efterhand ur "
+        "vem som skapade ärendet, inte registrerad när ärendet skapades. "
+        "Tomt = beställaren stämplades vid create och är alltså inte en gissning.",
     )
 
     # ============================================================================
@@ -1138,6 +1179,7 @@ class OneCoreMaintenanceRequest(
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
         flag_sync_service = OneCoreFlagSyncService(self.env)
+        ordering_team_service = OrderingTeamService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -1160,6 +1202,9 @@ class OneCoreMaintenanceRequest(
             # Without this a case opened on a blocked flat shows no warning
             # until the next cron run (MIM-1959).
             flag_sync_service.populate_pest_control(request)
+            # MIM-1970: record who ordered the request while we still know.
+            # Skipped when the caller stamped the field itself.
+            ordering_team_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -1607,3 +1652,13 @@ class OneCoreMaintenanceRequest(
         distinct contact codes.
         """
         return OneCoreFlagSyncService(self.env).sync_special_attention()
+
+    @api.model
+    def _cron_backfill_ordering_team(self, limit=5000):
+        """Scheduled action (hourly): stamp "Beställande resursgrupp" on
+        requests created before MIM-1970, guessed from who created them.
+
+        One-off in practice: the domain is self-consuming, so once the backlog
+        is stamped this is a query that returns nothing. Writes only the
+        ordering_* fields — never Resursgrupp, Resurs or Steg."""
+        return OrderingTeamService(self.env).backfill_batch(limit=limit)
