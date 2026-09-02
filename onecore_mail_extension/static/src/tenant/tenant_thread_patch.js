@@ -55,10 +55,14 @@ patch(ThreadComponent.prototype, {
   // Without this, the leak above yields thread.messages.length === 1, isEmpty
   // false, the content block rendered, the message filtered out by
   // orderedMessages, and an empty area with no empty-state text at all.
+  //
+  // This is AND-ed onto base's own condition by tenant_thread.xml, so it only
+  // ever narrows: returning true outside ärende leaves base untouched, and no
+  // copy of base's expression lives here to go stale.
   get onecoreShowContent() {
     const thread = this.props.thread;
     if (!thread?.onecoreLogCategory) {
-      return !thread.isEmpty || thread.loadOlder || thread.hasLoadingFailed;
+      return true;
     }
     // loadOlder is deliberately dropped here: the server filters by category,
     // so an empty page means there are no older messages of this category and

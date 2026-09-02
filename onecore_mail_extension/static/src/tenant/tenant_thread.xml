@@ -3,16 +3,35 @@
 
 <t t-name="onecore_mail_extension.OneCoreThread" t-inherit="mail.Thread" t-inherit-mode="extension">
 
-    <!-- Decide list-vs-empty on the FILTERED message list. Identical to base
-         when no filter is active (see onecoreShowContent). -->
+    <!-- t-inherit-mode="extension" mutates mail.Thread ITSELF, so both xpaths
+         below apply to every thread render in the app — Discuss, chat windows,
+         mailboxes, livechat — not only to ärende. They therefore COMPOSE with
+         the existing condition (add= + separator=, see
+         odoo/tools/template_inheritance.py) instead of replacing it: a
+         position="replace" of the t-if would freeze a copy of base's
+         expression here, and an upstream tweak to it would silently keep the
+         old behaviour app-wide. -->
+
+    <!-- Decide list-vs-empty on the FILTERED message list. onecoreShowContent
+         is true whenever no filter is active, so this is base's condition
+         verbatim outside ärende. It also implies base's condition when a
+         filter IS active (base false => thread.messages empty => the filtered
+         list is empty => onecoreShowContent false), so the conjunction is the
+         filtered condition and nothing else. -->
     <xpath expr="//t[@name='content']" position="attributes">
-        <attribute name="t-if">onecoreShowContent</attribute>
+        <attribute name="t-if" add="onecoreShowContent" separator="and"/>
     </xpath>
 
     <!-- Base's "The conversation is empty." reads as data loss under a filter,
-         so it is suppressed while one is active and replaced below. -->
+         so it is suppressed while one is active and replaced below.
+         NOTE: base's own mail/static/src/core/web/thread_patch.xml already
+         position="replace"s this node and re-emits it inside a <t t-else="">,
+         so the xpath resolves against the post-patch tree — asset order
+         decides that, and it is not visible from this file. The node carries
+         no t-if of its own today, so add= is used verbatim; composing anyway
+         keeps a future upstream (or third-party) t-if on it intact. -->
     <xpath expr="//t[@name='empty-message']" position="attributes">
-        <attribute name="t-if">!props.thread.onecoreLogCategory</attribute>
+        <attribute name="t-if" add="!props.thread.onecoreLogCategory" separator="and"/>
     </xpath>
 
     <xpath expr="//t[@name='empty-message']" position="after">
