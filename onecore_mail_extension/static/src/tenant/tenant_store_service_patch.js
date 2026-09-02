@@ -16,6 +16,9 @@ patch(Store.prototype, {
                 messageType = "tenant_mail";
             }
             params.post_data.message_type = messageType;
+        } else if (postData.sendMyPages) {
+            // Mina sidor only — visible to the tenant with no notification.
+            params.post_data.message_type = "tenant_my_pages";
         }
         if (postData.informOpposite) {
             params.post_data.informs_opposite_party = true;

@@ -20,6 +20,9 @@
             <t t-if="props.type === 'message' and !tenantState.isHiddenFromMyPages">
                 <p class="mt-3"><strong>Skicka som</strong></p>
                 <div class="d-flex mb-3">
+                    <CheckBox disabled="myPagesLocked" className="'me-3'" id="send_my_pages" value="myPagesChecked" onChange.bind="onMyPagesCheckboxChange">
+                        Mina sidor
+                    </CheckBox>
                     <CheckBox disabled="!tenantState.tenantHasPhoneNumber" className="'me-3'" id="send_sms" value="tenantState.sendSMS" onChange.bind="onSMSCheckboxChange">
                         SMS
                     </CheckBox>
