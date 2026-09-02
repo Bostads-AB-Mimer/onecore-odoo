@@ -20,3 +20,33 @@ class OneCoreThreadController(ThreadController):
             "data": Store().add(messages).get_result(),
             "messages": messages.ids,
         }
+
+    @http.route(
+        "/onecore/mail/thread/messages", methods=["POST"], type="jsonrpc", auth="user"
+    )
+    def onecore_mail_thread_messages(
+        self, thread_model, thread_id, fetch_params=None, onecore_log_category=None
+    ):
+        # The händelselogg filter (MIM-1956) needs the category to reach
+        # _message_fetch, but there is no clean OWL hook that adds a key INSIDE
+        # fetch_params, and Thread.rpcParams cannot be used — it is also spread
+        # into /mail/message/update_content, where an unknown kwarg raises. So
+        # the category travels top-level to this route, which otherwise mirrors
+        # base /mail/thread/messages (mail/controllers/thread.py) exactly: same
+        # access check, same set_message_done, same Store serialization. Keep it
+        # in step with base on Odoo upgrades.
+        thread = self._get_thread_with_access(thread_model, thread_id, mode="read")
+        res = request.env["mail.message"]._message_fetch(
+            domain=None,
+            thread=thread,
+            onecore_log_category=onecore_log_category,
+            **(fetch_params or {}),
+        )
+        messages = res.pop("messages")
+        if not request.env.user._is_public():
+            messages.set_message_done()
+        return {
+            **res,
+            "data": Store().add(messages).get_result(),
+            "messages": messages.ids,
+        }

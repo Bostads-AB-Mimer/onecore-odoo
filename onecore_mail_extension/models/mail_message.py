@@ -393,3 +393,16 @@ class OneCoreMailMessage(models.Model):
             # test_message_without_subtype_is_communication.
             return ~event & ~internal_note
         raise ValueError(f"Okänd loggkategori: {category}")
+
+    @api.model
+    def _message_fetch(self, domain, *, onecore_log_category=None, **kwargs):
+        """Adds the händelselogg category filter to the chatter fetch.
+
+        Applied as a plain search domain with no sudo(), so mail.message ACLs
+        and record rules still decide what an external contractor sees.
+        """
+        if onecore_log_category:
+            domain = Domain(
+                True if domain is None else domain
+            ) & self._onecore_log_category_domain(onecore_log_category)
+        return super()._message_fetch(domain, **kwargs)

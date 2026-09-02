@@ -1,3 +1,4 @@
+from odoo import fields
 from odoo.fields import Domain
 from odoo.tests import TransactionCase, tagged
 
@@ -235,3 +236,73 @@ class TestOneCoreLogCategory(TransactionCase):
             "onecore_log_category",
             self.env["mail.message"]._to_store_defaults(Store.Target()),
         )
+
+    def test_message_fetch_filters_by_category(self):
+        self._message("notification", self.note_subtype)
+        note = self._message("comment", self.note_subtype)
+        sms = self._message("tenant_sms", self.comment_subtype)
+
+        MailMessage = self.env["mail.message"]
+        fetched = MailMessage._message_fetch(
+            domain=None,
+            thread=self.thread,
+            onecore_log_category=LOG_CATEGORY_INTERNAL_NOTE,
+        )["messages"]
+        self.assertEqual(fetched.ids, note.ids)
+
+        fetched = MailMessage._message_fetch(
+            domain=None,
+            thread=self.thread,
+            onecore_log_category=LOG_CATEGORY_COMMUNICATION,
+        )["messages"]
+        self.assertEqual(fetched.ids, sms.ids)
+
+    def test_message_fetch_without_category_is_unchanged(self):
+        """Alla must stay byte-identical to today's behaviour."""
+        MailMessage = self.env["mail.message"]
+        note = self._message("notification", self.note_subtype)
+        comment = self._message("comment", self.note_subtype)
+        with_none = MailMessage._message_fetch(
+            domain=None, thread=self.thread, onecore_log_category=None
+        )["messages"]
+        baseline = MailMessage._message_fetch(domain=None, thread=self.thread)[
+            "messages"
+        ]
+        # Core of the test: passing onecore_log_category=None is identical to
+        # not passing it at all.
+        self.assertEqual(with_none.ids, baseline.ids)
+        # The real risk is over-filtering, so also confirm both messages this
+        # test just created are actually in the unfiltered fetch. (baseline
+        # also carries a third message: res.partner.create() in setUpClass
+        # auto-logs a "Contact created" message via mail.thread._message_log_batch
+        # -- message_type "notification", subtype mail.mt_note, body
+        # "Contact created" -- confirmed by inspecting it directly. It lands
+        # in Händelse, not Intern notering, because _onecore_log_category_for
+        # checks message_type before subtype. Expected, and not asserted on
+        # here.)
+        self.assertIn(note.id, baseline.ids)
+        self.assertIn(comment.id, baseline.ids)
+
+    def test_pagination_applies_after_filtering(self):
+        """The reason this filter is server-side. With 40 events ahead of 5
+        kommunikation, a client-side filter over a 30-message page would show
+        zero. The server must return all 5."""
+        for _index in range(40):
+            self._message("notification", self.note_subtype)
+        for _index in range(5):
+            self._message("tenant_sms", self.comment_subtype)
+
+        fetched = self.env["mail.message"]._message_fetch(
+            domain=None,
+            thread=self.thread,
+            onecore_log_category=LOG_CATEGORY_COMMUNICATION,
+            limit=30,
+        )["messages"]
+        self.assertEqual(len(fetched), 5)
+
+    def test_pinned_fetch_ignores_category(self):
+        """The 'Fästa noteringar' section stays unfiltered by construction."""
+        note = self._message("comment", self.note_subtype)
+        note.pinned_at = fields.Datetime.now()
+        pinned = self.env["mail.message"]._fetch_pinned_messages(self.thread)
+        self.assertEqual(pinned.ids, note.ids)
