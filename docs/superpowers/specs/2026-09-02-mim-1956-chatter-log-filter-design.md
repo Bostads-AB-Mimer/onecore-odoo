@@ -221,9 +221,20 @@ under a filter:
    content block → gate 2 filters the message out → an empty content area with
    no empty-state message at all.
 
-The empty state must therefore be driven by the length of the **filtered**
-list, not by `isEmpty`, and show a filter-aware Swedish line (e.g. "Inga
-meddelanden av den här typen.").
+The empty state must therefore be driven by the **filtered** list rather than
+by base's unfiltered `isEmpty`, and show a filter-aware Swedish line (e.g.
+"Inga meddelanden av den här typen.").
+
+The way that is done is to **narrow `Thread.isEmpty` itself** (a patch on the
+Thread *model*): with a category active it reports empty unless some message in
+`thread.messages` carries that category. Base's own condition on the
+`name="content"` node (`!props.thread.isEmpty or props.thread.loadOlder or
+props.thread.hasLoadingFailed`) is then left completely untouched and does the
+right thing on its own. Patching `isEmpty` is base-sanctioned: base's
+`mail/static/src/discuss/core/public_web/thread_model_patch.js` narrows it the
+same way with `super.isEmpty`. The guard is a plain no-op when no category is
+set, so every thread outside ärende keeps base's behaviour — see risk 3c for
+why touching base's `t-if` was rejected.
 
 ### Left unfiltered, deliberately
 
@@ -237,8 +248,8 @@ meddelanden av den här typen.").
 |------|--------|
 | `onecore_mail_extension/models/mail_message.py` | Category field + compute, shared rule table, `_onecore_log_category_domain`, `_onecore_sanitize_log_category`, `_message_fetch` override, one entry in the existing `_to_store_defaults`, and the `EXPECTED_CATEGORIES` expectations map |
 | `onecore_mail_extension/controllers/thread.py` | New `/onecore/mail/thread/messages` route |
-| `onecore_mail_extension/static/src/tenant/tenant_thread_patch.js` (new) | Thread model patches (`fetchRouteChatter`, `getFetchParams`) and Thread component patches (`orderedMessages`, `onecoreShowContent`, `onecoreEmptyText`), all with no-op guards |
-| `onecore_mail_extension/static/src/tenant/tenant_thread.xml` (new) | `mail.Thread` inherit — composes a filter-aware condition onto the content and empty-state nodes (see risk 3c) |
+| `onecore_mail_extension/static/src/tenant/tenant_thread_patch.js` (new) | Thread model patches (`fetchRouteChatter`, `getFetchParams`, `isEmpty`) and Thread component patches (`orderedMessages`, `onecoreEmptyText`), all with no-op guards |
+| `onecore_mail_extension/static/src/tenant/tenant_thread.xml` (new) | `mail.Thread` inherit — suppresses base's empty-state node under an active filter and adds the Swedish one next to it. Deliberately does **not** touch base's `name="content"` `t-if` (see risk 3c) |
 | `onecore_mail_extension/static/src/tenant/tenant_chatter_patch.js` | Pill state, click handler, shared reset (`_onecoreSetLogCategory`), visibility getter, `onClickSearch` clearing the filter |
 | `onecore_mail_extension/static/src/tenant/tenant_chatter.xml` | Pill row (with `role="group"` / `aria-pressed`), filter-aware empty state |
 | `onecore_mail_extension/static/src/tenant/tenant_message.scss` | Pill styling |
@@ -401,23 +412,50 @@ those ever fail, the fallback is to resolve internal subtypes to ids first
 (`Domain("subtype_id", "in", internal_subtype_ids)`), which negates over a plain
 column instead of a join.
 
-**3c. The `mail.Thread` template inherit is global.**
+**3c. The `mail.Thread` template inherit is global — and expression
+attributes cannot be composed on the client side.**
 `t-inherit-mode="extension"` mutates `mail.Thread` itself, so
 `tenant_thread.xml` reaches every thread render in the app — Discuss, chat
-windows, mailboxes, livechat — not just ärende. The mitigation is that both
-xpaths **compose** rather than replace: `<attribute name="t-if"
-add="..." separator="and"/>` AND-s our condition onto whatever is already
-there (`odoo/tools/template_inheritance.py`, `t-if` being one of
-`PYTHON_ATTRIBUTES`). A `position="replace"` of the `t-if` would instead freeze
-a copy of base's expression in this repo, and an upstream tweak to it would
-silently keep the old behaviour app-wide. Composition also means the getter can
-return `true` outside ärende and leave base untouched by construction, with no
-duplicated expression to go stale. Residual exposure: the xpaths still depend on
-base's `name="content"` / `name="empty-message"` markers, and the
-`empty-message` one resolves against the *post-patch* tree, since base's own
-`mail/static/src/core/web/thread_patch.xml` replaces that node and re-emits it
-inside a `<t t-else="">` — asset-order-dependent and not visible from our file,
-so it is called out in a comment there.
+windows, mailboxes, livechat — not just ärende. That rules out
+`position="replace"` on base's `name="content"` `t-if`: it would freeze a copy
+of base's expression in this repo, and an upstream tweak to it would silently
+keep the old behaviour app-wide.
+
+An earlier attempt tried to *compose* onto that `t-if` instead, with
+`<attribute name="t-if" add="..." separator="and"/>`. **That does not work
+here, and fails silently.** Composition of expression attributes exists only in
+the **server-side** inheriter: `odoo/tools/template_inheritance.py` special-cases
+`PYTHON_ATTRIBUTES` (`t-if`, `t-elif`, `readonly`, `invisible`, …), validates
+the separator and emits `(old) and (new)` with both operands parenthesised.
+Static OWL asset templates such as this one are inherited **in the browser** by
+`addons/web/static/src/core/template_inheritance.js`, whose `modifyAttributes`
+has no such case: it does `splitAndTrim(oldValue, separator)`, appends the added
+value, and `values.join(separator)` — splitting on the literal substring and
+rejoining with **no spaces and no parentheses**. So base's `!props.thread.isEmpty
+or props.thread.loadOlder or props.thread.hasLoadingFailed` plus
+`add="onecoreShowContent" separator="and"` compiled to
+`… or props.thread.hasLoadingFailedandonecoreShowContent`, gluing two
+identifiers into one lookup that is simply `undefined`. No OWL error, clean
+console, condition never evaluated — the render guard was dead code, and a
+filter that yielded nothing produced a completely blank händelselogg.
+
+The approach actually used therefore **never overrides base's condition at
+all**: `Thread.isEmpty` is narrowed in a model patch (see Empty state), so
+`!props.thread.isEmpty or …` keeps working verbatim for every thread. Only the
+`empty-message` node is still touched, and its `t-if` is set to a plain value
+rather than composed — `add=` there would be a latent trap, not protection, for
+exactly the reason above.
+
+Residual exposure: the remaining xpath still depends on base's
+`name="empty-message"` marker, and it resolves against the *post-patch* tree,
+since base's own `mail/static/src/core/web/thread_patch.xml` replaces that node
+and re-emits it inside a `<t t-else="">` — asset-order-dependent and not visible
+from our file, so it is called out in a comment there. And because `isEmpty` is
+now patched globally, its other consumers were checked: base's
+`core/common/thread.xml`, `core/web/thread_patch.xml` (guarded on
+`model === 'mail.box'`) and the `mark-all-read` / `unstar-all` thread actions
+in `core/web/thread_actions.js` (guarded on the inbox/starred mailboxes) — none
+of which can ever see a thread with a log category set.
 
 **4. Acknowledge refetch only refreshes the filtered subset.**
 `_acknowledgeSignals` calls `thread.fetchMessages()` to re-serialise

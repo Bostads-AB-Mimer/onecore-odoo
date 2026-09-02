@@ -36,10 +36,35 @@ patch(Thread.prototype, {
 // Thread.post ends at addOrReplaceMessage, which pushes a newly posted message
 // straight into thread.messages without consulting any domain; bus-delivered
 // messages do the same. So logging an intern notering while Kommunikation is
-// active would make it pop into a list it does not belong in. The predicate
-// below is the second gate. It compares the category serialized onto each
+// active would make it pop into a list it does not belong in. The two patches
+// below are the second gate. They compare the category serialized onto each
 // message by mail.message._to_store_defaults, so the classification rules stay
 // in Python only.
+
+// Base decides between the message list and the empty state on
+// thread.isEmpty (mail/static/src/core/common/thread.xml, the name="content"
+// t-if), and base's isEmpty reads thread.messages — NOT the filtered list.
+// Without this, a leaked message yields thread.messages.length === 1, isEmpty
+// false, the content block rendered, the message dropped again by
+// orderedMessages below, and an empty log area with no empty-state text at
+// all.
+//
+// Narrowing isEmpty here rather than overriding base's t-if is deliberate:
+// base's condition then keeps working untouched for every thread in the app,
+// and no stale copy of it lives in our templates. Patching isEmpty on the
+// Thread model is base-sanctioned — see
+// mail/static/src/discuss/core/public_web/thread_model_patch.js, which
+// narrows it the same way with super.isEmpty.
+patch(Thread.prototype, {
+  get isEmpty() {
+    const category = this.onecoreLogCategory;
+    if (!category) {
+      return super.isEmpty;
+    }
+    return !this.messages.some((m) => m.onecore_log_category === category);
+  },
+});
+
 patch(ThreadComponent.prototype, {
   get orderedMessages() {
     const messages = super.orderedMessages;
@@ -48,26 +73,6 @@ patch(ThreadComponent.prototype, {
       return messages;
     }
     return messages.filter((msg) => msg.onecore_log_category === category);
-  },
-
-  // Base decides between the message list and the empty state on
-  // props.thread.isEmpty, which reads thread.messages — NOT the filtered list.
-  // Without this, the leak above yields thread.messages.length === 1, isEmpty
-  // false, the content block rendered, the message filtered out by
-  // orderedMessages, and an empty area with no empty-state text at all.
-  //
-  // This is AND-ed onto base's own condition by tenant_thread.xml, so it only
-  // ever narrows: returning true outside ärende leaves base untouched, and no
-  // copy of base's expression lives here to go stale.
-  get onecoreShowContent() {
-    const thread = this.props.thread;
-    if (!thread?.onecoreLogCategory) {
-      return true;
-    }
-    // loadOlder is deliberately dropped here: the server filters by category,
-    // so an empty page means there are no older messages of this category and
-    // loadOlder is already false.
-    return this.orderedMessages.length > 0 || thread.hasLoadingFailed;
   },
 
   get onecoreEmptyText() {
