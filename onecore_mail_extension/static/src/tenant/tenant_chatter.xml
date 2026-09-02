@@ -33,10 +33,15 @@
          inert pills would be a lie. -->
     <xpath expr="//div[hasclass('o-mail-Chatter-content')]" position="before">
         <div class="o-mimer-LogFilter d-flex flex-shrink-0 overflow-x-auto"
-             t-if="showLogFilter()">
+             t-if="showLogFilter()"
+             role="group" aria-label="Filtrera händelseloggen">
+            <!-- aria-pressed: the active pill is styled visually only, so
+                 without it a screen reader gets no signal of which filter is
+                 on. Single-select, so exactly one pill is 'true'. -->
             <button t-foreach="onecoreLogFilters" t-as="logFilter" t-key="logFilter.label"
                     class="o-mimer-LogFilter-pill btn btn-sm text-nowrap"
                     t-att-class="isActiveLogFilter(logFilter.id) ? 'active' : ''"
+                    t-att-aria-pressed="isActiveLogFilter(logFilter.id) ? 'true' : 'false'"
                     t-att-disabled="state.onecoreLogFilterBusy"
                     t-on-click="() => this.onClickLogFilter(logFilter.id)">
                 <t t-esc="logFilter.label"/>
