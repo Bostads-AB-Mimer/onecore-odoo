@@ -123,6 +123,7 @@
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
                     <field name="has_unread_new_customer_info" invisible="1" />
+                    <field name="has_unread_customer_message" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -943,6 +944,7 @@
                     <field name="master_key" />
                     <field name="hidden_from_my_pages" />
                     <field name="has_unread_new_customer_info" />
+                    <field name="has_unread_customer_message" />
                     <field name="special_attention" />
                     <field name="has_unread_supplier_dialog" />
                     <field name="has_unread_internal_dialog" />

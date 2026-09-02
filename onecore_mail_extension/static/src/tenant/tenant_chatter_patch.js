@@ -126,6 +126,13 @@ patch(Chatter.prototype, {
         method: "action_acknowledge_new_customer_info",
       });
     }
+    if (data.has_unread_customer_message) {
+      signals.push({
+        name: _t("Meddelande från kund"),
+        buttonLabel: _t("Markera meddelande från kund som läst"),
+        method: "action_acknowledge_customer_message",
+      });
+    }
     return signals;
   },
 

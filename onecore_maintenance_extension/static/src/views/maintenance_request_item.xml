@@ -6,6 +6,11 @@
                 <t t-esc="record.name.raw_value"/>
             </b>
             <div class="d-flex flex-column">
+                <div t-if="record.has_unread_customer_message.raw_value">
+                    <span class="mimer-badge mimer-badge-orange">
+                        Meddelande från kund
+                    </span>
+                </div>
                 <div t-if="record.has_unread_new_customer_info.raw_value">
                     <span class="mimer-badge">
                         Ny kundinfo

@@ -48,6 +48,7 @@
         <field name="schedule_date_after_due_date" />
         <field name="today_date" />
         <field name="has_unread_new_customer_info" />
+        <field name="has_unread_customer_message" />
         <field name="special_attention" />
         <field name="has_unread_supplier_dialog" />
         <field name="has_unread_internal_dialog" />
