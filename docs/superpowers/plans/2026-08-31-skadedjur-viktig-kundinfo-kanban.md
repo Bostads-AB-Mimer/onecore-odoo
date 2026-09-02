@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Two repos, two worktrees.** onecore-odoo: `/Users/simonkropp/Documents/Prototyp/Projects/Mimer/onecore-odoo/.claude/worktrees/mim-1959`, branch `feature/mim-1959-visa-skadedjur-viktig-kundinfo` off `epic/mim-1983-epic-odoo-prioritized-ux-and-communication-improvements`. onecore: `/Users/simonkropp/Documents/Prototyp/Projects/Mimer/onecore/.claude/worktrees/mim-1959`, branch `feature/mim-1959-rental-blocks-rental-ids` off `epic/mim-1983`. Commit in the repo the task names; never mix repos in one commit.
+- **Two repos, one worktree each.** Repo `onecore-odoo`: branch `feature/mim-1959-visa-skadedjur-viktig-kundinfo` off `epic/mim-1983-epic-odoo-prioritized-ux-and-communication-improvements`. Repo `onecore`: branch `feature/mim-1959-rental-blocks-rental-ids` off `epic/mim-1983`. Commit in the repo the task names; never mix repos in one commit.
 - **Tasks 1–2 are onecore. Tasks 3–9 are onecore-odoo.** The onecore endpoint must merge and deploy before the Odoo cron goes live.
 - **All user-facing strings are Swedish.** Field labels, filters, badges.
 - **Odoo field definitions always include `string=`.**
