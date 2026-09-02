@@ -15,8 +15,10 @@ from odoo.tests.common import TransactionCase
 
 from ...utils.test_utils import (
     create_facility,
+    create_facility_option,
     create_maintenance_request,
     create_parking_space,
+    create_parking_space_option,
     create_rental_property,
     create_tenant,
 )
@@ -516,6 +518,41 @@ class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
                 self.env,
                 space_caption="Lägenhet",
                 rental_property_id=rental_property.id,
+            )
+
+        self.assertTrue(request.requires_pest_control)
+
+    def test_create_through_the_parking_option_path_is_flagged(self):
+        """The production create path goes through the option records, not the
+        persisted ones - so this is the path that has to resolve a rental id."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            parking_space_option = create_parking_space_option(
+                self.env, rental_id=BLOCKED_RENTAL_ID
+            )
+            request = create_maintenance_request(
+                self.env,
+                space_caption="Bilplats",
+                parking_space_option_id=parking_space_option.id,
+            )
+
+        self.assertTrue(request.requires_pest_control)
+
+    def test_create_through_the_facility_option_path_is_flagged(self):
+        """See test_create_through_the_parking_option_path_is_flagged."""
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            facility_option = create_facility_option(
+                self.env, rental_id=BLOCKED_RENTAL_ID
+            )
+            request = create_maintenance_request(
+                self.env,
+                space_caption="Lokal",
+                facility_option_id=facility_option.id,
             )
 
         self.assertTrue(request.requires_pest_control)

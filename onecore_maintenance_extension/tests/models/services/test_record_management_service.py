@@ -7,6 +7,8 @@ from ...utils.test_utils import (
     create_property_option,
     create_building_option,
     create_rental_property_option,
+    create_parking_space_option,
+    create_facility_option,
     create_tenant_option,
     create_lease_option,
 )
@@ -58,6 +60,63 @@ class TestRecordManagementService(TransactionCase):
             request.rental_property_id.address, rental_property_option.address
         )
         self.assertEqual(request.rental_property_id.code, rental_property_option.code)
+
+    def test_save_parking_space_option_to_permanent_record(self):
+        """Creating request with parking_space_option_id should create permanent parking space record"""
+        parking_space_option = create_parking_space_option(
+            self.env, rental_id="705-022-04-0201"
+        )
+
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Bilplats",
+            parking_space_option_id=parking_space_option.id,
+        )
+
+        self.assertTrue(request.parking_space_id)
+        self.assertEqual(request.parking_space_id.name, parking_space_option.name)
+        self.assertEqual(request.parking_space_id.code, parking_space_option.code)
+
+    def test_save_parking_space_persists_the_rental_id(self):
+        """The flag syncs resolve the object through rental_property_id, and the
+        option's name is a display name - so rental_id has to be carried over."""
+        parking_space_option = create_parking_space_option(
+            self.env, rental_id="705-022-04-0201"
+        )
+
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Bilplats",
+            parking_space_option_id=parking_space_option.id,
+        )
+
+        self.assertEqual(request.parking_space_id.rental_property_id, "705-022-04-0201")
+
+    def test_save_facility_option_to_permanent_record(self):
+        """Creating request with facility_option_id should create permanent facility record"""
+        facility_option = create_facility_option(self.env, rental_id="705-022-04-0301")
+
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lokal",
+            facility_option_id=facility_option.id,
+        )
+
+        self.assertTrue(request.facility_id)
+        self.assertEqual(request.facility_id.name, facility_option.name)
+        self.assertEqual(request.facility_id.code, facility_option.code)
+
+    def test_save_facility_persists_the_rental_id(self):
+        """See test_save_parking_space_persists_the_rental_id."""
+        facility_option = create_facility_option(self.env, rental_id="705-022-04-0301")
+
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lokal",
+            facility_option_id=facility_option.id,
+        )
+
+        self.assertEqual(request.facility_id.rental_property_id, "705-022-04-0301")
 
     def test_save_tenant_option_to_permanent_record(self):
         """Creating request with tenant_option_id should create permanent tenant record"""
