@@ -22,6 +22,12 @@
                         <field name="owner_user_id" />
                         <field name="stage_id" />
                         <field string="Resursgrupp" name="maintenance_team_id" />
+                        <!-- MIM-1970: who ordered the request, as opposed to
+                             who it sits with. Stored at create, so the facet
+                             answers the same thing in May as it did in March -->
+                        <field string="Beställande resursgrupp" name="ordering_team_id" />
+                        <field string="Beställande distrikt (kod)"
+                            name="ordering_cost_center_code" />
                         <field string="Distrikt" name="cost_center_name" />
                         <field string="Distriktkod" name="cost_center_code" />
                         <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
@@ -104,6 +110,9 @@
                                 context="{'group_by': 'cost_center_name'}" />
                             <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
                                 context="{'group_by': 'kvv_area_code'}" />
+                            <filter string='Beställande resursgrupp' name='ordering_team'
+                                domain="[]"
+                                context="{'group_by': 'ordering_team_id'}" />
                         </group>
                     </search>
                 </xpath>
@@ -920,6 +929,7 @@
                         <field name="address" optional="show" />
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
+                        <field name="ordering_team_id" optional="hide" />
                         <field name="cost_center_display" string="Distrikt" optional="show" />
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />

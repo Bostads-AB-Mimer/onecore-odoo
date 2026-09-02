@@ -5,3 +5,4 @@ from . import test_component_ai_analysis_service
 from . import test_component_hierarchy_service
 from . import test_component_onecore_service
 from . import test_management_area_service
+from . import test_ordering_team_service

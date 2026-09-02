@@ -47,5 +47,26 @@
             <field name="interval_type">hours</field>
             <field name="active" eval="True"/>
         </record>
+
+        <!--
+        MIM-1970: backfill of "Beställande resursgrupp" on requests created
+        before the field existed. The orderer is guessed from who created the
+        request and which team they belong to today - ordering_backfilled_at
+        marks every guessed row so it stays distinguishable from the ones
+        stamped at create. Pure DB work, no HTTP, so the batch is large.
+        Self-consuming: once the backlog is stamped this is one query that
+        returns nothing. Writes ONLY the ordering_* fields - never
+        Resursgrupp/Resurs/Steg.
+        -->
+        <record id="ir_cron_backfill_ordering_team" model="ir.cron">
+            <field name="name">Ärenden: härled beställande resursgrupp</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_backfill_ordering_team()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
     </data>
 </odoo>

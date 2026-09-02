@@ -7,6 +7,9 @@ from datetime import datetime
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
+from . import ordering_team_service
+from .ordering_team_service import OrderingTeamService
+
 _logger = logging.getLogger(__name__)
 
 
@@ -16,7 +19,8 @@ class MaintenanceStageManager:
     PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad", "Återsänd")
 
     ATERSAND_STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
-    KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
+    # Defined by OrderingTeamService, which owns the orderer -> team lookup.
+    KUNDCENTER_TEAM_XML_ID = ordering_team_service.KUNDCENTER_TEAM_XML_ID
 
     def __init__(self, env):
         self.env = env
@@ -144,11 +148,9 @@ class MaintenanceStageManager:
         recordset if neither resolves; the caller then leaves the team
         unchanged."""
         orderer = record.owner_user_id or record.create_uid
-        team = (
-            self.env["maintenance.team"]
-            .sudo()
-            .search([("member_ids", "in", [orderer.id])], limit=1)
-        )
+        # MIM-1970: one definition of "the orderer's team", shared with the
+        # ordering_team_id stamp on create.
+        team = OrderingTeamService(self.env).resolve_orderer_team(orderer)
         if not team:
             # MIM-1916: resolve by xml-id, never by (translatable) name
             team = self.env.ref(self.KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
@@ -183,6 +185,12 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
+        # Beställande resursgrupp (OrderingTeamService) — stamped by create and
+        # the backfill cron. The backfill writes without the creating_records
+        # context, so without this every backfilled request gets a chatter note
+        "ordering_team_id",
+        "ordering_cost_center_code",
+        "ordering_backfilled_at",
     }
 
     def __init__(self, env):

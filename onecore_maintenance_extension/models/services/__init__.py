@@ -6,3 +6,4 @@ from .component_hierarchy_service import ComponentHierarchyService
 from .component_onecore_service import ComponentOneCoreService
 from .component_ai_analysis_service import ComponentAIAnalysisService
 from .management_area_service import ManagementAreaService
+from .ordering_team_service import OrderingTeamService
