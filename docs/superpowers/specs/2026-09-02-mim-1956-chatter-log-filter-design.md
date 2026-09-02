@@ -399,7 +399,18 @@ is genuinely visible to the tenant on Mina sidor. Any future code that infers
 "is this internal?" from the subtype alone will be wrong. This predates
 MIM-1956 but our rule table is the first place that dependency is written down.
 
-**10. Three-way merge contention on `mail_message.py`.** PR #280 (MIM-1957) is
+**10. Test and seed fixtures must never `create()` a `tenant_*` message.**
+`OneCoreMailMessage.create()` intercepts any `message_type` starting with
+`tenant_` and dispatches a real SMS/e-mail through the OneCore API, then
+rewrites the type to a `failed_*` variant when the call fails. A fixture that
+creates `tenant_sms` directly therefore makes a live HTTP attempt *and* ends up
+with a different `message_type` than it asked for — and seeding a local ärende
+this way would message a real tenant's phone number. Fixtures create as
+`notification` and then `write()` the intended type; `write` is not overridden.
+`create()` also reads `values["message_type"]` unguarded, so it must always be
+supplied.
+
+**11. Three-way merge contention on `mail_message.py`.** PR #280 (MIM-1957) is
 in review against the same file, and MIM-1960 has just landed in it. Our
 additions go in as separate blocks rather than interleaved to keep the conflict
 resolvable.
