@@ -1,11 +1,21 @@
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError
+from odoo.fields import Domain
 
 import logging
 import requests
 from ...onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
+
+# ============================================================================
+# HÄNDELSELOGG CATEGORIES (MIM-1956)
+# ============================================================================
+# Categories for the chatter log filter. Derived, never stored, so the rules
+# apply retroactively to every existing message and cannot go stale.
+LOG_CATEGORY_EVENT = "event"
+LOG_CATEGORY_INTERNAL_NOTE = "internal_note"
+LOG_CATEGORY_COMMUNICATION = "communication"
 
 
 class OneCoreMailMessage(models.Model):
@@ -98,6 +108,7 @@ class OneCoreMailMessage(models.Model):
             "is_dialog_unread_for_side",
             "pinned_by_name",
             "can_pin",
+            "onecore_log_category",
         ]
 
     @api.model
@@ -137,6 +148,12 @@ class OneCoreMailMessage(models.Model):
             "pinned_by_name": self.pinned_by_name,
         }
 
+    # MIM-1956 — adding a type here has a side effect on the händelselogg
+    # filter: anything that is neither "comment" nor "notification" is
+    # classified as Kommunikation (see _onecore_log_category_for), i.e. it
+    # shows up in the filter handläggare read as the tenant conversation.
+    # Decide whether that is right, then add the type to EXPECTED_CATEGORIES in
+    # tests/test_log_category.py — the suite fails until you do.
     message_type = fields.Selection(
         selection_add=[
             ("from_tenant", "From tenant"),
@@ -316,3 +333,63 @@ class OneCoreMailMessage(models.Model):
         messages = super(OneCoreMailMessage, self).create(values_list)
 
         return messages
+
+    # ========================================================================
+    # HÄNDELSELOGG CATEGORY (MIM-1956)
+    # ========================================================================
+
+    onecore_log_category = fields.Selection(
+        [
+            (LOG_CATEGORY_EVENT, "Händelse"),
+            (LOG_CATEGORY_INTERNAL_NOTE, "Intern notering"),
+            (LOG_CATEGORY_COMMUNICATION, "Kommunikation"),
+        ],
+        string="Loggkategori",
+        compute="_compute_onecore_log_category",
+        store=False,
+    )
+
+    @api.model
+    def _onecore_log_category_for(self, message_type, subtype_internal):
+        """The single rule table behind the händelselogg filter.
+
+        First match wins. Both consumers — the computed field and
+        _onecore_log_category_domain — read these rules, so the server filter
+        and the value the OWL store sees cannot drift apart.
+
+        NOTE: Kommunikation is the catch-all. Any NEW message_type that is
+        neither "comment" nor "notification" therefore lands in the filter
+        handläggare read as the tenant conversation. tests/test_log_category.py
+        fails the build until such a type is classified deliberately.
+        """
+        if message_type == "notification":
+            return LOG_CATEGORY_EVENT
+        if message_type == "comment" and subtype_internal:
+            return LOG_CATEGORY_INTERNAL_NOTE
+        return LOG_CATEGORY_COMMUNICATION
+
+    @api.depends("message_type", "subtype_id.internal")
+    def _compute_onecore_log_category(self):
+        for message in self:
+            message.onecore_log_category = self._onecore_log_category_for(
+                message.message_type, message.subtype_id.internal
+            )
+
+    @api.model
+    def _onecore_log_category_domain(self, category):
+        """The search-domain twin of _onecore_log_category_for."""
+        event = Domain("message_type", "=", "notification")
+        internal_note = Domain("message_type", "=", "comment") & Domain(
+            "subtype_id.internal", "=", True
+        )
+        if category == LOG_CATEGORY_EVENT:
+            return event
+        if category == LOG_CATEGORY_INTERNAL_NOTE:
+            return internal_note
+        if category == LOG_CATEGORY_COMMUNICATION:
+            # Complement of the other two, so the three categories partition
+            # the log exactly. DomainNot renders "(...) IS NOT TRUE", which
+            # keeps messages with no subtype at all in this bucket — pinned by
+            # test_message_without_subtype_is_communication.
+            return ~event & ~internal_note
+        raise ValueError(f"Okänd loggkategori: {category}")

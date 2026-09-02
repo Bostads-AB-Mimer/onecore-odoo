@@ -54,3 +54,16 @@ Here's a complete [example](https://github.com/Bostads-AB-Mimer/onecore-odoo/tre
 ### Rollback migrations
 
 I have yet to find a way to rollback migrations so for now I guess we need to create another commit that reverts the changes to the model and create another migration that reverts the changes to the data.
+
+## Message categories in händelseloggen
+
+The chatter filter (Alla / Händelser / Interna noteringar / Kommunikation)
+derives its categories from `message_type` and the message subtype — nothing is
+stored. **Kommunikation is the catch-all**, so a new `message_type` that is
+neither `comment` nor `notification` will show up there by default, in the
+filter handläggare read as the tenant conversation.
+
+Before adding a `message_type`, read the comment on the `message_type` field in
+`onecore_mail_extension/models/mail_message.py` and classify the new type in
+`EXPECTED_CATEGORIES` (`onecore_mail_extension/tests/test_log_category.py`).
+The test suite fails until you do.
