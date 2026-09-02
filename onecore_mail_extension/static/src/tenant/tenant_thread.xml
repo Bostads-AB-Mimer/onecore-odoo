@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="onecore_mail_extension.OneCoreThread" t-inherit="mail.Thread" t-inherit-mode="extension">
+
+    <!-- Decide list-vs-empty on the FILTERED message list. Identical to base
+         when no filter is active (see onecoreShowContent). -->
+    <xpath expr="//t[@name='content']" position="attributes">
+        <attribute name="t-if">onecoreShowContent</attribute>
+    </xpath>
+
+    <!-- Base's "The conversation is empty." reads as data loss under a filter,
+         so it is suppressed while one is active and replaced below. -->
+    <xpath expr="//t[@name='empty-message']" position="attributes">
+        <attribute name="t-if">!props.thread.onecoreLogCategory</attribute>
+    </xpath>
+
+    <xpath expr="//t[@name='empty-message']" position="after">
+        <t t-if="props.thread.onecoreLogCategory">
+            <div class="d-flex flex-column align-items-center">
+                <span class="fs-1" style="filter: grayscale(1);">😶</span>
+                <span t-esc="onecoreEmptyText"/>
+            </div>
+        </t>
+    </xpath>
+
+</t>
+
+</templates>
