@@ -8,3 +8,4 @@ from .component_ai_analysis_service import ComponentAIAnalysisService
 from .management_area_service import ManagementAreaService
 from .direct_lookup_service import DirectLookupService
 from .onecore_flag_sync_service import OneCoreFlagSyncService
+from .ordering_team_service import OrderingTeamService
