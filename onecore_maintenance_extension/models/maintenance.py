@@ -2,7 +2,6 @@ import urllib.parse
 import uuid
 import logging
 import json
-import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
@@ -18,6 +17,7 @@ from .services import (
     ExternalContractorService,
     MaintenanceStageManager,
     ManagementAreaService,
+    OneCoreFlagSyncService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -40,11 +40,6 @@ from .mixins import (
 )
 
 _logger = logging.getLogger(__name__)
-
-# Per-worker cache so the pest control badge doesn't trigger a OneCore call on
-# every form read (web_save re-reads included). Worst-case staleness = TTL.
-PEST_CONTROL_CACHE_TTL = 300  # seconds
-_pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
 
 
 class OneCoreMaintenanceRequest(
@@ -201,11 +196,14 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_new_customer_info",
         store=False,
     )
-    # Form-view only. Adding this to tree/kanban would fire one API call per row.
+    # Stored snapshot written only by OneCoreFlagSyncService (create path +
+    # cron). Computing it per record would fire one OneCore call per kanban
+    # card, which is why it used to be form-only (MIM-1959).
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
-        compute="_compute_requires_pest_control",
-        store=False,
+        store=True,
+        readonly=True,
+        default=False,
     )
     floor_plan_image_url = fields.Char(
         store=False, readonly=True, compute="_compute_floor_plan"
@@ -409,46 +407,6 @@ class OneCoreMaintenanceRequest(
         record_service = RecordManagementService(self.env)
         for record in self:
             record_service.handle_empty_tenant_logic(record)
-
-    @api.depends("rental_property_id", "rental_property_option_id")
-    def _compute_requires_pest_control(self):
-        api = None
-        for record in self:
-            rental_id = None
-            if record.rental_property_id:
-                rental_id = record.rental_property_id.rental_property_id
-            elif record.rental_property_option_id:
-                rental_id = record.rental_property_option_id.name
-
-            if not rental_id:
-                record.requires_pest_control = False
-                continue
-
-            cached = _pest_control_cache.get(rental_id)
-            if cached and time.monotonic() < cached[0]:
-                record.requires_pest_control = cached[1]
-                continue
-
-            try:
-                if api is None:
-                    api = record.get_core_api()
-                data = api.fetch_residence(rental_id, timeout=5)
-                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                value = any(
-                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
-                )
-                _pest_control_cache[rental_id] = (
-                    time.monotonic() + PEST_CONTROL_CACHE_TTL,
-                    value,
-                )
-                record.requires_pest_control = value
-            except Exception as err:
-                _logger.warning(
-                    "Could not fetch pest control status for rental_id %s: %s",
-                    rental_id,
-                    err,
-                )
-                record.requires_pest_control = False
 
     @api.depends(
         "message_ids.date",
@@ -1149,6 +1107,7 @@ class OneCoreMaintenanceRequest(
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
+        flag_sync_service = OneCoreFlagSyncService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -1167,6 +1126,10 @@ class OneCoreMaintenanceRequest(
             # effort (never blocks creation); skipped when the caller already
             # stamped the fields (core does for mimer.nu requests).
             management_area_service.populate(request)
+            # Spärr skadedjur, from the same TTL-cached set the cron refreshes.
+            # Without this a case opened on a blocked flat shows no warning
+            # until the next cron run (MIM-1959).
+            flag_sync_service.populate_pest_control(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -1593,3 +1556,24 @@ class OneCoreMaintenanceRequest(
         The batch is large because the cost is the cost-center trees, fetched
         once per run, not per request."""
         return ManagementAreaService(self.env).backfill_batch(limit=limit)
+
+    @api.model
+    def _cron_sync_pest_control(self):
+        """Refresh "Spärr skadedjur" on every open request.
+
+        Two fixed OneCore calls per run regardless of case volume - flat API
+        cost, so the interval can be short, though the run itself is still one
+        wide SELECT over all open requests: a spärr added after the case was
+        created has to reach the case (MIM-1959).
+        """
+        return OneCoreFlagSyncService(self.env).sync_pest_control()
+
+    @api.model
+    def _cron_sync_special_attention(self):
+        """Refresh "Viktig kundinfo" on the tenants of every open request.
+
+        Hourly rather than quarter-hourly: specialAttention is a hand-set flag
+        in Xpand that changes very rarely, and this run costs one call per 200
+        distinct contact codes.
+        """
+        return OneCoreFlagSyncService(self.env).sync_special_attention()
