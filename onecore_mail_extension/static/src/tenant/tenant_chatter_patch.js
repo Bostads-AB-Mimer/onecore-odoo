@@ -56,15 +56,27 @@ patch(Chatter.prototype, {
     super.changeThread(threadModel, threadId);
     const thread = this.state.thread;
     if (thread?.onecoreLogCategory) {
-      thread.onecoreLogCategory = undefined;
-      // Drop the filtered window together with the filter — same reset as
-      // onClickLogFilter. Without it the reopened log renders the previous
-      // category's page under an active "Alla" pill.
-      thread.messages = [];
-      thread.isLoaded = false;
-      thread.loadOlder = false;
-      thread.loadNewer = false;
+      // Drop the filtered window together with the filter. Without it the
+      // reopened log renders the previous category's page under an active
+      // "Alla" pill. No refetch here — base load() runs right after
+      // changeThread and does it.
+      this._onecoreSetLogCategory(thread, undefined);
     }
+  },
+
+  // The one place that switches händelselogg category (MIM-1956). Setting the
+  // category alone is not enough: the loaded window belongs to the OLD
+  // category, so fetchNewMessages would ask for messages after an id from it.
+  // Three callers — onClickLogFilter, changeThread and onClickSearch — so this
+  // lives in one method rather than three copies of the same five lines.
+  // Deliberately does NOT fetch: changeThread must not, since base load()
+  // follows immediately.
+  _onecoreSetLogCategory(thread, categoryId) {
+    thread.onecoreLogCategory = categoryId;
+    thread.messages = [];
+    thread.isLoaded = false;
+    thread.loadOlder = false;
+    thread.loadNewer = false;
   },
 
   async load(thread, requestList) {
@@ -129,17 +141,27 @@ patch(Chatter.prototype, {
     // rather than racing it.
     this.state.onecoreLogFilterBusy = true;
     try {
-      thread.onecoreLogCategory = categoryId;
-      // Drop the loaded window and re-page from the newest message of the new
-      // category. Without the reset, fetchNewMessages would ask for messages
-      // after the newest id it already holds — an id from the previous category.
-      thread.messages = [];
-      thread.isLoaded = false;
-      thread.loadOlder = false;
-      thread.loadNewer = false;
+      this._onecoreSetLogCategory(thread, categoryId);
       await thread.fetchNewMessages();
     } finally {
       this.state.onecoreLogFilterBusy = false;
+    }
+  },
+
+  // Opening search clears the filter (MIM-1956). Search is NOT composed with
+  // the pills: store.searchMessagesInThread builds its RPC from
+  // thread.getFetchRoute() + thread.getFetchParams() (core/common/
+  // store_service.js), both of which our Thread patches hook, so an active
+  // category would silently scope the search to it — while showLogFilter()
+  // hides the pills, leaving the user no way to see why their term is not
+  // found. Composing the two is a deliberate follow-up, not this ticket.
+  // Consequence: closing search returns the pills to "Alla".
+  async onClickSearch() {
+    super.onClickSearch();
+    const thread = this.state.thread;
+    if (this.state.isSearchOpen && thread?.onecoreLogCategory) {
+      this._onecoreSetLogCategory(thread, undefined);
+      await thread.fetchNewMessages();
     }
   },
 
