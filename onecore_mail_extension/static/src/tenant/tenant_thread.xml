@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="onecore_mail_extension.OneCoreThread" t-inherit="mail.Thread" t-inherit-mode="extension">
+
+    <!-- t-inherit-mode="extension" mutates mail.Thread ITSELF, so the xpaths
+         below apply to every thread render in the app — Discuss, chat windows,
+         mailboxes, livechat — not only to ärende. They are therefore kept to a
+         minimum, and the list-vs-empty decision is NOT made here: base's own
+         t-if on name="content" (!props.thread.isEmpty or …) is left completely
+         untouched, and Thread.isEmpty is narrowed in tenant_thread_patch.js
+         instead. MIM-1956.
+
+         Do NOT try to compose a t-if here with <attribute add=… separator=…>.
+         That composition only exists in the SERVER-side inheriter, which
+         special-cases expression attributes and parenthesises both operands
+         (PYTHON_ATTRIBUTES in odoo/tools/template_inheritance.py). OWL asset
+         templates like this one are inherited IN THE BROWSER by
+         web/static/src/core/template_inheritance.js, whose modifyAttributes
+         does a plain values.join(separator) — no spaces, no parentheses — so
+         "a or b" + add="c" separator="and" compiles to "a or bandc", gluing
+         two identifiers into one undefined lookup. It fails silently: no OWL
+         error, just a condition that is never evaluated. -->
+
+    <!-- Base's "The conversation is empty." reads as data loss under a filter,
+         so it is suppressed while one is active and replaced below.
+         NOTE: base's own mail/static/src/core/web/thread_patch.xml already
+         position="replace"s this node and re-emits it inside a <t t-else="">,
+         so the xpath resolves against the post-patch tree — asset order
+         decides that, and it is not visible from this file. The node carries
+         no t-if of its own, so this sets the attribute outright (see the
+         warning above: add= is not a safe way to compose an expression
+         attribute on the client side, so it would not protect us against an
+         upstream t-if appearing here either — it would mangle it). -->
+    <xpath expr="//t[@name='empty-message']" position="attributes">
+        <attribute name="t-if">!props.thread.onecoreLogCategory</attribute>
+    </xpath>
+
+    <xpath expr="//t[@name='empty-message']" position="after">
+        <t t-if="props.thread.onecoreLogCategory">
+            <div class="d-flex flex-column align-items-center">
+                <span class="fs-1" style="filter: grayscale(1);">😶</span>
+                <span t-esc="onecoreEmptyText"/>
+            </div>
+        </t>
+    </xpath>
+
+</t>
+
+</templates>
