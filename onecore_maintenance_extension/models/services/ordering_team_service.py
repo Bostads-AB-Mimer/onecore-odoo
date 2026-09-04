@@ -66,8 +66,16 @@ class OrderingTeamService:
             # deriving from it would let a single membership change silently
             # claim that some team ordered thousands of tenant reports.
             return self.kundcenter_team()
+        # No Kundcenter fallback here, deliberately. Kundcenter distributes
+        # every request in the organisation, so their bucket is the largest one
+        # by construction — quietly filing "we could not tell" in it would mix
+        # 990 requests from 29 group-less creators (prod, 2026-09-03) in with
+        # the ones they genuinely registered, and nobody could separate them
+        # afterwards. An empty ordering team is the truthful answer: this
+        # request has no known ordering unit. The AD/officeLocation work is
+        # what will fill these in properly.
         orderer = request.owner_user_id or request.create_uid
-        return self.resolve_orderer_team(orderer) or self.kundcenter_team()
+        return self.resolve_orderer_team(orderer)
 
     # ------------------------------------------------------------------
     # create()
@@ -123,47 +131,54 @@ class OrderingTeamService:
         ``ordering_backfilled_at`` marks it as exactly that, so guessed rows
         stay distinguishable from the ones stamped at create.
 
-        Pure DB work, no HTTP, hence the large batch. The domain is
-        self-consuming: a stamped request drops out of the next run, so once
-        the backlog is done this is one query that returns nothing.
+        Pure DB work, no HTTP, hence the large batch. Requests whose orderer
+        cannot be resolved (creator in no resource group) are stamped with the
+        timestamp alone and keep an empty team — the truthful answer, and what
+        keeps the domain self-consuming: without that stamp those ~990 rows
+        would come back every single hour forever. Same pattern as
+        ManagementAreaService.backfill_batch stamping unresolvable requests.
         """
         Request = self.env["maintenance.request"].sudo()
         records = Request.search(
-            [("ordering_team_id", "=", False)], order="id desc", limit=limit
+            [
+                ("ordering_team_id", "=", False),
+                ("ordering_backfilled_at", "=", False),
+            ],
+            order="id desc",
+            limit=limit,
         )
         if not records:
             return 0
 
         kundcenter = self.kundcenter_team()
-        if not kundcenter:
-            # Without the fallback nothing resolves and the very same rows
-            # would come back every hour.
-            _logger.warning(
-                "Ordering-team backfill skipped: Kundcenter team (%s) not found",
-                KUNDCENTER_TEAM_XML_ID,
-            )
-            return 0
-
         user_to_team = self._member_team_map()
         now = fields.Datetime.now()
-        groups = {}  # team id -> request ids
+        groups = {}  # team id (or False when unresolved) -> request ids
         for record in records:
             if record.creation_origin == MIMER_NU_ORIGIN:
+                # Kundcenter distributes every request in the organisation, so
+                # they are the right owner of the tenant inflow.
                 team = kundcenter
             else:
                 orderer = record.owner_user_id or record.create_uid
-                team = (
-                    user_to_team.get(orderer.id) if orderer else None
-                ) or kundcenter
-            groups.setdefault(team.id, []).append(record.id)
+                team = user_to_team.get(orderer.id) if orderer else None
+            groups.setdefault(team.id if team else False, []).append(record.id)
 
         Team = self.env["maintenance.team"].sudo()
+        resolved = 0
         for team_id, ids in groups.items():
-            Request.browse(ids).write(
-                self._stamp_vals(Team.browse(team_id), backfilled_at=now)
-            )
+            if team_id:
+                vals = self._stamp_vals(Team.browse(team_id), backfilled_at=now)
+                resolved += len(ids)
+            else:
+                vals = {"ordering_backfilled_at": now}
+            Request.browse(ids).write(vals)
 
-        _logger.info("Ordering-team backfill: %s requests stamped", len(records))
+        _logger.info(
+            "Ordering-team backfill: %s requests processed, %s resolved",
+            len(records),
+            resolved,
+        )
         return len(records)
 
     def _member_team_map(self):
