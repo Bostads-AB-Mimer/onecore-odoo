@@ -57,6 +57,19 @@
         Self-consuming: once the backlog is stamped this is one query that
         returns nothing. Writes ONLY the ordering_* fields - never
         Resursgrupp/Resurs/Steg.
+
+        SHIPPED INACTIVE ON PURPOSE. The five district teams (Vast, Ost, Norr,
+        Mitt, Studentteam) are archived in production until the kvartersvardar
+        start working in Odoo, and Odoo's search() excludes archived records -
+        so the derivation cannot see them. Their 50 members would be stamped
+        with their functional group (Fastighetsservice, Driftenheten, ...)
+        instead of their district, permanently: the domain is self-consuming,
+        so the cron never revisits a stamped request. MIM-1975/1976 would then
+        be built on top of an empty answer.
+
+        Turn it on in Installningar -> Teknisk -> Schemalagda atgarder AFTER
+        the district teams are unarchived. Until then the field is still set
+        correctly on every newly created request - only the backfill waits.
         -->
         <record id="ir_cron_backfill_ordering_team" model="ir.cron">
             <field name="name">Ärenden: härled beställande resursgrupp</field>
@@ -66,7 +79,7 @@
             <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">hours</field>
-            <field name="active" eval="True"/>
+            <field name="active" eval="False"/>
         </record>
     </data>
 </odoo>

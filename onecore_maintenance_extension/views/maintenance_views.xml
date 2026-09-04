@@ -95,6 +95,25 @@
                             domain="[('archive', '=', False)]" />
                         <filter string="Inaktiva ärenden" name="inactive"
                             domain="[('archive', '=', True)]" />
+                        <separator />
+                        <!-- MIM-1970: beställare per distrikt, matchat på
+                             kostnadsställe. Skriver man i stället teamnamnet i
+                             sökrutan blir domänen en ilike på det (översättbara,
+                             omdöpningsbara) namnet, och en sparad favorit tystnar
+                             den dag någon byter namn på gruppen — namnen HAR bytts
+                             i prod. Klickvägen här är den stabila, och den som
+                             1975/1976/1977 ska bygga sina favoriter på.
+                             Koderna speglar data/maintenance.team.csv. -->
+                        <filter string="Beställt av Distrikt Mitt" name="ordered_by_mitt"
+                            domain="[('ordering_cost_center_code', '=', '61110')]" />
+                        <filter string="Beställt av Distrikt Norr" name="ordered_by_norr"
+                            domain="[('ordering_cost_center_code', '=', '61120')]" />
+                        <filter string="Beställt av Distrikt Öst" name="ordered_by_ost"
+                            domain="[('ordering_cost_center_code', '=', '61130')]" />
+                        <filter string="Beställt av Distrikt Väst" name="ordered_by_vast"
+                            domain="[('ordering_cost_center_code', '=', '61140')]" />
+                        <filter string="Beställt av Studentteam" name="ordered_by_student"
+                            domain="[('ordering_cost_center_code', '=', '61150')]" />
                         <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
@@ -729,6 +748,15 @@
                                             name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
+                                        <!-- MIM-1970: vem som beställde, till skillnad
+                                             från raden ovan som är var ärendet ligger nu.
+                                             Stämplas vid create och ändras aldrig, så den
+                                             står readonly. Dold när den saknas: gamla
+                                             ärenden får sitt värde först av backfillen. -->
+                                        <field
+                                            name="ordering_team_id"
+                                            options="{'no_create': True, 'no_open': True}"
+                                            invisible="not ordering_team_id" />
                                         <field name="user_id"
                                             domain="maintenance_team_domain" />
                                         <label for="schedule_date" />
@@ -930,6 +958,10 @@
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
                         <field name="ordering_team_id" optional="hide" />
+                        <!-- Ifylld = beställaren är härledd i efterhand av backfillen,
+                             tom = registrerad vid create. Utan den här kolumnen går det
+                             inte att se i UI:t om värdet är en gissning. -->
+                        <field name="ordering_backfilled_at" optional="hide" />
                         <field name="cost_center_display" string="Distrikt" optional="show" />
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />

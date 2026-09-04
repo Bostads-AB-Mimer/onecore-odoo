@@ -277,11 +277,14 @@ class OneCoreMaintenanceRequest(
         "ärendet skapades så distriktsfiltret slipper joina mot resursgruppen.",
     )
     ordering_backfilled_at = fields.Datetime(
-        "Beställare gissad (backfill)",
+        "Beställare härledd i efterhand",
         readonly=True,
-        help="Satt av backfill-jobbet: beställaren är härledd i efterhand ur "
-        "vem som skapade ärendet, inte registrerad när ärendet skapades. "
-        "Tomt = beställaren stämplades vid create och är alltså inte en gissning.",
+        help="Satt av backfill-jobbet. Är det ifyllt tillsammans med en "
+        "beställare är beställaren en gissning, härledd ur vem som skapade "
+        "ärendet och vilken grupp den personen tillhör idag — inte registrerad "
+        "när ärendet skapades. Är det ifyllt utan beställare har jobbet tittat "
+        "på ärendet men inte kunnat härleda någon; skaparen saknar resursgrupp. "
+        "Tomt = ärendet stämplades vid create och är alltså ingen gissning.",
     )
 
     # ============================================================================
