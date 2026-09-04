@@ -40,6 +40,19 @@ class TestOrderingTeamService(TransactionCase):
         # No team at all — falls through to Kundcenter
         self.teamless_user = create_internal_user(self.env)
 
+        # Kundcenter's two queues (MIM-1970: same person in both is exactly
+        # the case the category override exists for).
+        self.inkomna = self.kundcenter
+        self.nyckel = create_maintenance_team(self.env, name="Nyckelbeställningar")
+        self.kundcenter_user = create_internal_user(self.env)
+        self.inkomna.write({"member_ids": [(4, self.kundcenter_user.id)]})
+        self.nyckel.write({"member_ids": [(4, self.kundcenter_user.id)]})
+
+        self.key_category = self.env["maintenance.request.category"].create(
+            {"name": "Beställning av extra nyckel", "preferred_ordering_team_id": self.nyckel.id}
+        )
+        self.plain_category = self.env.ref("onecore_maintenance_extension.category_1")
+
     def _clear_ordering(self, *requests):
         """Make a request look like it predates MIM-1970."""
         for request in requests:
@@ -86,8 +99,26 @@ class TestOrderingTeamService(TransactionCase):
 
         self.assertFalse(request.ordering_team_id)
         self.assertFalse(request.ordering_cost_center_code)
-        # Not a backfill guess either — create simply had nothing to record
-        self.assertFalse(request.ordering_backfilled_at)
+        # The timestamp IS stamped even though nothing was resolved — see
+        # test_create_time_unresolved_orderer_is_not_rederived_later for why.
+        self.assertTrue(request.ordering_backfilled_at)
+
+    def test_create_time_unresolved_orderer_is_not_rederived_later(self):
+        """What the timestamp above exists to prevent: without it, a request
+        genuinely resolved to "no team" at create time would be
+        indistinguishable from a true pre-MIM-1970 legacy row. The backfill
+        would then "fix" it later using the creator's current membership —
+        rewriting a history that was already correctly empty."""
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+        self.assertFalse(request.ordering_team_id)
+
+        # The creator joins a team after the request already exists.
+        self.district_team.write({"member_ids": [(4, self.teamless_user.id)]})
+
+        processed = self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(processed, 0)
+        self.assertFalse(request.ordering_team_id)
 
     def test_create_still_routes_mimer_nu_to_kundcenter(self):
         """The one deliberate Kundcenter claim survives the fallback removal:
@@ -142,6 +173,52 @@ class TestOrderingTeamService(TransactionCase):
 
         self.assertEqual(request.ordering_team_id, self.other_team)
         self.assertEqual(request.ordering_cost_center_code, "61130")
+
+    def test_create_member_of_two_teams_gets_the_lower_id_by_default(self):
+        """Baseline the category override is meant to change: without a
+        matching category, someone in both Kundcenter queues always lands on
+        the older one (lowest id), same as any other multi-membership."""
+        request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.plain_category.id,
+        )
+
+        self.assertEqual(request.ordering_team_id, self.inkomna)
+
+    def test_create_category_override_wins_for_a_member_of_the_preferred_team(self):
+        """MIM-1970's Kundcenter fix: the category names which of the
+        orderer's own teams should win, instead of the lowest-id default."""
+        request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+
+        self.assertEqual(request.ordering_team_id, self.nyckel)
+
+    def test_create_category_override_uses_owner_over_creator(self):
+        """The override must respect the same owner-over-creator precedence
+        as the plain path (test_create_prefers_owner_over_creator) — it reads
+        the same ``orderer``, not create_uid directly."""
+        request = create_maintenance_request(
+            self.env(user=self.district_user),
+            owner_user_id=self.kundcenter_user.id,
+            maintenance_request_category_id=self.key_category.id,
+        )
+
+        self.assertEqual(request.create_uid, self.district_user)
+        self.assertEqual(request.ordering_team_id, self.nyckel)
+
+    def test_create_category_override_ignored_for_a_non_member(self):
+        """Josefin Sjöberg: kvartersvärdar use the same key-order category.
+        The override must never fire off the category alone, or a
+        kvartersvärd's cylinderbyte would get credited to Kundcenter."""
+        request = create_maintenance_request(
+            self.env(user=self.district_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+
+        self.assertEqual(request.ordering_team_id, self.district_team)
+        self.assertNotEqual(request.ordering_team_id, self.nyckel)
 
     # ------------------------------------------------------------------
     # Backfill
@@ -215,6 +292,37 @@ class TestOrderingTeamService(TransactionCase):
 
         second = self.env["maintenance.request"]._cron_backfill_ordering_team()
         self.assertEqual(second, 0)
+
+    def test_backfill_applies_the_category_override_too(self):
+        """Old key-order requests get the same fix as new ones — the override
+        reads the category stored on the historical request itself."""
+        request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+        self._clear_ordering(request)
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.nyckel)
+
+    def test_backfill_never_uses_an_archived_preferred_team(self):
+        """Mirrors test_archived_team_is_never_the_orderer for the category
+        override. The backfill's precomputed map must re-check the preferred
+        team's active state itself — a plain field read from the category
+        does not, and would silently stamp an archived team forever (the
+        domain is self-consuming)."""
+        request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+        self._clear_ordering(request)
+        self.nyckel.action_archive()
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertNotEqual(request.ordering_team_id, self.nyckel)
+        self.assertEqual(request.ordering_team_id, self.inkomna)
 
     def test_backfill_leaves_no_chatter_note(self):
         """SKIP_FIELDS: the backfill writes outside the creating_records
