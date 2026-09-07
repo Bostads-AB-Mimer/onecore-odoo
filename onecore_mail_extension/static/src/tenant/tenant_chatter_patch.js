@@ -79,6 +79,22 @@ patch(Chatter.prototype, {
     thread.loadNewer = false;
   },
 
+  // Base fetchNewMessages/fetchMessages silently no-op while
+  // thread.status === "loading" (thread_model.js) — and that state isn't only
+  // set by fetches this module starts. Base's fetchThreadData fires
+  // fetchNewMessages() unawaited on every chatter mount, and onPostCallback,
+  // MAIL:RELOAD-THREAD and _acknowledgeSignals all land the thread in
+  // "loading" too. Clearing thread.messages (_onecoreSetLogCategory) while one
+  // of those is in flight, then having our own fetchNewMessages no-op against
+  // it, leaves an emptied list for the in-flight unfiltered fetch to splice
+  // its results into — an active pill over an unfiltered page (review on
+  // this PR). Wait it out instead of racing it.
+  async _onecoreAwaitThreadReady(thread) {
+    while (thread.status === "loading") {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  },
+
   async load(thread, requestList) {
     await super.load(thread, requestList);
     await this._fetchPinnedMessages(thread);
@@ -141,6 +157,14 @@ patch(Chatter.prototype, {
     // rather than racing it.
     this.state.onecoreLogFilterBusy = true;
     try {
+      // A load started elsewhere (chatter mount, post, save, ack) may already
+      // be in flight — see _onecoreAwaitThreadReady. Let it settle before
+      // tearing down thread.messages, then re-check: it may have made this
+      // click stale (record switched, or the category already changed).
+      await this._onecoreAwaitThreadReady(thread);
+      if (!this.state.thread?.eq(thread) || this.isActiveLogFilter(categoryId)) {
+        return;
+      }
       this._onecoreSetLogCategory(thread, categoryId);
       await thread.fetchNewMessages();
     } finally {
@@ -160,6 +184,14 @@ patch(Chatter.prototype, {
     super.onClickSearch();
     const thread = this.state.thread;
     if (this.state.isSearchOpen && thread?.onecoreLogCategory) {
+      // Same race as onClickLogFilter (MIM-1956 review): don't clear
+      // thread.messages ahead of a load already in flight elsewhere, or our
+      // own fetchNewMessages below no-ops against it and leaves the log
+      // empty with no recovery.
+      await this._onecoreAwaitThreadReady(thread);
+      if (!this.state.thread?.eq(thread) || !thread.onecoreLogCategory) {
+        return;
+      }
       this._onecoreSetLogCategory(thread, undefined);
       await thread.fetchNewMessages();
     }
