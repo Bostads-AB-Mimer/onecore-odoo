@@ -52,13 +52,24 @@ class MaintenanceStageManager:
 
         return updates
 
-    def handle_resource_assignment(self, record, new_user_id):
-        """Handle workflow when user is assigned/unassigned."""
+    def handle_resource_assignment(self, record, new_user_id, validate=True):
+        """Handle workflow when user is assigned/unassigned.
+
+        Pass validate=False from an onchange: a record that is still being
+        built in the form must never raise, because the user cannot act on
+        the error — the form has not rendered yet, so the Prioritet field
+        they are told to fill in is not on screen. There the auto-transition
+        is skipped instead, leaving the request in "Väntar på handläggning".
+        write() keeps validating, so MIM-1873 still blocks the save.
+        """
         if new_user_id and record.stage_id.name == "Väntar på handläggning":
             # Auto-transition to "Resurs tilldelad" when user is assigned
             resource_allocated_stage = self._get_stage_by_name("Resurs tilldelad")
             if resource_allocated_stage:
-                self._validate_priority_set(record, resource_allocated_stage.id)
+                if validate:
+                    self._validate_priority_set(record, resource_allocated_stage.id)
+                elif self._priority_missing(record, resource_allocated_stage.id):
+                    return {}
                 return {"stage_id": resource_allocated_stage.id}
 
         elif new_user_id is False and record.stage_id.name not in (
@@ -82,12 +93,17 @@ class MaintenanceStageManager:
                 "Ingen resurs är tilldelad. Vänligen välj en resurs."
             )
 
-    def _validate_priority_set(self, record, new_stage_id):
-        """Validate priority_expanded is set before moving to a handling stage."""
+    def _priority_missing(self, record, new_stage_id):
+        """Whether the target stage needs a priority the record does not have."""
         new_stage = self.env["maintenance.stage"].browse(new_stage_id)
         if new_stage.name in self.PRIORITY_EXEMPT_STAGES:
-            return
-        if not record.priority_expanded:
+            return False
+        return not record.priority_expanded
+
+    def _validate_priority_set(self, record, new_stage_id):
+        """Validate priority_expanded is set before moving to a handling stage."""
+        if self._priority_missing(record, new_stage_id):
+            new_stage = self.env["maintenance.stage"].browse(new_stage_id)
             raise exceptions.UserError(
                 _("Prioritet måste anges innan ärendet flyttas till '%s'.")
                 % new_stage.name
