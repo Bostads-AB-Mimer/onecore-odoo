@@ -905,3 +905,69 @@ class TestManagementAreaEndpoints:
         with patch.object(api, "_get_json", return_value={"kvvAreas": []}) as mock_get_json:
             assert api.fetch_cost_center_tree("a/b") == {"kvvAreas": []}
         mock_get_json.assert_called_once_with("/cost-centers/a%2Fb/tree")
+
+
+class TestFetchPestBlockedRentalIds:
+    """GET /residences/rental-blocks/rental-ids — the bulk pest lookup."""
+
+    def test_builds_url_with_reason_and_active(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = ["705-022-04-0201"]
+            result = api.fetch_pest_blocked_rental_ids(timeout=15)
+
+        assert result == ["705-022-04-0201"]
+        get_json.assert_called_once_with(
+            "/residences/rental-blocks/rental-ids?blockReason=SKADEDJUR&active=true",
+            timeout=15,
+        )
+
+    def test_reason_is_url_encoded(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = []
+            api.fetch_pest_blocked_rental_ids(block_reason="A B")
+
+        assert "blockReason=A+B" in get_json.call_args[0][0]
+
+
+class TestFetchBlockReasonCaptions:
+    """GET /residences/block-reasons — guards against a caption rename."""
+
+    def test_returns_captions(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = [
+                {"id": "1", "caption": "SKADEDJUR"},
+                {"id": "2", "caption": "RENOVERING"},
+            ]
+            assert api.fetch_block_reason_captions() == [
+                "SKADEDJUR",
+                "RENOVERING",
+            ]
+
+    def test_skips_entries_without_caption(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = [{"id": "1"}, {"id": "2", "caption": "X"}]
+            assert api.fetch_block_reason_captions() == ["X"]
+
+    def test_none_content_is_empty(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = None
+            assert api.fetch_block_reason_captions() == []
+
+
+class TestFetchContactsBatch:
+    """GET /v1/contacts/batch — repeated ?code= params."""
+
+    def test_repeats_the_code_param(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            get_json.return_value = [{"contactCode": "P1"}]
+            result = api.fetch_contacts_batch(["P1", "P2"], timeout=15)
+
+        assert result == [{"contactCode": "P1"}]
+        get_json.assert_called_once_with(
+            "/v1/contacts/batch?code=P1&code=P2", timeout=15
+        )
+
+    def test_empty_codes_does_not_call_onecore(self, api):
+        with patch.object(CoreApi, "_get_json") as get_json:
+            assert api.fetch_contacts_batch([]) == []
+            get_json.assert_not_called()
