@@ -81,11 +81,18 @@ class OneCoreFlagSyncService:
     def open_requests(self):
         """Requests the badges are still shown on. Closed ones keep their last
         known value: the badge is about the object's current state, which stops
-        being interesting once the case is done."""
+        being interesting once the case is done.
+
+        Filters on stage_id.done, not closed_date: closed_date is stamped only
+        by MaintenanceStageManager on a stage transition, so a request already
+        in the done stage before that write path existed - or ported data -
+        can have closed_date still NULL and would otherwise be treated as open
+        forever.
+        """
         return (
             self.env["maintenance.request"]
             .sudo()
-            .search([("closed_date", "=", False), ("archive", "=", False)])
+            .search([("stage_id.done", "=", False), ("archive", "=", False)])
         )
 
     @staticmethod
@@ -271,7 +278,12 @@ class OneCoreFlagSyncService:
         if not codes:
             return {}
 
-        api = self._api(api)
+        try:
+            api = self._api(api)
+        except Exception as err:  # e.g. the token POST in CoreApi.__init__
+            _logger.warning("Viktig kundinfo: could not reach OneCore: %s", err)
+            return {}
+
         flags = {}
         for start in range(0, len(codes), CONTACT_BATCH_SIZE):
             chunk = codes[start : start + CONTACT_BATCH_SIZE]

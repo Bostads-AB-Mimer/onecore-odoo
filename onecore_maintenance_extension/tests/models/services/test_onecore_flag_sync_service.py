@@ -16,6 +16,7 @@ from odoo.tests.common import TransactionCase
 from ...utils.test_utils import (
     create_facility,
     create_facility_option,
+    create_internal_user,
     create_maintenance_request,
     create_parking_space,
     create_parking_space_option,
@@ -51,6 +52,16 @@ class FlagSyncTestMixin:
             **kwargs,
         )
         return self.env["maintenance.request"].browse(request.id)
+
+    def _close_request(self, request):
+        """Move to the done stage as an internal user: env.user in these tests
+        is the superuser, which onecore_maintenance_extension.group_external_contractor
+        happens to carry (see security/maintenance.xml), so a plain write()
+        here would trip the "external contractor" stage-transition guard."""
+        internal_user = create_internal_user(self.env)
+        request.with_user(internal_user).write(
+            {"stage_id": self.env.ref("maintenance.stage_6").id}
+        )
 
     def _mock_api(self, MockApi, blocked=None, captions=None):
         MockApi.return_value.fetch_block_reason_captions.return_value = (
@@ -191,7 +202,23 @@ class TestSyncPestControl(FlagSyncTestMixin, TransactionCase):
 
     def test_closed_requests_are_excluded(self):
         request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
-        request.sudo().write({"closed_date": fields.Datetime.now()})
+        self._close_request(request)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_api(MockApi, blocked=[BLOCKED_RENTAL_ID])
+            self.service.sync_pest_control()
+
+        self.assertFalse(request.requires_pest_control)
+
+    def test_legacy_closed_stage_with_no_closed_date_is_excluded(self):
+        """closed_date is stamped only on a stage transition (MaintenanceStageManager),
+        so a request closed before that write path existed - or ported data -
+        can be in the done stage with closed_date still NULL. It must not be
+        treated as open."""
+        request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
+        self._close_request(request)
+        request.sudo().write({"closed_date": False})
         self._configure_onecore()
 
         with patch(CORE_API_PATH) as MockApi:
@@ -359,6 +386,20 @@ class TestSyncSpecialAttention(FlagSyncTestMixin, TransactionCase):
         self.assertEqual(calls[0][0][0], ["P000001", "P000002"])
         self.assertEqual(calls[1][0][0], ["P000003"])
 
+    def test_api_construction_failure_does_not_escape_the_cron(self):
+        """_api() builds a fresh CoreApi when no client is passed in, and
+        CoreApi.__init__ POSTs for an auth token when none is persisted - so
+        this can fail on the network, same as fetch_contacts_batch already
+        does, and must not escape sync_special_attention uncaught."""
+        self._request_with_tenant("P123456")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.side_effect = Exception("boom")
+            changed = self.service.sync_special_attention()
+
+        self.assertEqual(changed, 0)
+
     def test_a_failing_chunk_does_not_lose_the_others(self):
         _r1, tenant_one = self._request_with_tenant("P000001")
         _r2, tenant_two = self._request_with_tenant("P000002")
@@ -378,7 +419,25 @@ class TestSyncSpecialAttention(FlagSyncTestMixin, TransactionCase):
 
     def test_closed_requests_are_excluded(self):
         request, tenant = self._request_with_tenant("P123456")
-        request.sudo().write({"closed_date": fields.Datetime.now()})
+        self._close_request(request)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_contacts_batch.return_value = [
+                _contact("P123456", True)
+            ]
+            self.service.sync_special_attention()
+
+        self.assertFalse(tenant.special_attention)
+
+    def test_legacy_closed_stage_with_no_closed_date_is_excluded(self):
+        """Same legacy-data gap as pest control's equivalent test: closed_date
+        is only stamped on a stage transition, so a request already in the
+        done stage before that write path existed can have closed_date still
+        NULL."""
+        request, tenant = self._request_with_tenant("P123456")
+        self._close_request(request)
+        request.sudo().write({"closed_date": False})
         self._configure_onecore()
 
         with patch(CORE_API_PATH) as MockApi:
@@ -434,11 +493,14 @@ class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
         self.assertFalse(request.requires_pest_control)
 
     def test_onecore_failure_never_blocks_creation(self):
+        """The create path skips the caption guard (verify_reason=False), so
+        fetch_block_reason_captions is never called here - the failure has to
+        come from the lookup the create path actually makes."""
         self._configure_onecore()
 
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_block_reason_captions.side_effect = Exception(
-                "boom"
+            MockApi.return_value.fetch_pest_blocked_rental_ids.side_effect = (
+                Exception("boom")
             )
             request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
             self.assertFalse(self.service.populate_pest_control(request))
