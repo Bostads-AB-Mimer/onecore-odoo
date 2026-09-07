@@ -206,6 +206,9 @@ class RecordManagementService:
         new_parking_space_record = self.env["maintenance.parking.space"].create(
             {
                 "name": parking_space_option_record.name,
+                # OneCore's rentalId - the option's name is a display name, so the
+                # identity has to come from rental_id or the flag syncs find nothing.
+                "rental_property_id": parking_space_option_record.rental_id,
                 "code": parking_space_option_record.code,
                 "type_name": parking_space_option_record.type_name,
                 "type_code": parking_space_option_record.type_code,
@@ -231,6 +234,8 @@ class RecordManagementService:
         new_facility_record = self.env["maintenance.facility"].create(
             {
                 "name": facility_option_record.name,
+                # OneCore's rentalId - see _save_parking_space.
+                "rental_property_id": facility_option_record.rental_id,
                 "code": facility_option_record.code,
                 "type_name": facility_option_record.type_name,
                 "type_code": facility_option_record.type_code,
