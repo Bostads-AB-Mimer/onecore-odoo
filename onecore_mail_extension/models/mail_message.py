@@ -546,6 +546,7 @@ EXPECTED_CATEGORIES = {
     "failed_tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
     "tenant_mail_ok_and_sms_failed": LOG_CATEGORY_COMMUNICATION,
     "tenant_mail_failed_and_sms_ok": LOG_CATEGORY_COMMUNICATION,
+    "tenant_my_pages": LOG_CATEGORY_COMMUNICATION,
     # base `sms` and `snailmail` addons (auto_install=True on `mail`+`iap_mail`,
     # both already satisfied here) add these two selection values even though
     # onecore doesn't use either module directly. Neither is "comment" nor
