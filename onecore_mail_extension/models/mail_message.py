@@ -1,5 +1,5 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 
 import logging
 import requests
@@ -161,6 +161,7 @@ class OneCoreMailMessage(models.Model):
                 "tenant_mail_failed_and_sms_ok",
                 "Sent to tenant by email and SMS, but sending email failed",
             ),
+            ("tenant_my_pages", "Published to tenant on Mina sidor"),
         ],
         ondelete={
             "from_tenant": "set default",
@@ -173,6 +174,7 @@ class OneCoreMailMessage(models.Model):
             "failed_tenant_mail_and_sms": "set default",
             "tenant_mail_ok_and_sms_failed": "set default",
             "tenant_mail_failed_and_sms_ok": "set default",
+            "tenant_my_pages": "set default",
         },
     )
 
@@ -187,6 +189,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "to": to_email,
@@ -195,6 +198,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -216,6 +220,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "phoneNumber": phone_number,
@@ -223,6 +228,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -237,8 +243,37 @@ class OneCoreMailMessage(models.Model):
             _logger.error(f"An error occurred: {err}")
         return None
 
+    def _log_my_pages_message(
+        self, work_order_code, contact_code, text, triggered_by_user=None
+    ):
+        """Record a Mina sidor publication in OneCore's communication log.
+
+        Best-effort by design: the tenant can already see the message (it exists
+        in Odoo with the tenant_my_pages type), so a logging failure must NOT
+        change message_type the way a failed SMS/e-post send does — that would
+        retract a delivered message. Failures are logged for monitoring only.
+        """
+        payload = {
+            "workOrderCode": work_order_code,
+            "contactCode": contact_code,
+            "text": text,
+            "triggeredByUser": triggered_by_user,
+        }
+        try:
+            response = self.get_core_api().request(
+                "POST", "/work-orders/log-my-pages-message", json=payload
+            )
+            response.raise_for_status()
+        except Exception as err:
+            _logger.error(
+                "Failed to log Mina sidor message for %s: %s",
+                work_order_code,
+                err,
+            )
+
     @api.model_create_multi
     def create(self, values_list):
+        pending_my_pages = []
         for values in values_list:
             if values["message_type"].startswith("tenant_"):
                 the_record = self.env["maintenance.request"].search(
@@ -260,6 +295,23 @@ class OneCoreMailMessage(models.Model):
                 # log entry for the outbound SMS/email.
                 contact_code = the_record.tenant_id.contact_code
                 triggered_by_user = self.env.user.name
+                work_order_code = f"od-{the_record.id}"
+
+                # Mina sidor only: nothing is sent, the message is published by
+                # existing on the record. Refuse it outright when the errand is
+                # hidden from Mimer.nu — digital tenant communication is closed
+                # there, and the composer hides the checkboxes for that case.
+                if values["message_type"] == "tenant_my_pages":
+                    if the_record.hidden_from_my_pages:
+                        raise UserError(
+                            _(
+                                "Det här ärendet är dolt från Mimer.nu. "
+                                "Meddelanden till hyresgäst kan inte skickas."
+                            )
+                        )
+                    pending_my_pages.append(
+                        (work_order_code, contact_code, body, triggered_by_user)
+                    )
 
                 # send by sms
                 if values["message_type"] == "tenant_sms":
@@ -269,6 +321,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_sms_result is None:
@@ -283,6 +336,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None:
@@ -297,6 +351,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
                     send_sms_result = self._send_sms(
                         the_record.tenant_id.phone_number,
@@ -304,6 +359,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None and send_sms_result is not None:
@@ -314,5 +370,12 @@ class OneCoreMailMessage(models.Model):
                         values["message_type"] = "failed_tenant_mail_and_sms"
 
         messages = super(OneCoreMailMessage, self).create(values_list)
+
+        # Logged after the records exist: the log call is not transactional, so
+        # firing it inside the loop would leave OneCore asserting a publication
+        # that a later rollback erased. Safe to defer because nothing reads the
+        # result — a failed log call must never change message_type.
+        for args in pending_my_pages:
+            self._log_my_pages_message(*args)
 
         return messages
