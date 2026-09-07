@@ -159,6 +159,10 @@ class FieldChangeTracker:
         "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
         "master_key_changed_at",
+        # Written on every inbound Mina-sidor message (MIM-1960) — the tenant's
+        # own message is already in the chatter; a field-change note on top of
+        # it is noise.
+        "last_customer_message_at",
         "recently_added_tenant",  # technical flag, English label — never log
         # OneCore management-area snapshot (ManagementAreaService) — written
         # lazily from the button/backfill; not a user change worth a note

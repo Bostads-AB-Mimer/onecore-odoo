@@ -29,15 +29,55 @@ stay NULL, which the compute already reads as "nothing to acknowledge".
 
 Only rows where *both* columns are still NULL are touched, so a re-run cannot
 overwrite acknowledgements made after the upgrade.
+
+MIM-1960 renamed the two columns this script writes:
+`new_customer_info_ack_at` -> `customer_message_ack_at` and
+`new_customer_info_external_ack_at` -> `customer_message_external_ack_at`
+(see `19.0.1.0.6/pre-migration.py`). `19.0.1.0.6/post-migration.py` now owns
+the cutover baseline, re-derived under a broader detection rule
+(`message_type == 'from_tenant'` instead of "authored by odoo@mimer.nu with
+an inbox notification"). Because of Odoo's migration ordering — every
+version's pre-migration runs, then `init_models()`, then every version's
+post-migration, in version order (`odoo/modules/loading.py:174,194,230`) —
+this script's post-migration always runs *after* `init_models()` has already
+applied the current field definitions, which only know the new column names.
+So on every reachable database state, `new_customer_info_ack_at` no longer
+exists by the time this script would run: on a production upgrade the column
+was never created under the old name, and on any database that already went
+through 19.0.1.0.6 it was renamed away in that version's pre-migration.
+Without a guard, this script aborts every upgrade that crosses 19.0.1.0.5
+with a `ProgrammingError` on a column that no longer exists.
+
+This file is retained, rather than deleted, as the record of what MIM-1844's
+cutover intended — deleting it would lose that history. The guard below makes
+it a safe no-op: it returns before doing any work whenever the old column is
+absent, which is unconditionally the case on every reachable database, so the
+body beyond the guard is effectively unreachable. It is kept as documentation
+of the original baseline logic, not as code that still executes.
 """
+
 import logging
+
+from odoo.tools.sql import column_exists
 
 _logger = logging.getLogger(__name__)
 
 MIMER_INTEGRATION_LOGIN = "odoo@mimer.nu"
 
+TABLE = "maintenance_request"
+OLD_ACK_COLUMN = "new_customer_info_ack_at"
+
 
 def migrate(cr, version):
+    if not column_exists(cr, TABLE, OLD_ACK_COLUMN):
+        _logger.info(
+            "MIM-1844 migration skipped: %s.%s no longer exists (renamed by "
+            "MIM-1960) — nothing to baseline.",
+            TABLE,
+            OLD_ACK_COLUMN,
+        )
+        return
+
     from odoo import api, SUPERUSER_ID
 
     env = api.Environment(cr, SUPERUSER_ID, {})

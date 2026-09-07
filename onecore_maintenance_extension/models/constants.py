@@ -79,3 +79,12 @@ FORM_STATES = [
     ("maintenance-unit", "Underhållsenhet"),
     ("facility", "Lokal"),
 ]
+
+# Mail message types on the tenant <-> case channel.
+# CUSTOMER_MESSAGE_TYPE is written by onecore's work-order service
+# (odoo-adapter.addMessageToWorkOrder) when it forwards a Mina-sidor message.
+# RECEIPT_TO_TENANT_MESSAGE_TYPE is our reply confirming receipt; the selection
+# value itself is declared on mail.message in onecore_mail_extension, which
+# cannot import this module. Keep the two strings in sync.
+CUSTOMER_MESSAGE_TYPE = "from_tenant"
+RECEIPT_TO_TENANT_MESSAGE_TYPE = "receipt_to_tenant"
