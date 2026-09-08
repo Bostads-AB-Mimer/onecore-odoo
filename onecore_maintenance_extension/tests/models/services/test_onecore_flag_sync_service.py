@@ -504,6 +504,10 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
         self.assertEqual(changed, 1)
         self.assertEqual(request.lease_id.lease_status, 2)
         self.assertGreater(len(request.message_ids), before)
+        # MIM-1954: name must not drift from the freshly-written status - the
+        # screenshot regression where Kontrakt still showed "(Gällande)"
+        # after Kontraktsstatus had already moved on to "Uppsagt".
+        self.assertEqual(request.lease_id.name, "216-034-03-0101/01 (Uppsagt)")
 
     def test_last_debit_date_change_alone_updates_without_chatter(self):
         request = self._request_with_lease(

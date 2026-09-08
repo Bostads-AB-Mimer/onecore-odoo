@@ -43,8 +43,11 @@ class OnecoreMaintenanceLease(models.Model):
     _description = "Lease"
     _unaccent = True
 
-    name = fields.Char("name", required=True)
-    lease_id = fields.Char(string="Kontrakt", store=True, readonly=True)
+    # Computed rather than a plain Char so it can never go stale like the
+    # option's display name does (MIM-1954): sync_lease_status only ever
+    # writes lease_status, and this recomputes from it automatically.
+    name = fields.Char("Kontrakt", compute="_compute_name", store=True)
+    lease_id = fields.Char(string="Kontrakt ID", store=True, readonly=True)
     lease_number = fields.Char("Kontraktnummer", required=True)
     lease_type = fields.Char("Kontraktstyp", required=True)
     lease_start_date = fields.Date("Startdatum")
@@ -71,3 +74,11 @@ class OnecoreMaintenanceLease(models.Model):
     def _compute_lease_status_label(self):
         for lease in self:
             lease.lease_status_label = LEASE_STATUS_LABELS.get(lease.lease_status)
+
+    @api.depends("lease_id", "lease_status_label")
+    def _compute_name(self):
+        for lease in self:
+            if lease.lease_id and lease.lease_status_label:
+                lease.name = f"{lease.lease_id} ({lease.lease_status_label})"
+            else:
+                lease.name = lease.lease_id

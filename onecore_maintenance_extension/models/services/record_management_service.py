@@ -152,8 +152,8 @@ class RecordManagementService:
             {
                 # OneCore's leaseId - the option's name is a display name, so the
                 # identity has to come from lease_id or the flag syncs find nothing.
+                # name is computed from lease_id/lease_status_label, not set here.
                 "lease_id": lease_option_record.lease_id,
-                "name": lease_option_record.name,
                 "lease_number": lease_option_record.lease_number,
                 "lease_type": lease_option_record.lease_type,
                 "lease_start_date": lease_option_record.lease_start_date,
@@ -396,7 +396,6 @@ class RecordManagementService:
         return self.env["maintenance.lease"].create(
             {
                 "lease_id": lease["leaseId"],
-                "name": lease["leaseId"],
                 "lease_number": lease["leaseNumber"],
                 "lease_type": lease["type"],
                 "lease_start_date": lease["leaseStartDate"],

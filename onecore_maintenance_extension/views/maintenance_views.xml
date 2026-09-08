@@ -643,9 +643,11 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
-                                        <!-- MIM-1954: live status, not the frozen snapshot baked
-                                        into lease_name/lease_option_id's display name at creation -
-                                        kept fresh by ir_cron_sync_lease_status. -->
+                                        <!-- MIM-1954: lease_name recomputes from this whenever
+                                        ir_cron_sync_lease_status changes lease_status, so the two
+                                        stay consistent. lease_option_id's display name (shown only
+                                        before creation, above) is still a frozen snapshot - the
+                                        option is discarded once the case is created. -->
                                         <field name="lease_status_label"
                                             string="Kontraktsstatus"
                                             invisible="not lease_status_label" />
