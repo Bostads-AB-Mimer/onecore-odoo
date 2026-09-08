@@ -21,13 +21,12 @@ import logging
 
 from odoo import fields
 
+from ..constants import MIMER_NU_ORIGIN
+
 _logger = logging.getLogger(__name__)
 
 # MIM-1916: resolve teams by xml-id, never by their (translatable) name.
 KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
-
-# Tenant reports from mimer.nu. Kundcenter owns that inflow.
-MIMER_NU_ORIGIN = "mimer-nu"
 
 
 class OrderingTeamService:
@@ -54,9 +53,16 @@ class OrderingTeamService:
         )
 
     def kundcenter_team(self):
-        """The Kundcenter team, or an empty recordset when it is missing."""
+        """The Kundcenter team, or an empty recordset when missing or archived.
+
+        env.ref is a plain browse and ignores ``active``; the search() is what
+        keeps an archived Kundcenter from being stamped, same as every other
+        team lookup here (test_archived_team_is_never_the_orderer).
+        """
         team = self.env.ref(KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
-        return team or self.env["maintenance.team"]
+        if not team:
+            return self.env["maintenance.team"]
+        return self.env["maintenance.team"].sudo().search([("id", "=", team.id)], limit=1)
 
     def resolve_ordering_team(self, request):
         """The resource group that ordered ``request``."""
@@ -65,6 +71,10 @@ class OrderingTeamService:
             # technical integration user, so its team membership says nothing:
             # deriving from it would let a single membership change silently
             # claim that some team ordered thousands of tenant reports.
+            # The category override is deliberately not consulted either: it
+            # picks between the *orderer's own* queues, and the orderer here is
+            # a tenant — a tenant's key request was not ordered by Kundcenter's
+            # Nyckelbeställningar queue, it landed in their inbox.
             return self.kundcenter_team()
         orderer = request.owner_user_id or request.create_uid
         preferred = self._preferred_category_team(
