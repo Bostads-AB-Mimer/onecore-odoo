@@ -4,7 +4,7 @@ import base64
 import datetime
 import logging
 from odoo import fields
-from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ..utils.helpers import get_tenant_name, get_main_phone_number, normalize_lease_status
 from .direct_lookup_service import all_routes
 from ....onecore_api import core_api
 
@@ -158,6 +158,8 @@ class RecordManagementService:
                 "lease_end_date": lease_option_record.lease_end_date,
                 "contract_date": lease_option_record.contract_date,
                 "approval_date": lease_option_record.approval_date,
+                "lease_status": lease_option_record.lease_status,
+                "last_debit_date": lease_option_record.last_debit_date,
                 "maintenance_request_id": maintenance_request.id,
             }
         )
@@ -397,8 +399,10 @@ class RecordManagementService:
                 "lease_type": lease["type"],
                 "lease_start_date": lease["leaseStartDate"],
                 "lease_end_date": lease["lastDebitDate"],
+                "last_debit_date": lease["lastDebitDate"],
                 "contract_date": lease["contractDate"],
                 "approval_date": lease["approvalDate"],
+                "lease_status": normalize_lease_status(lease.get("status")),
             }
         )
 

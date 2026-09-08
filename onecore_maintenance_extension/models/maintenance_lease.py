@@ -1,4 +1,6 @@
-from odoo import models, fields
+from odoo import api, models, fields
+
+from .constants import LEASE_STATUS_LABELS
 
 
 class OnecoreMaintenanceLeaseOption(models.Model):
@@ -52,7 +54,17 @@ class OnecoreMaintenanceLease(models.Model):
     contract_date = fields.Date("Kontraktsdatum")
     last_debit_date = fields.Date("Datum för senaste debitering")
     approval_date = fields.Date("Datum för godkännande")
+    lease_status = fields.Integer("Status")
+
+    lease_status_label = fields.Char(
+        "Kontraktsstatus", compute="_compute_lease_status_label", store=True
+    )
 
     maintenance_request_id = fields.Many2one(
         "maintenance.request", string="Maintenance Request", ondelete="cascade"
     )
+
+    @api.depends("lease_status")
+    def _compute_lease_status_label(self):
+        for lease in self:
+            lease.lease_status_label = LEASE_STATUS_LABELS.get(lease.lease_status)

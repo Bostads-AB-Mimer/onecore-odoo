@@ -17,6 +17,7 @@ from ...utils.test_utils import (
     create_facility,
     create_facility_option,
     create_internal_user,
+    create_lease_option,
     create_maintenance_request,
     create_parking_space,
     create_parking_space_option,
@@ -71,6 +72,19 @@ class FlagSyncTestMixin:
             blocked if blocked is not None else []
         )
         return MockApi.return_value
+
+    def _request_with_lease(
+        self, lease_ref="216-034-03-0101/01", lease_status=0, last_debit_date=False, **kwargs
+    ):
+        lease_option = create_lease_option(
+            self.env,
+            name=lease_ref,
+            lease_status=lease_status,
+            last_debit_date=last_debit_date,
+        )
+        return self._apartment_request(
+            rental_id=FREE_RENTAL_ID, lease_option_id=lease_option.id, **kwargs
+        )
 
 
 @tagged("onecore")
@@ -468,6 +482,138 @@ class TestSyncSpecialAttention(FlagSyncTestMixin, TransactionCase):
         MockApi.assert_not_called()
 
 
+def _fresh_lease(lease_id, status="Current", last_debit_date=False):
+    """Shape of one item in POST /leases/batch ``content``."""
+    return {"leaseId": lease_id, "status": status, "lastDebitDate": last_debit_date}
+
+
+@tagged("onecore")
+class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
+    def test_status_change_updates_the_lease_and_posts_chatter(self):
+        request = self._request_with_lease(lease_status=0)
+        before = len(request.message_ids)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease("216-034-03-0101/01", status="AboutToEnd")
+            ]
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 1)
+        self.assertEqual(request.lease_id.lease_status, 2)
+        self.assertGreater(len(request.message_ids), before)
+
+    def test_last_debit_date_change_alone_updates_without_chatter(self):
+        request = self._request_with_lease(
+            lease_status=0, last_debit_date="2027-01-01"
+        )
+        before = len(request.message_ids)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease(
+                    "216-034-03-0101/01", status="Current", last_debit_date="2027-06-01"
+                )
+            ]
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 1)
+        self.assertEqual(str(request.lease_id.last_debit_date), "2027-06-01")
+        self.assertEqual(len(request.message_ids), before)
+
+    def test_unchanged_run_writes_nothing(self):
+        self._request_with_lease(lease_status=0, last_debit_date="2027-01-01")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease(
+                    "216-034-03-0101/01", status="Current", last_debit_date="2027-01-01"
+                )
+            ]
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+
+    def test_request_without_a_lease_is_skipped(self):
+        create_maintenance_request(self.env, space_caption="Tvättstuga")
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+        MockApi.return_value.fetch_leases_batch.assert_not_called()
+
+    def test_closed_requests_are_excluded(self):
+        request = self._request_with_lease(lease_status=0)
+        self._close_request(request)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+        MockApi.return_value.fetch_leases_batch.assert_not_called()
+
+    def test_unconfigured_onecore_is_a_no_op(self):
+        self._request_with_lease(lease_status=0)
+
+        with patch(CORE_API_PATH) as MockApi:
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+        MockApi.assert_not_called()
+
+    def test_lease_ids_are_chunked(self):
+        """Patch the size rather than create 500 leases - the boundary logic
+        is what matters, not the constant's value."""
+        self._request_with_lease(lease_ref="1/01", lease_status=0)
+        self._request_with_lease(lease_ref="2/01", lease_status=0)
+        self._request_with_lease(lease_ref="3/01", lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "LEASE_BATCH_SIZE", 2
+        ):
+            MockApi.return_value.fetch_leases_batch.return_value = []
+            self.service.sync_lease_status()
+
+        calls = MockApi.return_value.fetch_leases_batch.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0][0], ["1/01", "2/01"])
+        self.assertEqual(calls[1][0][0], ["3/01"])
+
+    def test_a_failing_chunk_does_not_lose_the_others(self):
+        request_one = self._request_with_lease(lease_ref="1/01", lease_status=0)
+        request_two = self._request_with_lease(lease_ref="2/01", lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "LEASE_BATCH_SIZE", 1
+        ):
+            MockApi.return_value.fetch_leases_batch.side_effect = [
+                [_fresh_lease("1/01", status="AboutToEnd")],
+                Exception("boom"),
+            ]
+            self.service.sync_lease_status()
+
+        self.assertEqual(request_one.lease_id.lease_status, 2)
+        self.assertEqual(request_two.lease_id.lease_status, 0)
+
+    def test_api_construction_failure_does_not_escape_the_cron(self):
+        self._request_with_lease(lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.side_effect = Exception("boom")
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+
+
 @tagged("onecore")
 class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
     def test_new_case_on_a_blocked_object_is_flagged_immediately(self):
@@ -653,10 +799,25 @@ class TestFlagSyncCrons(FlagSyncTestMixin, TransactionCase):
 
         self.assertTrue(tenant.special_attention)
 
+    def test_lease_status_cron_delegates_to_the_service(self):
+        request = self._request_with_lease(lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease("216-034-03-0101/01", status="Ended")
+            ]
+            self.env["maintenance.request"]._cron_sync_lease_status()
+
+        self.assertEqual(request.lease_id.lease_status, 3)
+
     def test_cron_records_exist_and_are_active(self):
         pest = self.env.ref("onecore_maintenance_extension.ir_cron_sync_pest_control")
         kundinfo = self.env.ref(
             "onecore_maintenance_extension.ir_cron_sync_special_attention"
+        )
+        kontraktsstatus = self.env.ref(
+            "onecore_maintenance_extension.ir_cron_sync_lease_status"
         )
 
         self.assertTrue(pest.active)
@@ -666,3 +827,7 @@ class TestFlagSyncCrons(FlagSyncTestMixin, TransactionCase):
         self.assertTrue(kundinfo.active)
         self.assertEqual(kundinfo.interval_number, 1)
         self.assertEqual(kundinfo.interval_type, "hours")
+
+        self.assertTrue(kontraktsstatus.active)
+        self.assertEqual(kontraktsstatus.interval_number, 1)
+        self.assertEqual(kontraktsstatus.interval_type, "hours")
