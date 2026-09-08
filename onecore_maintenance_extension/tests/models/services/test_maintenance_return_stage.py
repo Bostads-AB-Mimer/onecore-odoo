@@ -128,6 +128,22 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         request.write({"stage_id": self.stage_atersand.id})
         self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
 
+    def test_team_fallback_skips_archived_kundcenter(self):
+        """An archived Kundcenter is never a hand-back target: the request
+        keeps its team rather than being sent to a queue nobody works in.
+        Same invariant as test_archived_team_is_never_the_orderer, now that
+        the fallback shares OrderingTeamService.kundcenter_team()."""
+        request = self._create_returnable_request(
+            owner_user_id=self.teamless_user.id
+        )
+        team_before = request.maintenance_team_id
+        self.kundcenter_team.action_archive()
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, team_before)
+        self.assertNotEqual(request.maintenance_team_id, self.kundcenter_team)
+
     def test_orderer_in_multiple_teams_takes_first(self):
         """An orderer in several teams: the first match is used"""
         second_team = self.env["maintenance.team"].create(

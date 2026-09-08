@@ -151,6 +151,25 @@ class TestOrderingTeamService(TransactionCase):
         self.assertEqual(request.ordering_team_id, self.kundcenter)
         self.assertNotEqual(request.ordering_team_id, self.other_team)
 
+    def test_create_from_mimer_nu_ignores_the_category_override(self):
+        """PR #284 review: the mimer-nu branch returns before the category
+        override on purpose. The override picks between the *orderer's own*
+        queues, and the orderer here is a tenant — their key request landed in
+        Kundcenter's inbox, it was not ordered by the Nyckelbeställningar queue.
+        Even an integration user who happens to be a member of that queue must
+        not change the answer."""
+        integration_user = create_internal_user(self.env)
+        self.nyckel.write({"member_ids": [(4, integration_user.id)]})
+
+        request = create_maintenance_request(
+            self.env(user=integration_user),
+            creation_origin="mimer-nu",
+            maintenance_request_category_id=self.key_category.id,
+        )
+
+        self.assertEqual(request.ordering_team_id, self.kundcenter)
+        self.assertNotEqual(request.ordering_team_id, self.nyckel)
+
     def test_create_keeps_a_team_stamped_by_the_caller(self):
         """core over XML-RPC (and later MIM-1971) wins over the derivation."""
         request = create_maintenance_request(
@@ -376,6 +395,30 @@ class TestOrderingTeamService(TransactionCase):
         self.assertNotEqual(request.ordering_team_id, archived_team)
         self.assertFalse(request.ordering_team_id)
         self.assertFalse(request.ordering_cost_center_code)
+
+    def test_archived_kundcenter_is_never_the_orderer(self):
+        """PR #284 review: kundcenter_team() used to be a plain env.ref, which
+        ignores ``active`` — the one team lookup that could stamp an archived
+        team. Now it goes through search() like every other lookup, on both
+        the create path and the backfill."""
+        self.kundcenter.action_archive()
+
+        request = create_maintenance_request(
+            self.env(user=self.teamless_user), creation_origin="mimer-nu"
+        )
+        self.assertFalse(request.ordering_team_id)
+        # Resolved to nothing at create — stamped so the backfill will not
+        # revisit it (test_create_time_unresolved_orderer_is_not_rederived_later)
+        self.assertTrue(request.ordering_backfilled_at)
+
+        self._clear_ordering(request)
+        first = self.env["maintenance.request"]._cron_backfill_ordering_team()
+        second = self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertGreaterEqual(first, 1)
+        self.assertFalse(request.ordering_team_id)
+        self.assertTrue(request.ordering_backfilled_at)
+        self.assertEqual(second, 0)
 
     def test_search_view_exposes_the_facet_and_grouping(self):
         """What makes MIM-1975/1976/1977 configuration instead of development."""
