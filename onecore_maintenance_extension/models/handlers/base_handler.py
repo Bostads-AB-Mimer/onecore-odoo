@@ -78,6 +78,7 @@ class BaseMaintenanceHandler:
         lease_data = {
             "user_id": self.env.user.id,
             "name": lease_name,
+            "lease_id": lease["leaseId"],
             "lease_number": lease["leaseNumber"],
             "lease_type": lease["type"],
             "lease_status": status,

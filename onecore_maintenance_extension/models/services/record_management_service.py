@@ -150,7 +150,9 @@ class RecordManagementService:
         )
         new_lease_record = self.env["maintenance.lease"].create(
             {
-                "lease_id": lease_option_record.name,
+                # OneCore's leaseId - the option's name is a display name, so the
+                # identity has to come from lease_id or the flag syncs find nothing.
+                "lease_id": lease_option_record.lease_id,
                 "name": lease_option_record.name,
                 "lease_number": lease_option_record.lease_number,
                 "lease_type": lease_option_record.lease_type,

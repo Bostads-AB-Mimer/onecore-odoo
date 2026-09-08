@@ -10,6 +10,9 @@ class OnecoreMaintenanceLeaseOption(models.Model):
 
     user_id = fields.Many2one("res.users", "User", default=lambda self: self.env.user)
     name = fields.Char("name", required=True)
+    # OneCore's leaseId — the identity, distinct from name, which is a display
+    # string with the status label appended (e.g. "<leaseId> (Gällande)").
+    lease_id = fields.Char("Kontrakt ID")
     lease_number = fields.Char("Kontraktnummer", required=True)
     lease_type = fields.Char("Kontraktstyp", required=True)
     lease_status = fields.Integer("Status", default=3)

@@ -165,6 +165,21 @@ class TestRecordManagementService(TransactionCase):
         self.assertEqual(request.lease_id.lease_status, 1)
         self.assertEqual(str(request.lease_id.last_debit_date), "2027-05-01")
 
+    def test_save_lease_persists_the_lease_id_without_status_label(self):
+        """The kontraktsstatus-sync (MIM-1954) matches leases against OneCore
+        by lease_id, and the option's name is a display name with the status
+        label appended (e.g. "<leaseId> (Gällande)") - so the bare leaseId has
+        to be carried over separately or the batch lookup finds nothing."""
+        lease_option = create_lease_option(
+            self.env, name="705-023-04-0201/01 (Gällande)", lease_id="705-023-04-0201/01"
+        )
+
+        request = create_maintenance_request(
+            self.env, lease_option_id=lease_option.id
+        )
+
+        self.assertEqual(request.lease_id.lease_id, "705-023-04-0201/01")
+
     def test_save_tenant_uses_form_phone_email_over_option_values(self):
         """When creating with modified phone/email in form, should use form values over option values"""
         new_phone = self.fake.phone_number()

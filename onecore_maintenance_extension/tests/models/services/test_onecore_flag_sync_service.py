@@ -79,6 +79,7 @@ class FlagSyncTestMixin:
         lease_option = create_lease_option(
             self.env,
             name=lease_ref,
+            lease_id=lease_ref,
             lease_status=lease_status,
             last_debit_date=last_debit_date,
         )
