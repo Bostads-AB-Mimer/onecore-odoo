@@ -288,6 +288,11 @@ class MaintenanceBackfillWizard(models.TransientModel):
         self._unlink_replaced(old_lease, request.lease_id)
         self._unlink_replaced(old_tenant, request.tenant_id)
 
+        if not old_tenant and request.tenant_id:
+            # A genuine no-tenant -> tenant transition (not a correction of an
+            # already-attached tenant) - hide from Mina sidor (MIM-1953).
+            record_service.flag_new_tenant_attached(untracked)
+
         self._refresh_management_area(request)
         self._post_attach_note(request, before)
 

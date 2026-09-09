@@ -167,6 +167,54 @@ class TestBackfillWizard(TransactionCase):
         reloaded.invalidate_recordset()
         self.assertTrue(reloaded.rental_property_id)
         self.assertFalse(reloaded.tenant_id)
+        # No tenant attached - nothing new to hide from Mina sidor (MIM-1953).
+        self.assertFalse(reloaded.hidden_from_my_pages)
+
+    def test_tenant_lookup_on_tenantless_request_hides_from_my_pages(self):
+        # MIM-1953: a request raised with no tenant (e.g. a supplier work order
+        # on a vacant apartment) must not become visible on Mina sidor to
+        # whoever moves in later, once the wizard attaches them.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.assertFalse(request.hidden_from_my_pages)
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.tenant_id)
+        self.assertTrue(reloaded.hidden_from_my_pages)
+        self.assertTrue(reloaded.recently_added_tenant)
+
+    def test_replacing_an_existing_tenant_does_not_reset_hidden_from_my_pages(self):
+        # Correcting/replacing a tenant that was already on the request is not
+        # "a new customer showed up" - only a genuine no-tenant -> tenant
+        # transition should auto-hide the case.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz1 = self._wizard(request, "tenant")
+        wiz1.lookup_value = "P005468"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+        self.assertTrue(request.hidden_from_my_pages)
+        # A Mimer handler reviewed the case and decided it's fine to show after all.
+        request.hidden_from_my_pages = False
+
+        self._onecore_returns([OTHER_RES_LEASE], residence=OTHER_RESIDENCE)
+        wiz2 = self._wizard(request, "tenant")
+        wiz2.lookup_value = "P000999"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            wiz2.action_confirm()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertEqual(reloaded.contact_code, "P000999")
+        self.assertFalse(reloaded.hidden_from_my_pages)
 
     def test_vacant_object_over_contract_clears_stale_lease_tenant(self):
         # Regression: attaching a vacant object on top of an existing contract must

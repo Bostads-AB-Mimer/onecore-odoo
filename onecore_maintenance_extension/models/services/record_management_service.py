@@ -305,6 +305,20 @@ class RecordManagementService:
         ):  # Empty tenant / lease
             self._create_missing_lease_and_tenant(record)
 
+    def flag_new_tenant_attached(self, record):
+        """Mark a request whose FIRST tenant was just attached (MIM-1953).
+
+        Called only on a genuine no-tenant -> tenant transition, from both
+        the passive OneCore refetch (_create_tenant, below) and the
+        "Lägg till/ändra hyresgäst" backfill wizard. A request raised with no
+        tenant (e.g. a supplier work order on a vacant apartment) must not
+        surface to whoever moves in afterwards — hidden_from_my_pages is a
+        manual, reversible checkbox, so a Mimer handler can still un-hide it
+        after reviewing the case.
+        """
+        record.recently_added_tenant = True
+        record.hidden_from_my_pages = True
+
     def unlink_record(self, record):
         """Best-effort delete of a permanent record being removed or replaced.
 
@@ -423,5 +437,5 @@ class RecordManagementService:
             )
 
             record.tenant_id = recently_added_tenant_record.id
-            record.recently_added_tenant = True
             record.empty_tenant = False
+            self.flag_new_tenant_attached(record)
