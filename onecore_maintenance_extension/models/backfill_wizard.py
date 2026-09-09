@@ -40,7 +40,8 @@ class MaintenanceBackfillWizard(models.TransientModel):
     )
     lookup_value = fields.Char(string="Nummer")
     state = fields.Selection(
-        [("input", "input"), ("preview", "preview")], default="input"
+        [("input", "input"), ("preview", "preview"), ("confirm_hide", "confirm_hide")],
+        default="input",
     )
     # The contracts found by Sök; the chosen one drives what gets attached.
     lease_option_id = fields.Many2one("maintenance.lease.option", string="Kontrakt")
@@ -179,7 +180,9 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 raise exceptions.UserError(
                     _("Kunde inte avgöra hyresobjektets typ för det valda kontraktet.")
                 )
-            self._attach(request, route, lease_option[route["option_field"]], lease_option)
+            new_tenant_attached = self._attach(
+                request, route, lease_option[route["option_field"]], lease_option
+            )
         elif self.object_option_ref:
             object_option = self.object_option_ref
             if not object_option.exists():
@@ -192,10 +195,41 @@ class MaintenanceBackfillWizard(models.TransientModel):
                 raise exceptions.UserError(
                     _("Kunde inte avgöra hyresobjektets typ.")
                 )
-            self._attach(request, route, object_option, None, vacant=self.is_vacant)
+            new_tenant_attached = self._attach(
+                request, route, object_option, None, vacant=self.is_vacant
+            )
         else:
             raise exceptions.UserError(_("Sök fram ett resultat först."))
 
+        if new_tenant_attached:
+            # A genuine no-tenant -> tenant transition - ask whether to hide
+            # from Mina sidor rather than deciding on its own (MIM-1953).
+            self.state = "confirm_hide"
+            return self.action_window()
+
+        return self._close_action()
+
+    def action_confirm_hide(self):
+        # Ja on the hide question: hide from Mina sidor (MIM-1953).
+        self.ensure_one()
+        RecordManagementService(self.env).flag_new_tenant_attached(
+            self.maintenance_request_id
+        )
+        return self._close_action()
+
+    def action_confirm_no_hide(self):
+        # Nej on the hide question: leave visible, but still flag the
+        # internal new-customer badge - that staff notification is orthogonal
+        # to Mina sidor visibility. hidden_from_my_pages is written explicitly
+        # (not just left alone) so a stale True from an earlier attach/remove
+        # cycle on this same ärende doesn't silently override this answer.
+        self.ensure_one()
+        self.maintenance_request_id.write(
+            {"recently_added_tenant": True, "hidden_from_my_pages": False}
+        )
+        return self._close_action()
+
+    def _close_action(self):
         # Close the dialog AND reload the underlying form so the newly attached
         # data shows immediately (act_window_close alone leaves the stale form).
         return {"type": "ir.actions.client", "tag": "soft_reload"}
@@ -225,6 +259,9 @@ class MaintenanceBackfillWizard(models.TransientModel):
         Every write runs with change tracking suppressed and one summary note is
         posted at the end: the attach touches half a dozen fields, and a
         ``message_post`` per write made confirming both slow and noisy in the log.
+
+        Returns whether this was a genuine no-tenant -> tenant transition, so
+        the caller can ask about hiding from Mina sidor (MIM-1953).
         """
         record_service = RecordManagementService(self.env)
         old_objects = {
@@ -288,13 +325,12 @@ class MaintenanceBackfillWizard(models.TransientModel):
         self._unlink_replaced(old_lease, request.lease_id)
         self._unlink_replaced(old_tenant, request.tenant_id)
 
-        if not old_tenant and request.tenant_id:
-            # A genuine no-tenant -> tenant transition (not a correction of an
-            # already-attached tenant) - hide from Mina sidor (MIM-1953).
-            record_service.flag_new_tenant_attached(untracked)
-
         self._refresh_management_area(request)
         self._post_attach_note(request, before)
+        # A genuine no-tenant -> tenant transition (not a correction of an
+        # already-attached tenant) - the caller asks whether to hide from
+        # Mina sidor rather than deciding on its own (MIM-1953).
+        return bool(not old_tenant and request.tenant_id)
 
     def _refresh_management_area(self, request):
         """Re-snapshot distrikt/kvartersvärdsområde for the object just attached.

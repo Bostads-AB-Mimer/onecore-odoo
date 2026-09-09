@@ -6,6 +6,7 @@ from odoo.exceptions import UserError
 
 from ..utils.test_utils import create_maintenance_request
 from ...models.services.management_area_service import ManagementAreaService
+from ...models.services.record_management_service import RecordManagementService
 
 SOFT_RELOAD = {"type": "ir.actions.client", "tag": "soft_reload"}
 
@@ -126,7 +127,10 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
             self.assertTrue(wiz.lease_option_id)
             self.assertFalse(wiz.is_vacant)  # a contract was found
-            result = wiz.action_confirm()
+            wiz.action_confirm()
+            # A first tenant was attached - the wizard pauses to ask before
+            # closing (MIM-1953).
+            result = wiz.action_confirm_hide()
 
         self.assertEqual(result, SOFT_RELOAD)
         reloaded = self.env["maintenance.request"].browse(request.id)
@@ -161,8 +165,10 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
             self.assertFalse(wiz.lease_option_id)
             self.assertTrue(wiz.is_vacant)  # flagged for the wizard banner
-            wiz.action_confirm()
+            result = wiz.action_confirm()
 
+        # No tenant attached - nothing to ask about, the dialog closes directly.
+        self.assertEqual(result, SOFT_RELOAD)
         reloaded = self.env["maintenance.request"].browse(request.id)
         reloaded.invalidate_recordset()
         self.assertTrue(reloaded.rental_property_id)
@@ -170,10 +176,96 @@ class TestBackfillWizard(TransactionCase):
         # No tenant attached - nothing new to hide from Mina sidor (MIM-1953).
         self.assertFalse(reloaded.hidden_from_my_pages)
 
+    def test_new_tenant_attach_pauses_for_hide_confirmation(self):
+        # MIM-1953 follow-up: attaching a first tenant is asked about, not
+        # decided silently - action_confirm must not close the dialog yet.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            result = wiz.action_confirm()
+
+        self.assertNotEqual(result, SOFT_RELOAD)
+        self.assertEqual(wiz.state, "confirm_hide")
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        # The attach itself already happened - only the hide decision is pending.
+        self.assertTrue(reloaded.tenant_id)
+        self.assertFalse(reloaded.hidden_from_my_pages)
+        self.assertFalse(reloaded.recently_added_tenant)
+
+    def test_confirm_hide_yes_hides_from_my_pages(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+            result = wiz.action_confirm_hide()
+
+        self.assertEqual(result, SOFT_RELOAD)
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.hidden_from_my_pages)
+        self.assertTrue(reloaded.recently_added_tenant)
+
+    def test_confirm_no_hide_still_flags_new_customer_badge(self):
+        # Declining to hide still marks the internal "new customer" badge -
+        # that staff notification is orthogonal to Mina sidor visibility.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            wiz.action_confirm()
+            result = wiz.action_confirm_no_hide()
+
+        self.assertEqual(result, SOFT_RELOAD)
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertFalse(reloaded.hidden_from_my_pages)
+        self.assertTrue(reloaded.recently_added_tenant)
+
+    def test_re_attach_after_removal_answers_no_hide_correctly(self):
+        # Regression: hide-from-Mina-sidor from an earlier attach cycle must
+        # not linger and silently override a fresh "Nej" answer once the
+        # tenant is removed and a new one attached.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz1 = self._wizard(request, "tenant")
+        wiz1.lookup_value = "P005468"
+        with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
+            wiz1.action_search()
+            wiz1.action_confirm()
+            wiz1.action_confirm_hide()
+        self.assertTrue(request.hidden_from_my_pages)
+
+        RecordManagementService(self.env).remove_tenant(request)
+        self.assertFalse(request.tenant_id)
+
+        self._onecore_returns([OTHER_RES_LEASE], residence=OTHER_RESIDENCE)
+        wiz2 = self._wizard(request, "tenant")
+        wiz2.lookup_value = "P000999"
+        with patch.object(type(wiz2), "_get_core_api", return_value=self.fake_api):
+            wiz2.action_search()
+            wiz2.action_confirm()
+            self.assertEqual(wiz2.state, "confirm_hide")
+            wiz2.action_confirm_no_hide()
+
+        reloaded = self.env["maintenance.request"].browse(request.id)
+        reloaded.invalidate_recordset()
+        self.assertTrue(reloaded.tenant_id)
+        self.assertFalse(reloaded.hidden_from_my_pages)
+
     def test_tenant_lookup_on_tenantless_request_hides_from_my_pages(self):
         # MIM-1953: a request raised with no tenant (e.g. a supplier work order
         # on a vacant apartment) must not become visible on Mina sidor to
-        # whoever moves in later, once the wizard attaches them.
+        # whoever moves in later, once the wizard attaches them and the user
+        # confirms hiding it.
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
         self.assertFalse(request.hidden_from_my_pages)
         self._onecore_returns([RES_LEASE], residence=RESIDENCE)
@@ -182,6 +274,7 @@ class TestBackfillWizard(TransactionCase):
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
             wiz.action_search()
             wiz.action_confirm()
+            wiz.action_confirm_hide()
 
         reloaded = self.env["maintenance.request"].browse(request.id)
         reloaded.invalidate_recordset()
@@ -192,7 +285,7 @@ class TestBackfillWizard(TransactionCase):
     def test_replacing_an_existing_tenant_does_not_reset_hidden_from_my_pages(self):
         # Correcting/replacing a tenant that was already on the request is not
         # "a new customer showed up" - only a genuine no-tenant -> tenant
-        # transition should auto-hide the case.
+        # transition should ask about / auto-hide the case.
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
         self._onecore_returns([RES_LEASE], residence=RESIDENCE)
         wiz1 = self._wizard(request, "tenant")
@@ -200,6 +293,7 @@ class TestBackfillWizard(TransactionCase):
         with patch.object(type(wiz1), "_get_core_api", return_value=self.fake_api):
             wiz1.action_search()
             wiz1.action_confirm()
+            wiz1.action_confirm_hide()
         self.assertTrue(request.hidden_from_my_pages)
         # A Mimer handler reviewed the case and decided it's fine to show after all.
         request.hidden_from_my_pages = False
