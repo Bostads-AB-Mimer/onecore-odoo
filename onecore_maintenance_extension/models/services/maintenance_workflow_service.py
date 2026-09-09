@@ -7,6 +7,8 @@ from datetime import datetime
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
+from .ordering_team_service import OrderingTeamService
+
 _logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,6 @@ class MaintenanceStageManager:
     PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad", "Återsänd")
 
     ATERSAND_STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
-    KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
     def __init__(self, env):
         self.env = env
@@ -144,22 +145,20 @@ class MaintenanceStageManager:
         recordset if neither resolves; the caller then leaves the team
         unchanged."""
         orderer = record.owner_user_id or record.create_uid
-        team = (
-            self.env["maintenance.team"]
-            .sudo()
-            .search([("member_ids", "in", [orderer.id])], limit=1)
-        )
+        # MIM-1970: one definition each of "the orderer's team" and "the
+        # Kundcenter team", shared with the ordering_team_id stamp on create.
+        # kundcenter_team() resolves by xml-id (MIM-1916) and skips an
+        # archived team, so this fallback can never hand a request back to a
+        # team nobody works in.
+        service = OrderingTeamService(self.env)
+        team = service.resolve_orderer_team(orderer) or service.kundcenter_team()
         if not team:
-            # MIM-1916: resolve by xml-id, never by (translatable) name
-            team = self.env.ref(self.KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
-            if not team:
-                _logger.warning(
-                    "MIM-486: Kundcenter team (%s) not found; leaving "
-                    "maintenance_team_id unchanged for request %s",
-                    self.KUNDCENTER_TEAM_XML_ID,
-                    record.id,
-                )
-        return team or self.env["maintenance.team"]
+            _logger.warning(
+                "MIM-486: Kundcenter team missing or archived; leaving "
+                "maintenance_team_id unchanged for request %s",
+                record.id,
+            )
+        return team
 
 
 class FieldChangeTracker:
@@ -187,6 +186,12 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
+        # Beställande resursgrupp (OrderingTeamService) — stamped by create and
+        # the backfill cron. The backfill writes without the creating_records
+        # context, so without this every backfilled request gets a chatter note
+        "ordering_team_id",
+        "ordering_cost_center_code",
+        "ordering_backfilled_at",
     }
 
     def __init__(self, env):

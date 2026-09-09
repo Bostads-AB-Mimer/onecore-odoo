@@ -67,8 +67,10 @@ PRIORITY_OPTIONS = [
     ("365", "mer än 1 år"),
 ]
 
-# Creation origin options
-CREATION_ORIGINS = [("mimer-nu", "Mimer.nu"), ("internal", "Internt")]
+# Creation origin options. MIMER_NU_ORIGIN is the tenant self-service inflow;
+# OrderingTeamService keys its Kundcenter rule on it.
+MIMER_NU_ORIGIN = "mimer-nu"
+CREATION_ORIGINS = [(MIMER_NU_ORIGIN, "Mimer.nu"), ("internal", "Internt")]
 
 # Form state options
 FORM_STATES = [
