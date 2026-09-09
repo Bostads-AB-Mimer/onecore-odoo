@@ -1338,7 +1338,7 @@ class OneCoreMaintenanceRequest(
         if entering_atersand:
             team_to_record_ids = {}
             for record in self:
-                team = stage_manager.resolve_return_team(record)
+                team = stage_manager.resolve_return_team(record, vals)
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():

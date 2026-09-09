@@ -139,18 +139,38 @@ class MaintenanceStageManager:
         atersand = self._get_atersand_stage()
         return bool(atersand) and stage_id == atersand.id
 
-    def resolve_return_team(self, record):
-        """Team to hand a returned (Återsänd) request back to: the orderer's
-        first team, falling back to Kundcenter (MIM-486). Returns an empty
-        recordset if neither resolves; the caller then leaves the team
-        unchanged."""
+    def resolve_return_team(self, record, vals=None):
+        """Team to hand a returned (Återsänd) request back to (MIM-486).
+
+        MIM-2011: the ordering team stamped on the request wins when it is
+        still active — that *is* who ordered it, resolved with the category
+        and AD rules at create time, and a hand-back should go where the
+        order came from. Exception: ``vals`` (the write that moves the stage)
+        also changes ``owner_user_id``. Then the owner was changed on purpose
+        in the same act as returning it, and the new owner's team is the
+        intended target, not the stamp from the old owner
+        (test_owner_change_in_same_write_uses_new_orderer_team).
+
+        Otherwise the pre-2011 derivation: the orderer's first team, falling
+        back to Kundcenter. Returns an empty recordset if nothing resolves;
+        the caller then leaves the team unchanged."""
+        service = OrderingTeamService(self.env)
+        if not (vals and "owner_user_id" in vals) and record.ordering_team_id:
+            # search(), not a field read: an archived stamped team must fall
+            # through to the derivation, same rule as every team lookup here.
+            stamped = (
+                self.env["maintenance.team"]
+                .sudo()
+                .search([("id", "=", record.ordering_team_id.id)], limit=1)
+            )
+            if stamped:
+                return stamped
         orderer = record.owner_user_id or record.create_uid
         # MIM-1970: one definition each of "the orderer's team" and "the
         # Kundcenter team", shared with the ordering_team_id stamp on create.
         # kundcenter_team() resolves by xml-id (MIM-1916) and skips an
         # archived team, so this fallback can never hand a request back to a
         # team nobody works in.
-        service = OrderingTeamService(self.env)
         team = service.resolve_orderer_team(orderer) or service.kundcenter_team()
         if not team:
             _logger.warning(
