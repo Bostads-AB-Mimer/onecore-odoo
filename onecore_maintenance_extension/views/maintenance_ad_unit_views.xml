@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- MIM-2011: AD-enhet → resursgrupp. Edited inline by the business; no
+         seed rows, the values only exist in prod. -->
+    <record id="maintenance_ad_unit_view_list" model="ir.ui.view">
+        <field name="name">maintenance.ad.unit.list</field>
+        <field name="model">maintenance.ad.unit</field>
+        <field name="arch" type="xml">
+            <list string="AD-enheter" editable="bottom">
+                <field name="name" />
+                <field name="team_id" options="{'no_create': True}" />
+                <!-- What lookups and the unique constraint actually compare;
+                     hidden by default, useful when two rows "look different"
+                     but collide. -->
+                <field name="name_normalized" optional="hide" />
+            </list>
+        </field>
+    </record>
+
+    <record id="maintenance_ad_unit_action" model="ir.actions.act_window">
+        <field name="name">AD-enheter</field>
+        <field name="res_model">maintenance.ad.unit</field>
+        <field name="view_mode">list</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Ingen AD-enhet mappad ännu</p>
+            <p>
+                En rad per stavning i AD (officeLocation). Flera stavningar
+                kan peka på samma resursgrupp. Enheter som aldrig beställer
+                lämnas omappade.
+            </p>
+        </field>
+    </record>
+
+    <menuitem
+        id="menu_maintenance_ad_unit"
+        name="AD-enheter"
+        parent="maintenance.menu_maintenance_configuration"
+        action="maintenance_ad_unit_action"
+        groups="maintenance.group_equipment_manager,base.group_user"
+        sequence="3"
+    />
+</odoo>

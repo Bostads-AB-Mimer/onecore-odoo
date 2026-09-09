@@ -22,6 +22,7 @@ import logging
 from odoo import fields
 
 from ..constants import MIMER_NU_ORIGIN
+from ..maintenance_ad_unit import normalize_ad_unit
 
 _logger = logging.getLogger(__name__)
 
@@ -82,15 +83,55 @@ class OrderingTeamService:
         )
         if preferred:
             return preferred
+        # MIM-2011: the orderer's AD unit, when the business has mapped it to
+        # a team. Sits *after* the category rule on purpose: Kundcenter's two
+        # queues are both "Kundcenterenheten" in AD, so AD first would collapse
+        # them back into one. Sits *before* membership because membership is
+        # what gets it wrong — a person in a functional group plus the
+        # "Internt underhåll" test group (id 1) always lands on id 1.
+        ad_team = self._ad_team(orderer)
+        if ad_team:
+            return ad_team
         # No Kundcenter fallback here, deliberately. Kundcenter distributes
         # every request in the organisation, so their bucket is the largest one
         # by construction — quietly filing "we could not tell" in it would mix
         # 990 requests from 29 group-less creators (prod, 2026-09-03) in with
         # the ones they genuinely registered, and nobody could separate them
         # afterwards. An empty ordering team is the truthful answer: this
-        # request has no known ordering unit. The AD/officeLocation work is
-        # what will fill these in properly.
+        # request has no known ordering unit. An unmapped or unknown AD value
+        # falls through to here as well, exactly as before MIM-2011.
         return self.resolve_orderer_team(orderer)
+
+    def _ad_team(self, orderer):
+        """Team mapped to ``orderer``'s AD unit, or an empty recordset.
+
+        The raw AD value is normalised here, never at storage, so the SSO
+        write and the seed import give the same answer. The mapping table is
+        matched on the normalised value — never on a team name (MIM-1916).
+        """
+        if not orderer:
+            return self.env["maintenance.team"]
+        # sudo: the orderer may be read from a contractor's or the RPC
+        # integration user's env, which has no business reading res.users.
+        normalized = normalize_ad_unit(orderer.sudo().ad_office_location)
+        if not normalized:
+            return self.env["maintenance.team"]
+        unit = (
+            self.env["maintenance.ad.unit"]
+            .sudo()
+            .search([("name_normalized", "=", normalized)], limit=1)
+        )
+        if not unit:
+            return self.env["maintenance.team"]
+        # search(), not a plain field read: a mapping row may point at a team
+        # that is archived on purpose (new orderer groups are created archived
+        # until the unit starts working in Odoo) — it must not win until then
+        # (test_archived_team_is_never_the_orderer).
+        return (
+            self.env["maintenance.team"]
+            .sudo()
+            .search([("id", "=", unit.team_id.id)], limit=1)
+        )
 
     def _preferred_category_team(self, category, orderer):
         """Category-specific tie-break for someone in several teams.
@@ -203,6 +244,8 @@ class OrderingTeamService:
         kundcenter = self.kundcenter_team()
         user_to_team = self._member_team_map()
         category_overrides = self._category_preferred_team_members()
+        ad_teams = self._ad_team_map()
+        user_to_ad_unit = self._user_ad_unit_map() if ad_teams else {}
         now = fields.Datetime.now()
         groups = {}  # team id (or False when unresolved) -> request ids
         for record in records:
@@ -214,12 +257,16 @@ class OrderingTeamService:
                 orderer = record.owner_user_id or record.create_uid
                 team = None
                 if orderer:
+                    # Same precedence as resolve_ordering_team:
+                    # category → AD → membership.
                     override = category_overrides.get(
                         record.maintenance_request_category_id.id
                     )
                     if override and orderer.id in override[1]:
                         team = override[0]
-                    else:
+                    if team is None:
+                        team = ad_teams.get(user_to_ad_unit.get(orderer.id))
+                    if team is None:
                         team = user_to_team.get(orderer.id)
             groups.setdefault(team.id if team else False, []).append(record.id)
 
@@ -272,4 +319,47 @@ class OrderingTeamService:
             if not team:
                 continue
             mapping[category.id] = (team, set(team.member_ids.ids))
+        return mapping
+
+    def _ad_team_map(self):
+        """normalised AD unit -> team, for mapping rows whose team is active.
+
+        Precomputed once per batch (a few dozen rows), same reasoning as
+        ``_member_team_map``. search() on the team, not a field read, so a
+        row pointing at an archived team drops out here exactly as it does in
+        ``_ad_team`` on the create path.
+        """
+        mapping = {}
+        Team = self.env["maintenance.team"].sudo()
+        for unit in self.env["maintenance.ad.unit"].sudo().search([]):
+            if not unit.name_normalized:
+                continue
+            team = Team.search([("id", "=", unit.team_id.id)], limit=1)
+            if team:
+                mapping[unit.name_normalized] = team
+        return mapping
+
+    def _user_ad_unit_map(self):
+        """user id -> normalised AD unit, for users that have one.
+
+        active_test=False: the creators of old requests may well have left
+        the company since, and their AD unit is still the truthful answer for
+        what they ordered back then.
+        """
+        rows = (
+            self.env["res.users"]
+            .sudo()
+            .with_context(active_test=False)
+            .search_read(
+                [("ad_office_location", "!=", False)],
+                ["ad_office_location"],
+            )
+        )
+        mapping = {}
+        for row in rows:
+            normalized = normalize_ad_unit(row["ad_office_location"])
+            # A whitespace-only value is "no AD unit", same as on the create
+            # path where _ad_team returns early on an empty normalisation.
+            if normalized:
+                mapping[row["id"]] = normalized
         return mapping

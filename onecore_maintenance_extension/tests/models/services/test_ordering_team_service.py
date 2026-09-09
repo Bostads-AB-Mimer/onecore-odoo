@@ -5,8 +5,16 @@ a technical integration user and a derivation would be meaningless), the
 backfill cron and its guess stamp, and the search facet that makes the
 follow-up views MIM-1975/1976/1977 pure configuration.
 """
+from psycopg2 import IntegrityError
+
+from odoo.exceptions import AccessError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
+from odoo.tools import mute_logger
+
+from odoo.addons.onecore_maintenance_extension.models.maintenance_ad_unit import (
+    normalize_ad_unit,
+)
 
 from ...utils.test_utils import (
     create_internal_user,
@@ -353,6 +361,286 @@ class TestOrderingTeamService(TransactionCase):
         self.env["maintenance.request"]._cron_backfill_ordering_team()
 
         self.assertEqual(len(request.message_ids), messages_before)
+
+    # ------------------------------------------------------------------
+    # AD unit (MIM-2011): category → AD → membership
+    # ------------------------------------------------------------------
+    def _map_ad_unit(self, name, team):
+        return self.env["maintenance.ad.unit"].create(
+            {"name": name, "team_id": team.id}
+        )
+
+    def test_normalize_ad_unit_merges_the_known_prod_variants(self):
+        """The three pairs seen among the 33 prod values. Only the HR pair is
+        merged by normalisation; Kundcenter/Kundcenterenheten and the
+        Besiktings-/Besiktnings- typo are genuinely different strings and get
+        one mapping row each (test_two_spellings_can_map_to_the_same_team)."""
+        self.assertEqual(
+            normalize_ad_unit("HR- och social hållbarhets avdelningen"),
+            normalize_ad_unit("HR- och social hållbarhetsavdelningen"),
+        )
+        self.assertEqual(normalize_ad_unit("  Kundcenter  "), "kundcenter")
+        self.assertEqual(normalize_ad_unit("Distrikt   Öst"), "distrikt öst")
+        self.assertNotEqual(
+            normalize_ad_unit("Kundcenter"), normalize_ad_unit("Kundcenterenheten")
+        )
+        self.assertNotEqual(
+            normalize_ad_unit("Besiktings- och målerienheten"),
+            normalize_ad_unit("Besiktnings- och målerienheten"),
+        )
+        self.assertEqual(normalize_ad_unit(None), "")
+        self.assertEqual(normalize_ad_unit(""), "")
+
+    def test_create_teamless_creator_with_mapped_ad_unit_gets_the_team(self):
+        """AC 3 — the 990-request gap: a creator in no resource group, but
+        with a mapped AD unit, is no longer left empty."""
+        self._map_ad_unit("Fastighetsserviceenheten", self.other_team)
+        self.teamless_user.write({"ad_office_location": "Fastighetsserviceenheten"})
+
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+        self.assertEqual(request.ordering_cost_center_code, "61130")
+        self.assertFalse(request.ordering_backfilled_at)
+
+    def test_create_ad_unit_wins_over_the_lowest_id_membership(self):
+        """AC 4 — Annelie/David: a member of a functional group *and* the
+        "Internt underhåll" test group always landed on the lowest id. The AD
+        unit names the real group."""
+        self.other_team.write({"member_ids": [(4, self.district_user.id)]})
+        # Baseline: lowest id wins without an AD unit
+        self.assertEqual(
+            create_maintenance_request(self.env(user=self.district_user)).ordering_team_id,
+            self.district_team,
+        )
+
+        self._map_ad_unit("Annan enhet", self.other_team)
+        self.district_user.write({"ad_office_location": "Annan enhet"})
+
+        request = create_maintenance_request(self.env(user=self.district_user))
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_create_ad_unit_does_not_require_membership(self):
+        """Unlike the category override, the AD rule is not gated on the
+        orderer being a member of the mapped team: the whole point is to
+        resolve people whose Odoo membership is missing or misleading."""
+        self._map_ad_unit("Annan enhet", self.other_team)
+        self.district_user.write({"ad_office_location": "Annan enhet"})
+        self.assertNotIn(self.district_user, self.other_team.member_ids)
+
+        request = create_maintenance_request(self.env(user=self.district_user))
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_create_category_override_wins_over_the_ad_unit(self):
+        """Kundcenter's two queues are both "Kundcenterenheten" in AD. AD
+        before the category would collapse them back into one — the
+        category rule has to come first."""
+        self._map_ad_unit("Kundcenterenheten", self.inkomna)
+        self.kundcenter_user.write({"ad_office_location": "Kundcenterenheten"})
+
+        key_request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+        plain_request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.plain_category.id,
+        )
+
+        self.assertEqual(key_request.ordering_team_id, self.nyckel)
+        self.assertEqual(plain_request.ordering_team_id, self.inkomna)
+
+    def test_create_ad_unit_uses_owner_over_creator(self):
+        """Same orderer precedence as every other rule: owner_user_id first."""
+        self._map_ad_unit("Annan enhet", self.other_team)
+        self.teamless_user.write({"ad_office_location": "Annan enhet"})
+
+        request = create_maintenance_request(
+            self.env(user=self.district_user), owner_user_id=self.teamless_user.id
+        )
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_create_from_mimer_nu_ignores_the_ad_unit(self):
+        """Tenant reports go to Kundcenter regardless of what the integration
+        user's own AD unit says — same reasoning as for the category override."""
+        integration_user = create_internal_user(self.env)
+        self._map_ad_unit("IT-enheten", self.other_team)
+        integration_user.write({"ad_office_location": "IT-enheten"})
+
+        request = create_maintenance_request(
+            self.env(user=integration_user), creation_origin="mimer-nu"
+        )
+
+        self.assertEqual(request.ordering_team_id, self.kundcenter)
+
+    def test_create_ad_lookup_is_normalised(self):
+        """The mapping row is stored as AD spells it; the user's value may
+        differ in case, padding or the stray space before "avdelningen"."""
+        self._map_ad_unit("HR- och social hållbarhetsavdelningen", self.other_team)
+        self.teamless_user.write(
+            {"ad_office_location": "  hr- och social hållbarhets   avdelningen "}
+        )
+
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_two_spellings_can_map_to_the_same_team(self):
+        """Why this is a table and not a Char on the team."""
+        self._map_ad_unit("Besiktings- och målerienheten", self.other_team)
+        self._map_ad_unit("Besiktnings- och målerienheten", self.other_team)
+        typo_user = create_internal_user(
+            self.env, ad_office_location="Besiktings- och målerienheten"
+        )
+        correct_user = create_internal_user(
+            self.env, ad_office_location="Besiktnings- och målerienheten"
+        )
+
+        self.assertEqual(
+            create_maintenance_request(self.env(user=typo_user)).ordering_team_id,
+            self.other_team,
+        )
+        self.assertEqual(
+            create_maintenance_request(self.env(user=correct_user)).ordering_team_id,
+            self.other_team,
+        )
+
+    def test_duplicate_normalised_spelling_is_rejected(self):
+        """Two rows for the same unit would let whichever search() returns
+        first win silently. The constraint is on the normalised value."""
+        self._map_ad_unit("Kundcenter", self.inkomna)
+
+        with self.assertRaises(IntegrityError), mute_logger("odoo.sql_db"):
+            self._map_ad_unit("  KUNDCENTER ", self.nyckel)
+
+    def test_editing_a_row_into_a_duplicate_is_rejected(self):
+        self._map_ad_unit("Kundcenter", self.inkomna)
+        row = self._map_ad_unit("Kundcenterenheten", self.inkomna)
+
+        with self.assertRaises(IntegrityError), mute_logger("odoo.sql_db"):
+            row.write({"name": "kundcenter"})
+            self.env.flush_all()
+
+    def test_create_unmapped_ad_unit_changes_nothing(self):
+        """AC 6 — a value nobody has mapped (Projektenheten will never work in
+        Odoo) falls through to membership exactly as before MIM-2011."""
+        self.district_user.write({"ad_office_location": "Projektenheten"})
+        self.teamless_user.write({"ad_office_location": "Projektenheten"})
+
+        self.assertEqual(
+            create_maintenance_request(self.env(user=self.district_user)).ordering_team_id,
+            self.district_team,
+        )
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+        self.assertFalse(request.ordering_team_id)
+        self.assertTrue(request.ordering_backfilled_at)
+
+    def test_create_mapping_to_an_archived_team_is_ignored(self):
+        """AC 7 — Besiktning och Måleri, Fastighetsutveckling and IT were
+        created archived (2026-09-07) so the mapping can be entered ahead of
+        time. The row must stay inert until the team is unarchived."""
+        archived_team = create_maintenance_team(self.env, name="Arkiverad enhet")
+        self._map_ad_unit("IT-enheten", archived_team)
+        archived_team.action_archive()
+        self.district_user.write({"ad_office_location": "IT-enheten"})
+        self.teamless_user.write({"ad_office_location": "IT-enheten"})
+
+        self.assertEqual(
+            create_maintenance_request(self.env(user=self.district_user)).ordering_team_id,
+            self.district_team,
+        )
+        self.assertFalse(
+            create_maintenance_request(self.env(user=self.teamless_user)).ordering_team_id
+        )
+
+    def test_backfill_applies_the_ad_unit_rule(self):
+        """AC 5 — same rule for old requests, from a precomputed map."""
+        self._map_ad_unit("Fastighetsserviceenheten", self.other_team)
+        self.teamless_user.write({"ad_office_location": "Fastighetsserviceenheten"})
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+        self._clear_ordering(request)
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+        self.assertEqual(request.ordering_cost_center_code, "61130")
+        self.assertTrue(request.ordering_backfilled_at)
+
+    def test_backfill_category_override_wins_over_the_ad_unit(self):
+        self._map_ad_unit("Kundcenterenheten", self.inkomna)
+        self.kundcenter_user.write({"ad_office_location": "Kundcenterenheten"})
+        request = create_maintenance_request(
+            self.env(user=self.kundcenter_user),
+            maintenance_request_category_id=self.key_category.id,
+        )
+        self._clear_ordering(request)
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.nyckel)
+
+    def test_backfill_ad_unit_wins_over_the_lowest_id_membership(self):
+        self.other_team.write({"member_ids": [(4, self.district_user.id)]})
+        self._map_ad_unit("Annan enhet", self.other_team)
+        self.district_user.write({"ad_office_location": "Annan enhet"})
+        request = create_maintenance_request(self.env(user=self.district_user))
+        self._clear_ordering(request)
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_backfill_never_uses_a_mapping_to_an_archived_team(self):
+        """The precomputed map must re-check the team's active state itself,
+        same as test_backfill_never_uses_an_archived_preferred_team."""
+        archived_team = create_maintenance_team(self.env, name="Arkiverad enhet")
+        self._map_ad_unit("IT-enheten", archived_team)
+        self.district_user.write({"ad_office_location": "IT-enheten"})
+        request = create_maintenance_request(self.env(user=self.district_user))
+        self._clear_ordering(request)
+        archived_team.action_archive()
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.district_team)
+
+    def test_backfill_counts_the_ad_unit_of_an_archived_creator(self):
+        """Old requests were often created by people who have since left. An
+        archived user's AD unit is still the truthful answer for what they
+        ordered back then — the user map must not be active-filtered."""
+        self._map_ad_unit("Fastighetsserviceenheten", self.other_team)
+        self.teamless_user.write({"ad_office_location": "Fastighetsserviceenheten"})
+        request = create_maintenance_request(self.env(user=self.teamless_user))
+        self._clear_ordering(request)
+        self.teamless_user.action_archive()
+
+        self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+        self.assertEqual(request.ordering_team_id, self.other_team)
+
+    def test_ad_unit_mapping_is_read_only_for_plain_users(self):
+        """The business edits the table; everybody else only reads it."""
+        plain_user = create_internal_user(
+            self.env, group_ids=[(6, 0, [self.env.ref("base.group_user").id])]
+        )
+        self._map_ad_unit("Kundcenter", self.inkomna)
+
+        self.assertTrue(self.env(user=plain_user)["maintenance.ad.unit"].search([]))
+        with self.assertRaises(AccessError):
+            self.env(user=plain_user)["maintenance.ad.unit"].create(
+                {"name": "IT-enheten", "team_id": self.other_team.id}
+            )
+
+    def test_ad_unit_menu_sits_under_configuration(self):
+        menu = self.env.ref("onecore_maintenance_extension.menu_maintenance_ad_unit")
+
+        self.assertEqual(
+            menu.parent_id, self.env.ref("maintenance.menu_maintenance_configuration")
+        )
+        self.assertEqual(menu.action.res_model, "maintenance.ad.unit")
 
     # ------------------------------------------------------------------
     # Cron record / search facet

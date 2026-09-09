@@ -51,7 +51,7 @@ jobs:
               TEST_DB_NAME=\"test_onecore_\$(date +%s)\"
               echo \"Running tests with database: \$TEST_DB_NAME\"
 
-              ONECORE_MODULES=\"onecore_base_extension,onecore_api,onecore_ui,onecore_web_extension,onecore_mail_extension,onecore_maintenance_extension\"
+              ONECORE_MODULES=\"onecore_base_extension,onecore_api,onecore_ui,onecore_web_extension,onecore_mail_extension,onecore_maintenance_extension,onecore_auth\"
 
               odoo \
                 --addons-path=\"/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons\" \
