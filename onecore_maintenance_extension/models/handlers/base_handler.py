@@ -83,7 +83,6 @@ class BaseMaintenanceHandler:
             "lease_type": lease["type"],
             "lease_status": status,
             "lease_start_date": lease["leaseStartDate"],
-            "lease_end_date": lease["lastDebitDate"],
             "last_debit_date": lease["lastDebitDate"],
             "contract_date": lease["contractDate"],
             "approval_date": lease["approvalDate"],

@@ -92,8 +92,15 @@ def _fix_lease_id(cr):
 
 
 def _recompute_name(cr):
+    # lease_status is a brand-new Integer column with no SQL default, so
+    # every pre-existing row has it NULL rather than 0 — but the ORM (both
+    # _compute_lease_status_label and this same migration's init_models()
+    # pass) reads a NULL Integer as 0 ("Gällande"). COALESCE here mirrors
+    # that so the CASE below doesn't fall through to the bare-lease_id ELSE
+    # branch for exactly the pre-existing rows the ORM already treats as
+    # status 0.
     when_clauses = "\n            ".join(
-        f"WHEN lease_status = {status} THEN lease_id || ' ({label})'"
+        f"WHEN COALESCE(lease_status, 0) = {status} THEN lease_id || ' ({label})'"
         for status, label in LEASE_STATUS_LABELS.items()
     )
 

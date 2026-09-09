@@ -173,6 +173,29 @@ class TestLeaseSuffixMigration(TransactionCase):
 
         self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
 
+    def test_recomputes_name_for_a_legacy_row_with_null_lease_status(self):
+        """A genuinely pre-existing row: lease_status is SQL NULL (no
+        default backfilled it), exactly as _init_column leaves every
+        maintenance_lease row that predates the column. The ORM reads a NULL
+        Integer as 0 ("Gällande"), so the migration's SQL must treat NULL the
+        same way instead of falling through to the bare lease_id ELSE
+        branch."""
+        lease = self._create_frozen_row(
+            lease_id="216-034-03-0101/01",
+            name="216-034-03-0101/01",
+            lease_status=0,
+        )
+        self.env.flush_all()
+        self.env.cr.execute(
+            "UPDATE maintenance_lease SET lease_status = NULL WHERE id = %s",
+            (lease.id,),
+        )
+        self.env.invalidate_all()
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
+
     # -- idempotency -------------------------------------------------------
 
     def test_is_idempotent(self):
