@@ -1258,8 +1258,29 @@ class OneCoreMaintenanceRequest(
             and stage_manager.is_atersand_stage(vals["stage_id"])
             and any(record.stage_id.id != vals["stage_id"] for record in self)
         )
+        # MIM-2011 (PR #286 review): which records actually get a *different*
+        # owner in this write. Captured before super().write(), same as
+        # master_key_changed_ids below — afterwards record.owner_user_id
+        # already holds the new value and the old one is gone.
+        # Key presence in vals is not enough: a caller that resubmits the full
+        # field set (bulk server action, XML-RPC, a form posting every field)
+        # sends owner_user_id unchanged, and treating that as a hand-over
+        # would discard the stamped ordering team and fall back to the
+        # membership derivation — the exact wrong-team bug MIM-2011 fixes.
+        owner_changed_ids = set()
         if entering_atersand:
             vals["user_id"] = False
+            if vals.get("owner_user_id"):
+                # Only a hand-over to a *different, real* owner counts.
+                # Clearing the owner (owner_user_id=False) is not one: there
+                # is no new owner whose team could be the intended target, and
+                # the stamp is still the truest answer to who ordered it.
+                new_owner_id = vals["owner_user_id"]
+                owner_changed_ids = {
+                    record.id
+                    for record in self
+                    if (record.owner_user_id.id or False) != new_owner_id
+                }
             if external_contractor_service.is_external_contractor():
                 # Keep the returning contractor's access after the team
                 # switch. web_save re-reads the record in the same
@@ -1338,7 +1359,9 @@ class OneCoreMaintenanceRequest(
         if entering_atersand:
             team_to_record_ids = {}
             for record in self:
-                team = stage_manager.resolve_return_team(record, vals)
+                team = stage_manager.resolve_return_team(
+                    record, owner_changed=record.id in owner_changed_ids
+                )
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():

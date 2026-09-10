@@ -113,6 +113,24 @@ class TestAdOfficeLocationSync(TransactionCase):
 
         self.assertEqual(self.user.ad_office_location, "Rätt claim")
 
+    def test_multivalued_claim_is_refused_and_logged(self):
+        """PR #286 review. "Multivalued" is a checkbox on the hand-made
+        Keycloak mapper; with it on, the claim arrives as a list. str() would
+        store the literal "['Kundcenterenheten']" — no exception, so the
+        except branch never fires, and normalize_ad_unit would then match no
+        mapping row with nothing in the log to explain why."""
+        self.user.write({"ad_office_location": "Kundcenter"})
+
+        with self.assertLogs(
+            "odoo.addons.onecore_auth.models.res_users", "WARNING"
+        ) as logs:
+            login = self._signin({"office_location": ["Kundcenterenheten"]})
+
+        self.assertEqual(login, "ad.test@example.com")
+        # The good value from the import is left alone, not overwritten
+        self.assertEqual(self.user.ad_office_location, "Kundcenter")
+        self.assertIn("multivalued", logs.output[0])
+
     def test_unknown_subject_writes_nothing(self):
         """Stock denies the login; the sync must not run for a user that was
         never resolved."""
