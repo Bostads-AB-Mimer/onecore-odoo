@@ -334,6 +334,41 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
 
         self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
 
+    def test_owner_rewritten_to_the_same_value_keeps_the_stamp(self):
+        """PR #286 review. A caller that resubmits the whole field set (bulk
+        server action, XML-RPC, a form posting every field) sends
+        owner_user_id along unchanged. That is not a hand-over, so the stamped
+        ordering team must still win — testing for the key being present in
+        vals instead of the value having changed sent the request to the
+        membership-derived team, the exact bug MIM-2011 fixes."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+
+        request.write(
+            {
+                "owner_user_id": self.internal_user.id,  # unchanged
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+
+        self.assertEqual(request.maintenance_team_id, stamped_team)
+        self.assertNotEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_clearing_the_owner_keeps_the_stamp(self):
+        """Clearing the owner is not a hand-over: there is no new owner whose
+        team could be the target, and the stamp is still the truest answer to
+        who ordered the request."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+
+        request.write(
+            {"owner_user_id": False, "stage_id": self.stage_atersand.id}
+        )
+
+        self.assertEqual(request.maintenance_team_id, stamped_team)
+
     def test_request_without_stamp_still_uses_membership(self):
         """Pre-MIM-1970 rows (no ordering team, backfill not run) keep the
         original derivation."""

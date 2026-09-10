@@ -55,7 +55,26 @@ class ResUsers(models.Model):
             if claim not in validation:
                 return
             value = validation[claim]
-            value = str(value).strip() if value is not None else ""
+            if value is None:
+                return
+            if not isinstance(value, str):
+                # A multivalued protocol mapper delivers a list, and str()
+                # would happily store "['Kundcenterenheten']" — no exception,
+                # so the except below never fires, and normalize_ad_unit then
+                # silently matches no maintenance.ad.unit row with nothing in
+                # the log to explain why. The mapper is created by hand in
+                # Keycloak and the spec says multivalued OFF, so this is a
+                # configuration mistake worth shouting about (PR #286 review).
+                _logger.warning(
+                    "MIM-2011: Keycloak claim %r for %s is %s, expected a "
+                    "string. Check that the protocol mapper has multivalued "
+                    "OFF. The AD unit was not written.",
+                    claim,
+                    login,
+                    type(value).__name__,
+                )
+                return
+            value = value.strip()
             if not value:
                 return
             user = self.sudo().search([("login", "=", login)], limit=1)

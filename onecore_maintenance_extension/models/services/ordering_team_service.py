@@ -78,29 +78,57 @@ class OrderingTeamService:
             # Nyckelbeställningar queue, it landed in their inbox.
             return self.kundcenter_team()
         orderer = request.owner_user_id or request.create_uid
-        preferred = self._preferred_category_team(
-            request.maintenance_request_category_id, orderer
-        )
-        if preferred:
-            return preferred
-        # MIM-2011: the orderer's AD unit, when the business has mapped it to
-        # a team. Sits *after* the category rule on purpose: Kundcenter's two
-        # queues are both "Kundcenterenheten" in AD, so AD first would collapse
-        # them back into one. Sits *before* membership because membership is
-        # what gets it wrong — a person in a functional group plus the
-        # "Internt underhåll" test group (id 1) always lands on id 1.
-        ad_team = self._ad_team(orderer)
-        if ad_team:
-            return ad_team
-        # No Kundcenter fallback here, deliberately. Kundcenter distributes
-        # every request in the organisation, so their bucket is the largest one
-        # by construction — quietly filing "we could not tell" in it would mix
-        # 990 requests from 29 group-less creators (prod, 2026-09-03) in with
-        # the ones they genuinely registered, and nobody could separate them
-        # afterwards. An empty ordering team is the truthful answer: this
-        # request has no known ordering unit. An unmapped or unknown AD value
-        # falls through to here as well, exactly as before MIM-2011.
-        return self.resolve_orderer_team(orderer)
+        # No Kundcenter fallback at the end, deliberately. Kundcenter
+        # distributes every request in the organisation, so their bucket is the
+        # largest one by construction — quietly filing "we could not tell" in
+        # it would mix 990 requests from 29 group-less creators (prod,
+        # 2026-09-03) in with the ones they genuinely registered, and nobody
+        # could separate them afterwards. An empty ordering team is the
+        # truthful answer: this request has no known ordering unit. An unmapped
+        # or unknown AD value falls all the way through too, exactly as before
+        # MIM-2011.
+        return self._first_team(
+            lambda: self._preferred_category_team(
+                request.maintenance_request_category_id, orderer
+            ),
+            lambda: self._ad_team(orderer),
+            lambda: self.resolve_orderer_team(orderer),
+        ) or self.env["maintenance.team"]
+
+    @staticmethod
+    def _first_team(*candidates):
+        """First candidate that resolves to a team, or None.
+
+        THE precedence — category → AD → membership — and the only place it is
+        written down. Both write paths call this with their own lookups: the
+        create path resolves each candidate with a search(), the backfill
+        resolves them from maps it built once for the whole batch. The lookups
+        differ on purpose (no per-row query in the backfill); the order must
+        not.
+
+        PR #286 review: before this, the order was spelled out twice and kept
+        in sync by a comment. A rule added to one path and forgotten in the
+        other makes newly created and backfilled requests answer differently
+        for the same orderer, silently — which has happened once already, and
+        is why test_backfill_never_uses_an_archived_preferred_team exists.
+        """
+        for candidate in candidates:
+            team = candidate()
+            if team:
+                return team
+        return None
+
+    def _category_team_from_map(self, record, orderer, category_overrides):
+        """The category override for ``record``, resolved from a prebuilt map.
+
+        The backfill's counterpart to _preferred_category_team: same rule,
+        including that it only fires when the orderer is actually a member of
+        the preferred team.
+        """
+        override = category_overrides.get(record.maintenance_request_category_id.id)
+        if override and orderer.id in override[1]:
+            return override[0]
+        return None
 
     def _ad_team(self, orderer):
         """Team mapped to ``orderer``'s AD unit, or an empty recordset.
@@ -257,17 +285,16 @@ class OrderingTeamService:
                 orderer = record.owner_user_id or record.create_uid
                 team = None
                 if orderer:
-                    # Same precedence as resolve_ordering_team:
-                    # category → AD → membership.
-                    override = category_overrides.get(
-                        record.maintenance_request_category_id.id
+                    # Same order as the create path, from the one place it is
+                    # defined. Only the lookups differ: maps built once for
+                    # the batch instead of a search per row.
+                    team = self._first_team(
+                        lambda: self._category_team_from_map(
+                            record, orderer, category_overrides
+                        ),
+                        lambda: ad_teams.get(user_to_ad_unit.get(orderer.id)),
+                        lambda: user_to_team.get(orderer.id),
                     )
-                    if override and orderer.id in override[1]:
-                        team = override[0]
-                    if team is None:
-                        team = ad_teams.get(user_to_ad_unit.get(orderer.id))
-                    if team is None:
-                        team = user_to_team.get(orderer.id)
             groups.setdefault(team.id if team else False, []).append(record.id)
 
         Team = self.env["maintenance.team"].sudo()

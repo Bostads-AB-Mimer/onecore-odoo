@@ -621,6 +621,44 @@ class TestOrderingTeamService(TransactionCase):
 
         self.assertEqual(request.ordering_team_id, self.other_team)
 
+    def test_create_and_backfill_agree_on_every_precedence_case(self):
+        """PR #286 review: the precedence now lives in one place
+        (_first_team), but the two paths still feed it different lookups —
+        a search per request on create, prebuilt maps in the backfill. This
+        is the test that catches them drifting apart: whatever create stamps,
+        the backfill must reproduce for the same orderer and category."""
+        self._map_ad_unit("Kundcenterenheten", self.inkomna)
+        self._map_ad_unit("Fastighetsserviceenheten", self.other_team)
+        self.kundcenter_user.write({"ad_office_location": "Kundcenterenheten"})
+        self.teamless_user.write({"ad_office_location": "Fastighetsserviceenheten"})
+        self.district_user.write({"ad_office_location": "Enhet ingen mappat"})
+
+        cases = [
+            # category beats AD
+            (self.kundcenter_user, self.key_category),
+            # AD beats the lowest-id membership
+            (self.kundcenter_user, self.plain_category),
+            # AD resolves someone with no team at all
+            (self.teamless_user, self.plain_category),
+            # unmapped AD value falls through to membership
+            (self.district_user, self.plain_category),
+        ]
+        for user, category in cases:
+            with self.subTest(user=user.login, category=category.name):
+                stamped = create_maintenance_request(
+                    self.env(user=user),
+                    maintenance_request_category_id=category.id,
+                )
+                guessed = create_maintenance_request(
+                    self.env(user=user),
+                    maintenance_request_category_id=category.id,
+                )
+                self._clear_ordering(guessed)
+
+                self.env["maintenance.request"]._cron_backfill_ordering_team()
+
+                self.assertEqual(guessed.ordering_team_id, stamped.ordering_team_id)
+
     def test_ad_unit_mapping_is_read_only_for_plain_users(self):
         """The business edits the table; everybody else only reads it."""
         plain_user = create_internal_user(
