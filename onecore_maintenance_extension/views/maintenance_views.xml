@@ -671,13 +671,24 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
+                                        <!-- MIM-1954: lease_name recomputes from this whenever
+                                        ir_cron_sync_lease_status changes lease_status, so the two
+                                        stay consistent. lease_option_id's display name (shown only
+                                        before creation, above) is still a frozen snapshot - the
+                                        option is discarded once the case is created. -->
+                                        <field name="lease_status_label"
+                                            string="Kontraktsstatus"
+                                            invisible="not lease_status_label" />
 
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"
                                             invisible="create_date and not lease_name" />
-                                        <field name="lease_end_date"
-                                            string="Slutdatum"
+                                        <!-- MIM-1954: last_debit_date, not lease_end_date - OneCore
+                                        never returns a true contract end date, only sista
+                                        debiteringsdatum, so lease_end_date is left unused here. -->
+                                        <field name="last_debit_date"
+                                            string="Sista debiteringsdatum"
                                             invisible="create_date and not lease_name" />
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"

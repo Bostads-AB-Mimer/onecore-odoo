@@ -1,6 +1,29 @@
 """Helper functions for maintenance requests."""
 
+import logging
 import os
+
+_logger = logging.getLogger(__name__)
+
+# OneCore's lease status strings, mapped to the numeric codes used throughout
+# this addon (LEASE_STATUS_LABELS in constants.py).
+LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
+UNKNOWN_LEASE_STATUS = 4
+
+
+def normalize_lease_status(raw_status):
+    """Normalize a OneCore lease status to a LEASE_STATUS_LABELS key.
+
+    Accepts either OneCore's string status ("Current", "Upcoming", ...) or an
+    already-numeric LEASE_STATUS_LABELS code, so callers that re-fetch a lease
+    and callers that already hold a normalized value can share this function.
+    """
+    if raw_status in LEASE_STATUS_MAP:
+        return LEASE_STATUS_MAP[raw_status]
+    if raw_status in LEASE_STATUS_MAP.values():
+        return raw_status
+    _logger.warning("Unexpected lease status value: %s", raw_status)
+    return UNKNOWN_LEASE_STATUS
 
 
 def is_local():

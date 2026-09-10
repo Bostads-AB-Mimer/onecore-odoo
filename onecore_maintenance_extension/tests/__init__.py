@@ -37,6 +37,7 @@ from .models import test_schedule_date_warning
 from .models import test_maintenance_district
 from .models.services import test_management_area_service
 from .models.services import test_onecore_flag_sync_service
+from .models.services import test_lease_suffix_migration
 from .models.services import test_ordering_team_service
 from . import test_stage_hook
 from .utils import test_component_utils

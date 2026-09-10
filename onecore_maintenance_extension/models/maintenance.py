@@ -1680,6 +1680,17 @@ class OneCoreMaintenanceRequest(
         return OneCoreFlagSyncService(self.env).sync_special_attention()
 
     @api.model
+    def _cron_sync_lease_status(self):
+        """Refresh kontraktsstatus and sista debiteringsdatum on every open
+        request's lease (MIM-1954).
+
+        Hourly, like special attention: a contract's status changes about as
+        often as that flag does, and a run costs one call per 500 distinct
+        lease ids rather than one per open request.
+        """
+        return OneCoreFlagSyncService(self.env).sync_lease_status()
+
+    @api.model
     def _cron_backfill_ordering_team(self, limit=5000):
         """Scheduled action (hourly): stamp "Beställande resursgrupp" on
         requests created before MIM-1970, guessed from who created them.

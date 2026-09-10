@@ -317,6 +317,21 @@ class CoreApi:
         content = self._get_json("/residences/block-reasons", **kwargs) or []
         return [item.get("caption") for item in content if item.get("caption")]
 
+    def fetch_leases_batch(self, lease_ids, **kwargs):
+        """Batch lease lookup by lease id via POST /leases/batch.
+
+        A POST body, not query params: unlike a contact code batch, the
+        number of leases in play (every open ärende's contract) is unbounded
+        and a URL can't safely carry hundreds of ids.
+        """
+        if not lease_ids:
+            return []
+        response = self.request(
+            "POST", "/leases/batch", json={"leaseIds": lease_ids}, **kwargs
+        )
+        response.raise_for_status()
+        return response.json().get("content")
+
     def fetch_contacts_batch(self, contact_codes, **kwargs):
         """Lean batch contact lookup by contact code.
 
