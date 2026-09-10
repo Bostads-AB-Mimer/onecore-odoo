@@ -106,11 +106,12 @@ class OrderingTeamService:
         differ on purpose (no per-row query in the backfill); the order must
         not.
 
-        PR #286 review: before this, the order was spelled out twice and kept
-        in sync by a comment. A rule added to one path and forgotten in the
-        other makes newly created and backfilled requests answer differently
-        for the same orderer, silently — which has happened once already, and
-        is why test_backfill_never_uses_an_archived_preferred_team exists.
+        Spelling the order out separately in each path and keeping the two in
+        sync by hand is how they drift: a rule added to one and forgotten in
+        the other makes newly created and backfilled requests answer
+        differently for the same orderer, silently. That has happened once
+        already — test_backfill_never_uses_an_archived_preferred_team exists
+        because of it.
         """
         for candidate in candidates:
             team = candidate()
@@ -220,6 +221,19 @@ class OrderingTeamService:
             # later and derive a team from the creator's *then-current*
             # membership, silently rewriting a history that was already
             # correctly "no team" at create time.
+            #
+            # Rollout caveat for the AD rule: this stamp is final, and
+            # backfill_batch's domain never revisits a stamped row. A
+            # request created by a group-less user *after* release but
+            # *before* the business has filled in the AD mapping table is
+            # therefore stamped "no ordering team" for good, even though its
+            # orderer's AD unit — a stable fact that merely arrived late, not
+            # a membership that may since have changed — would resolve it.
+            # Closing that window is a one-off job, not a code change: clear
+            # ordering_backfilled_at on rows that still have no
+            # ordering_team_id once the table is filled, then let the backfill
+            # cron pick them up. Without it the AD rule is forward-only for
+            # that window.
             request.sudo().write({"ordering_backfilled_at": fields.Datetime.now()})
             return False
         # sudo: creators over RPC (mimer.nu) and contractors must not be

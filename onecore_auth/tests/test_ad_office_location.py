@@ -7,6 +7,7 @@ tokeninfo + userinfo dict with the subject already renamed to ``user_id``.
 from unittest.mock import patch
 
 from odoo.tests import TransactionCase, tagged
+from odoo.tools import mute_logger
 
 from ..models.res_users import OFFICE_LOCATION_CLAIM_PARAM
 
@@ -114,8 +115,8 @@ class TestAdOfficeLocationSync(TransactionCase):
         self.assertEqual(self.user.ad_office_location, "Rätt claim")
 
     def test_multivalued_claim_is_refused_and_logged(self):
-        """PR #286 review. "Multivalued" is a checkbox on the hand-made
-        Keycloak mapper; with it on, the claim arrives as a list. str() would
+        """"Multivalued" is a checkbox on the hand-made Keycloak mapper; with
+        it on, the claim arrives as a list. str() would
         store the literal "['Kundcenterenheten']" — no exception, so the
         except branch never fires, and normalize_ad_unit would then match no
         mapping row with nothing in the log to explain why."""
@@ -130,6 +131,31 @@ class TestAdOfficeLocationSync(TransactionCase):
         # The good value from the import is left alone, not overwritten
         self.assertEqual(self.user.ad_office_location, "Kundcenter")
         self.assertIn("multivalued", logs.output[0])
+
+    def test_database_error_leaves_the_transaction_usable(self):
+        """A database-level failure aborts the whole Postgres transaction, so
+        swallowing the exception is not enough on its own: without the
+        savepoint the controller's next query fails with
+        InFailedSqlTransaction and the user is locked out anyway, from a
+        place that points nowhere near this code."""
+        Users = self.env.registry["res.users"]
+        original_write = Users.write
+
+        def failing_write(records, vals):
+            if "ad_office_location" in vals:
+                records.env.cr.execute("SELECT 1 / 0")
+            return original_write(records, vals)
+
+        with patch.object(Users, "write", autospec=True, side_effect=failing_write), \
+                mute_logger("odoo.sql_db"), \
+                self.assertLogs("odoo.addons.onecore_auth.models.res_users", "ERROR"):
+            login = self._signin({"office_location": "Kundcenterenheten"})
+
+        self.assertEqual(login, "ad.test@example.com")
+        # The savepoint rolled back only the field write: the cursor still works
+        self.assertTrue(
+            self.env["res.users"].search_count([("id", "=", self.user.id)])
+        )
 
     def test_unknown_subject_writes_nothing(self):
         """Stock denies the login; the sync must not run for a user that was

@@ -160,7 +160,7 @@ class TestOrderingTeamService(TransactionCase):
         self.assertNotEqual(request.ordering_team_id, self.other_team)
 
     def test_create_from_mimer_nu_ignores_the_category_override(self):
-        """PR #284 review: the mimer-nu branch returns before the category
+        """The mimer-nu branch returns before the category
         override on purpose. The override picks between the *orderer's own*
         queues, and the orderer here is a tenant — their key request landed in
         Kundcenter's inbox, it was not ordered by the Nyckelbeställningar queue.
@@ -622,11 +622,11 @@ class TestOrderingTeamService(TransactionCase):
         self.assertEqual(request.ordering_team_id, self.other_team)
 
     def test_create_and_backfill_agree_on_every_precedence_case(self):
-        """PR #286 review: the precedence now lives in one place
-        (_first_team), but the two paths still feed it different lookups —
-        a search per request on create, prebuilt maps in the backfill. This
-        is the test that catches them drifting apart: whatever create stamps,
-        the backfill must reproduce for the same orderer and category."""
+        """The precedence lives in one place (_first_team), but the two paths
+        still feed it different lookups — a search per request on create,
+        prebuilt maps in the backfill. This is the test that catches them
+        drifting apart: whatever create stamps, the backfill must reproduce
+        for the same orderer and category."""
         self._map_ad_unit("Kundcenterenheten", self.inkomna)
         self._map_ad_unit("Fastighetsserviceenheten", self.other_team)
         self.kundcenter_user.write({"ad_office_location": "Kundcenterenheten"})
@@ -671,6 +671,40 @@ class TestOrderingTeamService(TransactionCase):
             self.env(user=plain_user)["maintenance.ad.unit"].create(
                 {"name": "IT-enheten", "team_id": self.other_team.id}
             )
+
+    def test_ad_unit_form_can_pick_an_archived_team(self):
+        """The mapping has to be enterable *before* the group starts working
+        in Odoo, and those groups are deliberately created archived. A plain
+        many2one hides archived records from its dropdown, so without
+        active_test=False on the field they cannot be picked at all — while
+        the field's help text and _ad_team's archived-team handling both
+        promise that they can. test_create_mapping_to_an_archived_team_is_ignored
+        covers the resolution side, but it builds the row through create()
+        and so never touches the dropdown."""
+        archived_team = create_maintenance_team(self.env, name="Arkiverad enhet")
+        archived_team.action_archive()
+
+        view = self.env.ref(
+            "onecore_maintenance_extension.maintenance_ad_unit_view_list"
+        )
+        self.assertIn("active_test", view.arch_db)
+
+        Team = self.env["maintenance.team"]
+        # What the dropdown does by default: the team is not offered at all
+        self.assertNotIn(
+            archived_team.id,
+            [row[0] for row in Team.name_search("Arkiverad enhet")],
+        )
+        # What the view's context makes it do instead
+        self.assertIn(
+            archived_team.id,
+            [
+                row[0]
+                for row in Team.with_context(active_test=False).name_search(
+                    "Arkiverad enhet"
+                )
+            ],
+        )
 
     def test_ad_unit_menu_sits_under_configuration(self):
         menu = self.env.ref("onecore_maintenance_extension.menu_maintenance_ad_unit")
@@ -723,7 +757,7 @@ class TestOrderingTeamService(TransactionCase):
         self.assertFalse(request.ordering_cost_center_code)
 
     def test_archived_kundcenter_is_never_the_orderer(self):
-        """PR #284 review: kundcenter_team() used to be a plain env.ref, which
+        """kundcenter_team() used to be a plain env.ref, which
         ignores ``active`` — the one team lookup that could stamp an archived
         team. Now it goes through search() like every other lookup, on both
         the create path and the backfill."""

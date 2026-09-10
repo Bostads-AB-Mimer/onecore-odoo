@@ -41,6 +41,14 @@ class ResUsers(models.Model):
         Never raises. The OAuth controller turns any exception here into a
         failed login (oauth_error=2), and a malformed claim must not lock
         anyone out.
+
+        The savepoint is what makes that true for *database* errors, not just
+        Python ones: a serialization failure, a deadlock or a
+        constraint from another res.users override aborts the whole Postgres
+        transaction, and swallowing the exception would then only move the
+        failure to the controller's next query as InFailedSqlTransaction —
+        locking the user out anyway, from somewhere that points nowhere near
+        here. Same pattern as direct_lookup_service._safe_update_form_options.
         """
         # Soft dependency: the field belongs to onecore_maintenance_extension.
         # This module must stay installable without it.
@@ -64,7 +72,7 @@ class ResUsers(models.Model):
                 # silently matches no maintenance.ad.unit row with nothing in
                 # the log to explain why. The mapper is created by hand in
                 # Keycloak and the spec says multivalued OFF, so this is a
-                # configuration mistake worth shouting about (PR #286 review).
+                # configuration mistake worth shouting about.
                 _logger.warning(
                     "MIM-2011: Keycloak claim %r for %s is %s, expected a "
                     "string. Check that the protocol mapper has multivalued "
@@ -77,9 +85,14 @@ class ResUsers(models.Model):
             value = value.strip()
             if not value:
                 return
-            user = self.sudo().search([("login", "=", login)], limit=1)
-            if user and user.ad_office_location != value:
-                user.write({"ad_office_location": value})
+            # savepoint: a database-level failure here (serialization,
+            # deadlock, a constraint from another res.users override) aborts
+            # the whole transaction. Swallowing it below without rolling back
+            # would just move the failure to the controller's next query.
+            with self.env.cr.savepoint():
+                user = self.sudo().search([("login", "=", login)], limit=1)
+                if user and user.ad_office_location != value:
+                    user.write({"ad_office_location": value})
         except Exception:
             _logger.exception(
                 "MIM-2011: could not sync AD unit from Keycloak for %s", login
