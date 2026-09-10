@@ -158,7 +158,7 @@ class MaintenanceStageManager:
         value and the old one is gone. "owner_user_id is a key in vals" is
         not the same question — a caller that resubmits every field sends an
         unchanged owner too, and answering yes there drops the stamp for no
-        reason (PR #286 review).
+        reason.
 
         Otherwise the pre-2011 derivation: the orderer's first team, falling
         back to Kundcenter. Returns an empty recordset if nothing resolves;
@@ -175,12 +175,25 @@ class MaintenanceStageManager:
             if stamped:
                 return stamped
         orderer = record.owner_user_id or record.create_uid
-        # MIM-1970: one definition each of "the orderer's team" and "the
-        # Kundcenter team", shared with the ordering_team_id stamp on create.
-        # kundcenter_team() resolves by xml-id (MIM-1916) and skips an
-        # archived team, so this fallback can never hand a request back to a
-        # team nobody works in.
-        team = service.resolve_orderer_team(orderer) or service.kundcenter_team()
+        # The same chain create() uses, via the one place it is defined.
+        # Skipping the AD step here would strand exactly the
+        # population this ticket exists for: a new owner in no resource group
+        # but with a mapped AD unit would be handed to Kundcenter instead of
+        # their own group, and so would every request with no stamp at all.
+        #
+        # MIM-1970: kundcenter_team() resolves by xml-id (MIM-1916) and skips
+        # an archived team, so this last fallback can never hand a request
+        # back to a team nobody works in.
+        team = (
+            service._first_team(
+                lambda: service._preferred_category_team(
+                    record.maintenance_request_category_id, orderer
+                ),
+                lambda: service._ad_team(orderer),
+                lambda: service.resolve_orderer_team(orderer),
+            )
+            or service.kundcenter_team()
+        )
         if not team:
             _logger.warning(
                 "MIM-486: Kundcenter team missing or archived; leaving "

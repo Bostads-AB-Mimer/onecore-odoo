@@ -1258,7 +1258,7 @@ class OneCoreMaintenanceRequest(
             and stage_manager.is_atersand_stage(vals["stage_id"])
             and any(record.stage_id.id != vals["stage_id"] for record in self)
         )
-        # MIM-2011 (PR #286 review): which records actually get a *different*
+        # MIM-2011: which records actually get a *different*
         # owner in this write. Captured before super().write(), same as
         # master_key_changed_ids below — afterwards record.owner_user_id
         # already holds the new value and the old one is gone.

@@ -8,7 +8,14 @@
         <field name="arch" type="xml">
             <list string="AD-enheter" editable="bottom">
                 <field name="name" />
-                <field name="team_id" options="{'no_create': True}" />
+                <!-- active_test=False: the whole point of the table is that a
+                     mapping can be entered *before* the group starts working
+                     in Odoo, and those groups are deliberately created
+                     archived (Besiktning och Måleri, Fastighetsutveckling,
+                     IT). Without this the many2one's name_search filters them
+                     out and they cannot be picked at all. -->
+                <field name="team_id" options="{'no_create': True}"
+                       context="{'active_test': False}" />
                 <!-- What lookups and the unique constraint actually compare;
                      hidden by default, useful when two rows "look different"
                      but collide. -->

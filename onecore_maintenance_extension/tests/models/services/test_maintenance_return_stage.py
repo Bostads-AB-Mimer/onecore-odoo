@@ -335,8 +335,8 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
 
     def test_owner_rewritten_to_the_same_value_keeps_the_stamp(self):
-        """PR #286 review. A caller that resubmits the whole field set (bulk
-        server action, XML-RPC, a form posting every field) sends
+        """A caller that resubmits the whole field set (bulk server action,
+        XML-RPC, a form posting every field) sends
         owner_user_id along unchanged. That is not a hand-over, so the stamped
         ordering team must still win — testing for the key being present in
         vals instead of the value having changed sent the request to the
@@ -368,6 +368,48 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         )
 
         self.assertEqual(request.maintenance_team_id, stamped_team)
+
+    def _map_ad_unit(self, name, team):
+        return self.env["maintenance.ad.unit"].create(
+            {"name": name, "team_id": team.id}
+        )
+
+    def test_owner_change_to_a_group_less_user_uses_their_ad_team(self):
+        """The fallback runs the same chain create() does. A new owner in no
+        resource group but with a mapped AD unit is exactly the population
+        MIM-2011 exists for; handing the request to Kundcenter instead of
+        their own group would reopen the gap the ticket closes."""
+        ad_team = self.env["maintenance.team"].create({"name": "AD Team"})
+        self._map_ad_unit("Fastighetsserviceenheten", ad_team)
+        self.teamless_user.write(
+            {"ad_office_location": "Fastighetsserviceenheten"}
+        )
+        request = self._create_returnable_request()
+
+        request.write(
+            {
+                "owner_user_id": self.teamless_user.id,
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+
+        self.assertEqual(request.maintenance_team_id, ad_team)
+        self.assertNotEqual(request.maintenance_team_id, self.kundcenter_team)
+
+    def test_unstamped_request_prefers_the_ad_team_over_membership(self):
+        """A pre-MIM-1970 row, or one created before the mapping table was
+        filled, carries no stamp. The AD rule still outranks membership there,
+        exactly as it does on the create path."""
+        ad_team = self.env["maintenance.team"].create({"name": "AD Team"})
+        self._map_ad_unit("Driftenheten", ad_team)
+        self.internal_user.write({"ad_office_location": "Driftenheten"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": False})
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, ad_team)
+        self.assertNotEqual(request.maintenance_team_id, self.orderer_team)
 
     def test_request_without_stamp_still_uses_membership(self):
         """Pre-MIM-1970 rows (no ordering team, backfill not run) keep the
