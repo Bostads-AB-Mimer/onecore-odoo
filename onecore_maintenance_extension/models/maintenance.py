@@ -193,7 +193,7 @@ class OneCoreMaintenanceRequest(
         "entreprenörer — som har tillgång till ärendet (MIM-1960).",
     )
     has_unread_new_customer_info = fields.Boolean(
-        string="Okvitterad ny kundinfo",
+        string="Okvitterad ny kund",
         compute="_compute_has_unread_new_customer_info",
         store=False,
     )
@@ -649,10 +649,11 @@ class OneCoreMaintenanceRequest(
     @api.depends("recently_added_tenant")
     @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
-        # "Ny kundinfo" now means exactly what the name says: the customer's
-        # *information* was updated. The tenant was back-filled from the OneCore
-        # API — a Mimer data-quality flag, not tenant communication, so it never
-        # reaches external contractors. Tenant messages moved to
+        # "Ny kund" (badge label; field/method names keep the older "new
+        # customer info" wording, MIM-1953) means exactly what it says: the
+        # tenant was back-filled from the OneCore API onto a request that had
+        # none — a Mimer data-quality flag, not tenant communication, so it
+        # never reaches external contractors. Tenant messages moved to
         # has_unread_customer_message (MIM-1960).
         is_external = ExternalContractorService(self.env).is_external_contractor()
         for record in self:
@@ -763,7 +764,7 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Clear the "Ny kundinfo" flag for every Mimer user on the request.
+        """Clear the "Ny kund" flag for every Mimer user on the request.
 
         There is no timestamp: the signal *is* recently_added_tenant, so
         clearing the flag is the acknowledgement. Internal only — the flag also

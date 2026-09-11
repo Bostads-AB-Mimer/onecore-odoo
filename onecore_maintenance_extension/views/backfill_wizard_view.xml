@@ -16,18 +16,14 @@
 
                         <div class="alert alert-warning" role="alert"
                             invisible="state != 'preview' or not is_vacant">
-                            <i class="fa fa-exclamation-triangle me-2" />
-                            Hyresobjektet saknar aktivt kontrakt. Det kopplas till
-                            ärendet utan hyresgäst (tomställt).
-                        </div>
+                            <i class="fa fa-exclamation-triangle me-2" /> Hyresobjektet saknar
+                            aktivt kontrakt. Det kopplas till ärendet utan hyresgäst (tomställt). </div>
 
                         <div class="alert alert-warning" role="alert"
                             invisible="state != 'preview' or not has_unsupported_contract">
-                            <i class="fa fa-exclamation-triangle me-2" />
-                            Hyresobjektet har kontrakt av en typ som inte kan hanteras
-                            här. Det kopplas till ärendet utan kontrakt och hyresgäst,
-                            men ärendet markeras inte som tomställt.
-                        </div>
+                            <i class="fa fa-exclamation-triangle me-2" /> Hyresobjektet har kontrakt
+                            av en typ som inte kan hanteras här. Det kopplas till ärendet utan
+                            kontrakt och hyresgäst, men ärendet markeras inte som tomställt. </div>
 
                         <group invisible="state != 'input'">
                             <field name="lookup_value"
@@ -60,12 +56,20 @@
                             <field name="prev_tenant_contact"
                                 invisible="not prev_tenant_contact" />
                         </group>
+
+                        <p invisible="state != 'confirm_hide'">
+                            Vill du dölja ärendet för kunden på Mimer.nu?
+                        </p>
                     </sheet>
                     <footer>
                         <button string="Sök" name="action_search" type="object"
                             class="btn-primary" invisible="state != 'input'" />
                         <button string="Lägg till" name="action_confirm" type="object"
                             class="btn-primary" invisible="state != 'preview'" />
+                        <button string="Ja" name="action_confirm_hide" type="object"
+                            class="btn-primary" invisible="state != 'confirm_hide'" />
+                        <button string="Nej" name="action_confirm_no_hide" type="object"
+                            class="btn-secondary" invisible="state != 'confirm_hide'" />
                         <button string="Avbryt" class="btn-secondary" special="cancel" />
                     </footer>
                 </form>

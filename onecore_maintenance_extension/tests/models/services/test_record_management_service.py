@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
@@ -12,6 +14,35 @@ from ...utils.test_utils import (
     create_tenant_option,
     create_lease_option,
 )
+
+CORE_API_PATH = "odoo.addons.onecore_api.core_api.CoreApi"
+
+
+def _lease_payload(tenants, lease_id="216-034-03-0101/01"):
+    return {
+        "leaseId": lease_id,
+        "leaseNumber": lease_id.split("/")[-1],
+        "type": "Bostadskontrakt",
+        "leaseStartDate": "1977-06-01",
+        "lastDebitDate": False,
+        "contractDate": "1977-05-01",
+        "approvalDate": "1977-05-15",
+        "rentalPropertyId": "216-034-03-0101",
+        "tenants": tenants,
+    }
+
+
+def _tenant_payload(contact_code="P005468", first="Sven", last="Olofsson"):
+    return {
+        "contactCode": contact_code,
+        "contactKey": "K-" + contact_code,
+        "firstName": first,
+        "lastName": last,
+        "nationalRegistrationNumber": "194903073015",
+        "emailAddress": "t@example.com",
+        "phoneNumbers": [{"phoneNumber": "0700000000", "isMainNumber": 1}],
+        "isTenant": True,
+    }
 
 
 @tagged("onecore")
@@ -173,3 +204,35 @@ class TestRecordManagementService(TransactionCase):
 
         self.assertEqual(request.tenant_id.phone_number, new_phone)
         self.assertEqual(request.tenant_id.email_address, new_email)
+
+
+@tagged("onecore")
+class TestEmptyTenantAutoRefetchHidesFromMyPages(TransactionCase):
+    """A request created on a vacant Lägenhet has no tenant. When OneCore
+    later reports a lease for it, the passive on-read refetch
+    (_compute_empty_tenant -> handle_empty_tenant_logic ->
+    _create_missing_lease_and_tenant -> _create_tenant) back-fills a tenant.
+    That new tenant must not gain visibility into a case raised before they
+    lived there (MIM-1953)."""
+
+    def test_newly_discovered_tenant_hides_request_from_my_pages(self):
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        self.assertFalse(request.lease_id)
+        self.assertFalse(request.hidden_from_my_pages)
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [
+                {"lease": _lease_payload([_tenant_payload()])}
+            ]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertTrue(request.lease_id)
+        self.assertTrue(request.tenant_id)
+        self.assertTrue(request.recently_added_tenant)
+        self.assertTrue(request.hidden_from_my_pages)
