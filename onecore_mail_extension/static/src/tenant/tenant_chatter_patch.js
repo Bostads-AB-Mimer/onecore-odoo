@@ -261,8 +261,8 @@ patch(Chatter.prototype, {
     }
     if (data.has_unread_new_customer_info) {
       signals.push({
-        name: _t("Ny kundinfo"),
-        buttonLabel: _t("Markera ny kundinfo som läst"),
+        name: _t("Ny kund"),
+        buttonLabel: _t("Markera ny kund som läst"),
         method: "action_acknowledge_new_customer_info",
       });
     }
