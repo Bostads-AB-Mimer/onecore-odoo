@@ -44,6 +44,7 @@ ENV=$ENV python3 "$ODOO_PATH/odoo-bin" \
   --db_user="$DB_USER" \
   --db_host="$DB_HOST" \
   --db_port="$DB_PORT" \
+  --http-interface="${HTTP_INTERFACE:-127.0.0.1}" \
   -i base \
   $MODULE_ARGS \
   --dev "$DEV_MODE"

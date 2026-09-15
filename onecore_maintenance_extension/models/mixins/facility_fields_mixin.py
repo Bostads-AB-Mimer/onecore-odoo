@@ -26,17 +26,23 @@ class FacilityFieldsMixin(models.AbstractModel):
         "Hyrestyp", related="facility_id.rental_type", depends=["facility_id"]
     )
     facility_area = fields.Char(
-        "Yta", related="facility_id.area", depends=["facility_id"]
+        "Lokalens yta", related="facility_id.area", depends=["facility_id"]
     )
     facility_building_code = fields.Char(
-        "Byggnadskod", related="facility_id.building_code", depends=["facility_id"]
+        "Lokalens byggnadskod",
+        related="facility_id.building_code",
+        depends=["facility_id"],
     )
     facility_building_name = fields.Char(
-        "Byggnad", related="facility_id.building_name", depends=["facility_id"]
+        "Lokalens byggnad", related="facility_id.building_name", depends=["facility_id"]
     )
     facility_property_code = fields.Char(
-        "Fastighetsnummer", related="facility_id.property_code", depends=["facility_id"]
+        "Lokalens fastighetsnummer",
+        related="facility_id.property_code",
+        depends=["facility_id"],
     )
     facility_property_name = fields.Char(
-        "Fastighet", related="facility_id.property_name", depends=["facility_id"]
+        "Lokalens fastighet",
+        related="facility_id.property_name",
+        depends=["facility_id"],
     )

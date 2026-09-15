@@ -16,7 +16,7 @@ class OnecoreMaintenanceParkingSpaceOption(models.Model):
     type_name = fields.Char("P-platstyp")
     type_code = fields.Char("P-platstypkod")
     number = fields.Char("P-platsnummer")
-    property_code = fields.Char("Fastigehtsnummer")
+    property_code = fields.Char("Fastighetsnummer")
     property_name = fields.Char("Fastighet")
     address = fields.Char("Adress")
     postal_code = fields.Char("Postnummer")

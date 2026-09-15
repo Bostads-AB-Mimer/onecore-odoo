@@ -158,7 +158,8 @@
                                     <a name="action_manual_entry"
                                        type="object"
                                        string="Eller fyll i manuellt"
-                                       class="btn-link"/>
+                                       class="btn-link"
+                                       role="button"/>
                                 </p>
                             </div>
                         </div>
@@ -175,7 +176,7 @@
                         <div invisible="form_state != 'review'">
                             <!-- Error message if AI failed -->
                             <div invisible="not api_error" class="alert alert-danger" role="alert">
-                                <h4 class="alert-heading">
+                                <h4 class="text-reset">
                                     <i class="fa fa-exclamation-triangle"/> AI-analys misslyckades
                                 </h4>
                                 <field name="error_message" readonly="1" nolabel="1"/>

@@ -190,7 +190,7 @@
                 </xpath>
 
                 <!-- Sets title to readonly for external contractors -->
-                <xpath expr="//div[@class='oe_title']//field[@name='name']" position="attributes">
+                <xpath expr="//div[hasclass('oe_title')]//field[@name='name']" position="attributes">
                     <attribute name="readonly">user_is_external_contractor</attribute>
                 </xpath>
 
