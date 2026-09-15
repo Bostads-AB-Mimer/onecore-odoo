@@ -1372,6 +1372,24 @@ class OneCoreMaintenanceRequest(
 
         return result
 
+    def preview_atersand_team(self, target_stage_id):
+        """Team name a move to `target_stage_id` would resolve to via
+        resolve_return_team(), or False if that stage isn't Återsänd.
+
+        Read-only mirror of the routing done in write() when actually
+        entering Återsänd — used by the statusbar confirmation dialog so the
+        user sees the real destination *before* the click commits anything.
+        owner_changed=False always: a plain statusbar click never changes
+        Ägare in the same action, so this matches what write() will do for
+        the click being confirmed.
+        """
+        self.ensure_one()
+        stage_manager = MaintenanceStageManager(self.env)
+        if not stage_manager.is_atersand_stage(target_stage_id):
+            return False
+        team = stage_manager.resolve_return_team(self, owner_changed=False)
+        return team.name if team else False
+
     def _track_loan_product_changes(self, vals):
         """Track loan product changes for existing records."""
         loan_product_messages = {}
