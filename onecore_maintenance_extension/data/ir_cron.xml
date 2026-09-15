@@ -86,6 +86,25 @@
         </record>
 
         <!--
+        Kontraktsstatus + sista debiteringsdatum on the lease of every open
+        request. A contract snapshotted at case creation can change status
+        afterwards (MIM-1954); the run costs one call per 500 distinct lease
+        ids (POST /leases/batch), not one per open request. Hourly, like
+        viktig kundinfo: a contract's status changes about as often as that
+        flag does.
+        -->
+        <record id="ir_cron_sync_lease_status" model="ir.cron">
+            <field name="name">Ärenden: synka kontraktsstatus från OneCore</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_lease_status()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!--
         MIM-1970: backfill of "Beställande resursgrupp" on requests created
         before the field existed. The orderer is guessed from who created the
         request and which team they belong to today - ordering_backfilled_at

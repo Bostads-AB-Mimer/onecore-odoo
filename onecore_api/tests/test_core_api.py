@@ -971,3 +971,26 @@ class TestFetchContactsBatch:
         with patch.object(CoreApi, "_get_json") as get_json:
             assert api.fetch_contacts_batch([]) == []
             get_json.assert_not_called()
+
+
+class TestFetchLeasesBatch:
+    """POST /leases/batch — bulk lease lookup by lease id, in a request body
+    rather than query params: lease ids are unbounded in number and a URL
+    can't safely carry hundreds of them."""
+
+    def test_posts_the_lease_ids(self, api):
+        with patch.object(CoreApi, "request") as request:
+            request.return_value.json.return_value = {
+                "content": [{"leaseId": "1"}]
+            }
+            result = api.fetch_leases_batch(["1", "2"], timeout=15)
+
+        assert result == [{"leaseId": "1"}]
+        request.assert_called_once_with(
+            "POST", "/leases/batch", json={"leaseIds": ["1", "2"]}, timeout=15
+        )
+
+    def test_empty_lease_ids_does_not_call_onecore(self, api):
+        with patch.object(CoreApi, "request") as request:
+            assert api.fetch_leases_batch([]) == []
+            request.assert_not_called()
