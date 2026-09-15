@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- MIM-2011: show the AD unit on the admin user form so it can be seen
+         and corrected without SQL. No group_ids on an extension view (Odoo
+         19 forbids it); the form itself is already admin-only. -->
+    <record id="view_users_form_ad_office_location" model="ir.ui.view">
+        <field name="name">res.users.form.ad.office.location</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='preferences']//group[@name='other_preferences']"
+                position="inside">
+                <field name="ad_office_location" />
+            </xpath>
+        </field>
+    </record>
+</odoo>

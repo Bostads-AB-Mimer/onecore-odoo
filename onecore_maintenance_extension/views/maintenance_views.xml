@@ -651,7 +651,7 @@
                                         groups="!onecore_maintenance_extension.group_external_contractor"
                                         invisible="not recently_added_tenant">
                                         <span
-                                            class="mimer-badge mb-1 fs-7 px-2 py-2">
+                                            class="mimer-badge mimer-badge-green mb-1 fs-7 px-2 py-2">
                                             Ny hyresgäst, ärendet är uppdaterat
                                         </span>
                                     </div>

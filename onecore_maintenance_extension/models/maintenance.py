@@ -193,7 +193,7 @@ class OneCoreMaintenanceRequest(
         "entreprenörer — som har tillgång till ärendet (MIM-1960).",
     )
     has_unread_new_customer_info = fields.Boolean(
-        string="Okvitterad ny kundinfo",
+        string="Okvitterad ny kund",
         compute="_compute_has_unread_new_customer_info",
         store=False,
     )
@@ -649,10 +649,11 @@ class OneCoreMaintenanceRequest(
     @api.depends("recently_added_tenant")
     @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
-        # "Ny kundinfo" now means exactly what the name says: the customer's
-        # *information* was updated. The tenant was back-filled from the OneCore
-        # API — a Mimer data-quality flag, not tenant communication, so it never
-        # reaches external contractors. Tenant messages moved to
+        # "Ny kund" (badge label; field/method names keep the older "new
+        # customer info" wording, MIM-1953) means exactly what it says: the
+        # tenant was back-filled from the OneCore API onto a request that had
+        # none — a Mimer data-quality flag, not tenant communication, so it
+        # never reaches external contractors. Tenant messages moved to
         # has_unread_customer_message (MIM-1960).
         is_external = ExternalContractorService(self.env).is_external_contractor()
         for record in self:
@@ -763,7 +764,7 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Clear the "Ny kundinfo" flag for every Mimer user on the request.
+        """Clear the "Ny kund" flag for every Mimer user on the request.
 
         There is no timestamp: the signal *is* recently_added_tenant, so
         clearing the flag is the acknowledgement. Internal only — the flag also
@@ -1258,8 +1259,29 @@ class OneCoreMaintenanceRequest(
             and stage_manager.is_atersand_stage(vals["stage_id"])
             and any(record.stage_id.id != vals["stage_id"] for record in self)
         )
+        # MIM-2011: which records actually get a *different*
+        # owner in this write. Captured before super().write(), same as
+        # master_key_changed_ids below — afterwards record.owner_user_id
+        # already holds the new value and the old one is gone.
+        # Key presence in vals is not enough: a caller that resubmits the full
+        # field set (bulk server action, XML-RPC, a form posting every field)
+        # sends owner_user_id unchanged, and treating that as a hand-over
+        # would discard the stamped ordering team and fall back to the
+        # membership derivation — the exact wrong-team bug MIM-2011 fixes.
+        owner_changed_ids = set()
         if entering_atersand:
             vals["user_id"] = False
+            if vals.get("owner_user_id"):
+                # Only a hand-over to a *different, real* owner counts.
+                # Clearing the owner (owner_user_id=False) is not one: there
+                # is no new owner whose team could be the intended target, and
+                # the stamp is still the truest answer to who ordered it.
+                new_owner_id = vals["owner_user_id"]
+                owner_changed_ids = {
+                    record.id
+                    for record in self
+                    if (record.owner_user_id.id or False) != new_owner_id
+                }
             if external_contractor_service.is_external_contractor():
                 # Keep the returning contractor's access after the team
                 # switch. web_save re-reads the record in the same
@@ -1338,7 +1360,9 @@ class OneCoreMaintenanceRequest(
         if entering_atersand:
             team_to_record_ids = {}
             for record in self:
-                team = stage_manager.resolve_return_team(record)
+                team = stage_manager.resolve_return_team(
+                    record, owner_changed=record.id in owner_changed_ids
+                )
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():

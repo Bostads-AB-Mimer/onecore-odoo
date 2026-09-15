@@ -12,8 +12,8 @@
                     </span>
                 </div>
                 <div t-if="record.has_unread_new_customer_info.raw_value">
-                    <span class="mimer-badge">
-                        Ny kundinfo
+                    <span class="mimer-badge mimer-badge-green">
+                        Ny kund
                     </span>
                 </div>
                 <div t-if="record.special_attention.raw_value">

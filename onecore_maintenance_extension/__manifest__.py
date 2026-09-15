@@ -18,6 +18,8 @@
         "views/mobile_view.xml",
         "views/maintenance_component_wizard_view.xml",
         "views/backfill_wizard_view.xml",
+        "views/maintenance_ad_unit_views.xml",
+        "views/res_users_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",

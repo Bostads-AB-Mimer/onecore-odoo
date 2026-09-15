@@ -22,6 +22,7 @@ import logging
 from odoo import fields
 
 from ..constants import MIMER_NU_ORIGIN
+from ..maintenance_ad_unit import normalize_ad_unit
 
 _logger = logging.getLogger(__name__)
 
@@ -77,20 +78,89 @@ class OrderingTeamService:
             # Nyckelbeställningar queue, it landed in their inbox.
             return self.kundcenter_team()
         orderer = request.owner_user_id or request.create_uid
-        preferred = self._preferred_category_team(
-            request.maintenance_request_category_id, orderer
+        # No Kundcenter fallback at the end, deliberately. Kundcenter
+        # distributes every request in the organisation, so their bucket is the
+        # largest one by construction — quietly filing "we could not tell" in
+        # it would mix 990 requests from 29 group-less creators (prod,
+        # 2026-09-03) in with the ones they genuinely registered, and nobody
+        # could separate them afterwards. An empty ordering team is the
+        # truthful answer: this request has no known ordering unit. An unmapped
+        # or unknown AD value falls all the way through too, exactly as before
+        # MIM-2011.
+        return self._first_team(
+            lambda: self._preferred_category_team(
+                request.maintenance_request_category_id, orderer
+            ),
+            lambda: self._ad_team(orderer),
+            lambda: self.resolve_orderer_team(orderer),
+        ) or self.env["maintenance.team"]
+
+    @staticmethod
+    def _first_team(*candidates):
+        """First candidate that resolves to a team, or None.
+
+        THE precedence — category → AD → membership — and the only place it is
+        written down. Both write paths call this with their own lookups: the
+        create path resolves each candidate with a search(), the backfill
+        resolves them from maps it built once for the whole batch. The lookups
+        differ on purpose (no per-row query in the backfill); the order must
+        not.
+
+        Spelling the order out separately in each path and keeping the two in
+        sync by hand is how they drift: a rule added to one and forgotten in
+        the other makes newly created and backfilled requests answer
+        differently for the same orderer, silently. That has happened once
+        already — test_backfill_never_uses_an_archived_preferred_team exists
+        because of it.
+        """
+        for candidate in candidates:
+            team = candidate()
+            if team:
+                return team
+        return None
+
+    def _category_team_from_map(self, record, orderer, category_overrides):
+        """The category override for ``record``, resolved from a prebuilt map.
+
+        The backfill's counterpart to _preferred_category_team: same rule,
+        including that it only fires when the orderer is actually a member of
+        the preferred team.
+        """
+        override = category_overrides.get(record.maintenance_request_category_id.id)
+        if override and orderer.id in override[1]:
+            return override[0]
+        return None
+
+    def _ad_team(self, orderer):
+        """Team mapped to ``orderer``'s AD unit, or an empty recordset.
+
+        The raw AD value is normalised here, never at storage, so the SSO
+        write and the seed import give the same answer. The mapping table is
+        matched on the normalised value — never on a team name (MIM-1916).
+        """
+        if not orderer:
+            return self.env["maintenance.team"]
+        # sudo: the orderer may be read from a contractor's or the RPC
+        # integration user's env, which has no business reading res.users.
+        normalized = normalize_ad_unit(orderer.sudo().ad_office_location)
+        if not normalized:
+            return self.env["maintenance.team"]
+        unit = (
+            self.env["maintenance.ad.unit"]
+            .sudo()
+            .search([("name_normalized", "=", normalized)], limit=1)
         )
-        if preferred:
-            return preferred
-        # No Kundcenter fallback here, deliberately. Kundcenter distributes
-        # every request in the organisation, so their bucket is the largest one
-        # by construction — quietly filing "we could not tell" in it would mix
-        # 990 requests from 29 group-less creators (prod, 2026-09-03) in with
-        # the ones they genuinely registered, and nobody could separate them
-        # afterwards. An empty ordering team is the truthful answer: this
-        # request has no known ordering unit. The AD/officeLocation work is
-        # what will fill these in properly.
-        return self.resolve_orderer_team(orderer)
+        if not unit:
+            return self.env["maintenance.team"]
+        # search(), not a plain field read: a mapping row may point at a team
+        # that is archived on purpose (new orderer groups are created archived
+        # until the unit starts working in Odoo) — it must not win until then
+        # (test_archived_team_is_never_the_orderer).
+        return (
+            self.env["maintenance.team"]
+            .sudo()
+            .search([("id", "=", unit.team_id.id)], limit=1)
+        )
 
     def _preferred_category_team(self, category, orderer):
         """Category-specific tie-break for someone in several teams.
@@ -151,6 +221,19 @@ class OrderingTeamService:
             # later and derive a team from the creator's *then-current*
             # membership, silently rewriting a history that was already
             # correctly "no team" at create time.
+            #
+            # Rollout caveat for the AD rule: this stamp is final, and
+            # backfill_batch's domain never revisits a stamped row. A
+            # request created by a group-less user *after* release but
+            # *before* the business has filled in the AD mapping table is
+            # therefore stamped "no ordering team" for good, even though its
+            # orderer's AD unit — a stable fact that merely arrived late, not
+            # a membership that may since have changed — would resolve it.
+            # Closing that window is a one-off job, not a code change: clear
+            # ordering_backfilled_at on rows that still have no
+            # ordering_team_id once the table is filled, then let the backfill
+            # cron pick them up. Without it the AD rule is forward-only for
+            # that window.
             request.sudo().write({"ordering_backfilled_at": fields.Datetime.now()})
             return False
         # sudo: creators over RPC (mimer.nu) and contractors must not be
@@ -203,6 +286,8 @@ class OrderingTeamService:
         kundcenter = self.kundcenter_team()
         user_to_team = self._member_team_map()
         category_overrides = self._category_preferred_team_members()
+        ad_teams = self._ad_team_map()
+        user_to_ad_unit = self._user_ad_unit_map() if ad_teams else {}
         now = fields.Datetime.now()
         groups = {}  # team id (or False when unresolved) -> request ids
         for record in records:
@@ -214,13 +299,16 @@ class OrderingTeamService:
                 orderer = record.owner_user_id or record.create_uid
                 team = None
                 if orderer:
-                    override = category_overrides.get(
-                        record.maintenance_request_category_id.id
+                    # Same order as the create path, from the one place it is
+                    # defined. Only the lookups differ: maps built once for
+                    # the batch instead of a search per row.
+                    team = self._first_team(
+                        lambda: self._category_team_from_map(
+                            record, orderer, category_overrides
+                        ),
+                        lambda: ad_teams.get(user_to_ad_unit.get(orderer.id)),
+                        lambda: user_to_team.get(orderer.id),
                     )
-                    if override and orderer.id in override[1]:
-                        team = override[0]
-                    else:
-                        team = user_to_team.get(orderer.id)
             groups.setdefault(team.id if team else False, []).append(record.id)
 
         Team = self.env["maintenance.team"].sudo()
@@ -272,4 +360,47 @@ class OrderingTeamService:
             if not team:
                 continue
             mapping[category.id] = (team, set(team.member_ids.ids))
+        return mapping
+
+    def _ad_team_map(self):
+        """normalised AD unit -> team, for mapping rows whose team is active.
+
+        Precomputed once per batch (a few dozen rows), same reasoning as
+        ``_member_team_map``. search() on the team, not a field read, so a
+        row pointing at an archived team drops out here exactly as it does in
+        ``_ad_team`` on the create path.
+        """
+        mapping = {}
+        Team = self.env["maintenance.team"].sudo()
+        for unit in self.env["maintenance.ad.unit"].sudo().search([]):
+            if not unit.name_normalized:
+                continue
+            team = Team.search([("id", "=", unit.team_id.id)], limit=1)
+            if team:
+                mapping[unit.name_normalized] = team
+        return mapping
+
+    def _user_ad_unit_map(self):
+        """user id -> normalised AD unit, for users that have one.
+
+        active_test=False: the creators of old requests may well have left
+        the company since, and their AD unit is still the truthful answer for
+        what they ordered back then.
+        """
+        rows = (
+            self.env["res.users"]
+            .sudo()
+            .with_context(active_test=False)
+            .search_read(
+                [("ad_office_location", "!=", False)],
+                ["ad_office_location"],
+            )
+        )
+        mapping = {}
+        for row in rows:
+            normalized = normalize_ad_unit(row["ad_office_location"])
+            # A whitespace-only value is "no AD unit", same as on the create
+            # path where _ad_team returns early on an empty normalisation.
+            if normalized:
+                mapping[row["id"]] = normalized
         return mapping

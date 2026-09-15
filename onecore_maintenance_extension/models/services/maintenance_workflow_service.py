@@ -139,19 +139,61 @@ class MaintenanceStageManager:
         atersand = self._get_atersand_stage()
         return bool(atersand) and stage_id == atersand.id
 
-    def resolve_return_team(self, record):
-        """Team to hand a returned (Återsänd) request back to: the orderer's
-        first team, falling back to Kundcenter (MIM-486). Returns an empty
-        recordset if neither resolves; the caller then leaves the team
-        unchanged."""
-        orderer = record.owner_user_id or record.create_uid
-        # MIM-1970: one definition each of "the orderer's team" and "the
-        # Kundcenter team", shared with the ordering_team_id stamp on create.
-        # kundcenter_team() resolves by xml-id (MIM-1916) and skips an
-        # archived team, so this fallback can never hand a request back to a
-        # team nobody works in.
+    def resolve_return_team(self, record, owner_changed=False):
+        """Team to hand a returned (Återsänd) request back to (MIM-486).
+
+        MIM-2011: the ordering team stamped on the request wins when it is
+        still active — that *is* who ordered it, resolved with the category
+        and AD rules at create time, and a hand-back should go where the
+        order came from. Exception: ``owner_changed``, i.e. the same write
+        that moves the stage also handed the request to a *different, real*
+        owner. Then the hand-over was deliberate and the new owner's team is
+        the intended target, not the stamp from the old owner
+        (test_owner_change_in_same_write_uses_new_orderer_team). Clearing the
+        owner is not a hand-over — there is no new owner to aim at — so the
+        stamp still wins there.
+
+        The caller decides ``owner_changed`` because only it can: this runs
+        after super().write(), so ``record.owner_user_id`` is already the new
+        value and the old one is gone. "owner_user_id is a key in vals" is
+        not the same question — a caller that resubmits every field sends an
+        unchanged owner too, and answering yes there drops the stamp for no
+        reason.
+
+        Otherwise the pre-2011 derivation: the orderer's first team, falling
+        back to Kundcenter. Returns an empty recordset if nothing resolves;
+        the caller then leaves the team unchanged."""
         service = OrderingTeamService(self.env)
-        team = service.resolve_orderer_team(orderer) or service.kundcenter_team()
+        if not owner_changed and record.ordering_team_id:
+            # search(), not a field read: an archived stamped team must fall
+            # through to the derivation, same rule as every team lookup here.
+            stamped = (
+                self.env["maintenance.team"]
+                .sudo()
+                .search([("id", "=", record.ordering_team_id.id)], limit=1)
+            )
+            if stamped:
+                return stamped
+        orderer = record.owner_user_id or record.create_uid
+        # The same chain create() uses, via the one place it is defined.
+        # Skipping the AD step here would strand exactly the
+        # population this ticket exists for: a new owner in no resource group
+        # but with a mapped AD unit would be handed to Kundcenter instead of
+        # their own group, and so would every request with no stamp at all.
+        #
+        # MIM-1970: kundcenter_team() resolves by xml-id (MIM-1916) and skips
+        # an archived team, so this last fallback can never hand a request
+        # back to a team nobody works in.
+        team = (
+            service._first_team(
+                lambda: service._preferred_category_team(
+                    record.maintenance_request_category_id, orderer
+                ),
+                lambda: service._ad_team(orderer),
+                lambda: service.resolve_orderer_team(orderer),
+            )
+            or service.kundcenter_team()
+        )
         if not team:
             _logger.warning(
                 "MIM-486: Kundcenter team missing or archived; leaving "

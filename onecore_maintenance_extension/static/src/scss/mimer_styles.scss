@@ -41,6 +41,19 @@ $mimer-orange-text: #E65100;
     color: $mimer-orange-text;
 }
 
+// Mimer new-tenant green (Material green 50 / 300 / 900). Used for "Ny kund"
+// (recently_added_tenant) so it reads apart from the tenant-message/dialog
+// signals above and the default blue .mimer-badge (MIM-1953).
+$mimer-green-bg: #E8F5E9;
+$mimer-green-border: #81C784;
+$mimer-green-text: #1B5E20;
+
+.mimer-badge-green {
+    background: $mimer-green-bg;
+    border-color: $mimer-green-border;
+    color: $mimer-green-text;
+}
+
 // Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
 $mimer-address-blue: #1D4ED8;
 

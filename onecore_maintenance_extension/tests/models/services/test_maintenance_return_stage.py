@@ -263,10 +263,126 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
             )
 
     def test_owner_change_in_same_write_uses_new_orderer_team(self):
-        """The team is resolved after super().write(): changing owner and
-        stage in one write hands the request to the NEW orderer's team"""
+        """Changing owner and stage in one write hands the request to the
+        NEW orderer's team. Two things make this hold: the team is resolved
+        after super().write(), and (MIM-2011) the stamped ordering_team_id —
+        which still names the OLD owner's team — is skipped whenever the same
+        write changes owner_user_id. Changing the owner while returning is a
+        deliberate act; the stamp from before it must not override it."""
         second_team = self.env["maintenance.team"].create(
             {"name": "Second Owner Team", "member_ids": [(4, self.teamless_user.id)]}
+        )
+        request = self._create_returnable_request()
+        self.assertEqual(request.ordering_team_id, self.orderer_team)
+
+        request.write(
+            {
+                "owner_user_id": self.teamless_user.id,
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+        self.assertEqual(request.maintenance_team_id, second_team)
+
+    def test_stamped_ordering_team_wins_over_membership(self):
+        """MIM-2011: the ordering team stamped at create (category and AD
+        rules included) is who ordered the request; a hand-back goes there,
+        not to whatever team the owner happens to be first in today."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+        self.assertNotIn(self.internal_user, stamped_team.member_ids)
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, stamped_team)
+        self.assertNotEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_archived_stamped_ordering_team_falls_back_to_membership(self):
+        """A request stamped with a team that has since been archived must
+        not be handed back to a queue nobody works in — same invariant as
+        test_team_fallback_skips_archived_kundcenter."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+        stamped_team.action_archive()
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_mimer_nu_request_returns_to_kundcenter_not_the_integration_user(self):
+        """Behaviour change worth pinning down (MIM-2011). Mina sidor-ärenden
+        are stamped with Kundcenter at create, so the stamp now decides where
+        a return goes. Before, the derivation ran on the technical
+        integration user and would have handed the request to whatever team
+        that account happens to belong to — which says nothing about who
+        ordered it. Kundcenter distributes the tenant inflow; that is the
+        right target."""
+        integration_user = create_internal_user(self.env)
+        self.contractor_team.write({"member_ids": [(4, integration_user.id)]})
+        request = create_maintenance_request(
+            self.env(user=integration_user),
+            creation_origin="mimer-nu",
+            maintenance_team_id=self.contractor_team.id,
+            owner_user_id=False,
+            stage_id=self.stage_paborjad.id,
+            user_id=self.external_user.id,
+        )
+        self.assertEqual(request.ordering_team_id, self.kundcenter_team)
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
+
+    def test_owner_rewritten_to_the_same_value_keeps_the_stamp(self):
+        """A caller that resubmits the whole field set (bulk server action,
+        XML-RPC, a form posting every field) sends
+        owner_user_id along unchanged. That is not a hand-over, so the stamped
+        ordering team must still win — testing for the key being present in
+        vals instead of the value having changed sent the request to the
+        membership-derived team, the exact bug MIM-2011 fixes."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+
+        request.write(
+            {
+                "owner_user_id": self.internal_user.id,  # unchanged
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+
+        self.assertEqual(request.maintenance_team_id, stamped_team)
+        self.assertNotEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_clearing_the_owner_keeps_the_stamp(self):
+        """Clearing the owner is not a hand-over: there is no new owner whose
+        team could be the target, and the stamp is still the truest answer to
+        who ordered the request."""
+        stamped_team = self.env["maintenance.team"].create({"name": "Stamped Team"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": stamped_team.id})
+
+        request.write(
+            {"owner_user_id": False, "stage_id": self.stage_atersand.id}
+        )
+
+        self.assertEqual(request.maintenance_team_id, stamped_team)
+
+    def _map_ad_unit(self, name, team):
+        return self.env["maintenance.ad.unit"].create(
+            {"name": name, "team_id": team.id}
+        )
+
+    def test_owner_change_to_a_group_less_user_uses_their_ad_team(self):
+        """The fallback runs the same chain create() does. A new owner in no
+        resource group but with a mapped AD unit is exactly the population
+        MIM-2011 exists for; handing the request to Kundcenter instead of
+        their own group would reopen the gap the ticket closes."""
+        ad_team = self.env["maintenance.team"].create({"name": "AD Team"})
+        self._map_ad_unit("Fastighetsserviceenheten", ad_team)
+        self.teamless_user.write(
+            {"ad_office_location": "Fastighetsserviceenheten"}
         )
         request = self._create_returnable_request()
 
@@ -276,7 +392,34 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
                 "stage_id": self.stage_atersand.id,
             }
         )
-        self.assertEqual(request.maintenance_team_id, second_team)
+
+        self.assertEqual(request.maintenance_team_id, ad_team)
+        self.assertNotEqual(request.maintenance_team_id, self.kundcenter_team)
+
+    def test_unstamped_request_prefers_the_ad_team_over_membership(self):
+        """A pre-MIM-1970 row, or one created before the mapping table was
+        filled, carries no stamp. The AD rule still outranks membership there,
+        exactly as it does on the create path."""
+        ad_team = self.env["maintenance.team"].create({"name": "AD Team"})
+        self._map_ad_unit("Driftenheten", ad_team)
+        self.internal_user.write({"ad_office_location": "Driftenheten"})
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": False})
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, ad_team)
+        self.assertNotEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_request_without_stamp_still_uses_membership(self):
+        """Pre-MIM-1970 rows (no ordering team, backfill not run) keep the
+        original derivation."""
+        request = self._create_returnable_request()
+        request.sudo().write({"ordering_team_id": False})
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.orderer_team)
 
     def test_redundant_same_stage_write_does_not_rerun_return(self):
         """Writing stage_id=Återsänd on a request already in Återsänd must not
