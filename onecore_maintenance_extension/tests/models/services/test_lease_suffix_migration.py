@@ -1,4 +1,4 @@
-"""Tests for migrations/19.0.1.0.8/post-migration.py (MIM-1954).
+"""Tests for migrations/19.0.1.0.10/post-migration.py (MIM-1954).
 
 Before this fix, maintenance.lease.lease_id and maintenance.lease.name were
 both populated from maintenance.lease.option.name — a display string with the
@@ -21,6 +21,17 @@ lease_id-corrupted row (lease_id repaired, name recomputed from the *newly
 repaired* lease_id) and a lease_id-clean-but-name-stale row (lease_id
 untouched, name recomputed from its already-correct lease_id). Both are
 covered below.
+
+Underneath all of that sits lease_status itself. _save_lease never persisted
+the option's status, and the column is new (so NULL on every pre-existing
+row), which leaves the suffix as the only surviving record of what the
+contract's status was at creation time. The migration therefore has to read
+the status back out of the suffix *before* stripping it — otherwise the ORM's
+NULL-reads-as-0 relabels every legacy lease "Gällande", the cron posts a
+false "Gällande -> Uppsagt" note on each open one, and closed ärenden (which
+open_requests() excludes) keep the wrong label forever. Rows with no suffix
+at all never had a status to recover and become "Okänd status" rather than a
+fabricated "Gällande".
 """
 
 import importlib.util
@@ -29,9 +40,13 @@ import os
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
+from odoo.addons.onecore_maintenance_extension.models.constants import (
+    LEASE_STATUS_LABELS,
+)
+
 
 def _load_lease_suffix_migration():
-    """Load migrations/19.0.1.0.8/post-migration.py by path.
+    """Load migrations/19.0.1.0.10/post-migration.py by path.
 
     The directory name is not a valid Python identifier, so it has to be
     loaded from its file path rather than imported normally — same idiom as
@@ -40,7 +55,7 @@ def _load_lease_suffix_migration():
     module_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     )
-    path = os.path.join(module_root, "migrations", "19.0.1.0.8", "post-migration.py")
+    path = os.path.join(module_root, "migrations", "19.0.1.0.10", "post-migration.py")
     spec = importlib.util.spec_from_file_location("mim_1954_post_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -92,12 +107,102 @@ class TestLeaseSuffixMigration(TransactionCase):
         self.env.invalidate_all()
         return lease
 
+    def _legacy_row(self, lease_id, name):
+        """A genuinely pre-existing row: lease_status is SQL NULL, exactly as
+        _init_column leaves every maintenance_lease row that predates the
+        column this release adds — and lease_status_label is whatever
+        init_models() computed from that NULL before this post-migration runs,
+        i.e. "Gällande" regardless of what the suffix says."""
+        lease = self._create_frozen_row(lease_id=lease_id, name=name, lease_status=0)
+        self.env.flush_all()
+        self.env.cr.execute(
+            "UPDATE maintenance_lease "
+            "SET lease_status = NULL, lease_status_label = 'Gällande' WHERE id = %s",
+            (lease.id,),
+        )
+        self.env.invalidate_all()
+        return lease
+
+    # -- lease_status recovery -------------------------------------------
+
+    def test_recovers_lease_status_from_the_suffix_before_stripping_it(self):
+        """The suffix is the only place a legacy row's creation-time status
+        survives — lease_status is a new NULL column and _save_lease never
+        persisted the option's status. Strip the suffix without reading it
+        first and every one of these rows comes out relabelled "Gällande"."""
+        lease = self._legacy_row(
+            lease_id="216-034-03-0101/01 (Uppsagt)",
+            name="216-034-03-0101/01 (Uppsagt)",
+        )
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+
+        self.assertEqual(lease.lease_status, 2)
+        self.assertEqual(lease.lease_id, "216-034-03-0101/01")
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Uppsagt)")
+
+    def test_recovers_every_known_status_label(self):
+        leases = {
+            label: self._legacy_row(
+                lease_id=f"705-023-04-0{i}01/01 ({label})",
+                name=f"705-023-04-0{i}01/01 ({label})",
+            )
+            for i, label in enumerate(LEASE_STATUS_LABELS.values())
+        }
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+
+        for status, label in LEASE_STATUS_LABELS.items():
+            self.assertEqual(leases[label].lease_status, status)
+            self.assertEqual(leases[label].lease_status_label, label)
+
+    def test_repairs_the_stale_lease_status_label_init_models_left_behind(self):
+        """lease_status_label is a stored compute on a brand-new column, so
+        init_models() already filled it in — from the NULL lease_status, i.e.
+        "Gällande" for every row. Writing lease_status in raw SQL does not
+        retrigger that compute, so the migration has to rewrite the label
+        itself or Kontraktsstatus keeps showing the wrong value."""
+        lease = self._legacy_row(
+            lease_id="216-034-03-0101/01 (Upphört)",
+            name="216-034-03-0101/01 (Upphört)",
+        )
+        self.assertEqual(lease.lease_status_label, "Gällande")  # the stale state
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+
+        self.assertEqual(lease.lease_status_label, "Upphört")
+
+    def test_recovers_the_status_from_a_suffix_left_only_on_name(self):
+        lease = self._legacy_row(
+            lease_id="216-034-03-0101/01", name="216-034-03-0101/01 (Kommande)"
+        )
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+
+        self.assertEqual(lease.lease_status, 1)
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Kommande)")
+
+    def test_never_overwrites_a_status_that_is_already_stored(self):
+        """A row the cron has already refreshed holds the authoritative
+        status; a suffix left over from creation time is older than that and
+        must not win."""
+        lease = self._create_frozen_row(
+            lease_id="216-034-03-0101/01 (Kommande)",
+            name="216-034-03-0101/01 (Kommande)",
+            lease_status=3,
+        )
+
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+
+        self.assertEqual(lease.lease_status, 3)
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Upphört)")
+
     # -- lease_id repair -----------------------------------------------
 
     def test_strips_the_status_label_suffix_from_lease_id(self):
         lease = self._create_lease("705-023-04-0201/01 (Gällande)")
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.lease_id, "705-023-04-0201/01")
 
@@ -109,7 +214,7 @@ class TestLeaseSuffixMigration(TransactionCase):
             )
         }
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         for label, lease in leases.items():
             self.assertNotIn(label, lease.lease_id)
@@ -118,7 +223,7 @@ class TestLeaseSuffixMigration(TransactionCase):
     def test_leaves_an_already_clean_lease_id_untouched(self):
         lease = self._create_lease("705-023-04-0201/01")
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.lease_id, "705-023-04-0201/01")
 
@@ -126,7 +231,7 @@ class TestLeaseSuffixMigration(TransactionCase):
         lease = self._create_lease(False)
 
         # Must not raise on a lease with no lease_id at all.
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertFalse(lease.lease_id)
 
@@ -142,7 +247,7 @@ class TestLeaseSuffixMigration(TransactionCase):
             lease_status=0,
         )
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.lease_id, "216-034-03-0101/01")
         self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
@@ -157,7 +262,7 @@ class TestLeaseSuffixMigration(TransactionCase):
             lease_status=0,  # Gällande - already updated by the cron
         )
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.lease_id, "216-034-03-0101/01")
         self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
@@ -169,32 +274,25 @@ class TestLeaseSuffixMigration(TransactionCase):
             lease_status=0,
         )
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
 
-    def test_recomputes_name_for_a_legacy_row_with_null_lease_status(self):
-        """A genuinely pre-existing row: lease_status is SQL NULL (no
-        default backfilled it), exactly as _init_column leaves every
-        maintenance_lease row that predates the column. The ORM reads a NULL
-        Integer as 0 ("Gällande"), so the migration's SQL must treat NULL the
-        same way instead of falling through to the bare lease_id ELSE
-        branch."""
-        lease = self._create_frozen_row(
-            lease_id="216-034-03-0101/01",
-            name="216-034-03-0101/01",
-            lease_status=0,
+    def test_a_suffixless_legacy_row_becomes_okand_status_not_gallande(self):
+        """The "empty rental object" auto-fill path wrote a bare leaseId and
+        never recorded a status, so there is no suffix to recover one from.
+        The ORM reads the NULL Integer as 0, which would silently assert
+        "Gällande" about a contract nobody ever checked — and on a closed
+        ärende, which the cron skips, that claim would stand forever."""
+        lease = self._legacy_row(
+            lease_id="216-034-03-0101/01", name="216-034-03-0101/01"
         )
-        self.env.flush_all()
-        self.env.cr.execute(
-            "UPDATE maintenance_lease SET lease_status = NULL WHERE id = %s",
-            (lease.id,),
-        )
-        self.env.invalidate_all()
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
-        self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
+        self.assertEqual(lease.lease_status, 4)
+        self.assertEqual(lease.lease_status_label, "Okänd status")
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Okänd status)")
 
     # -- idempotency -------------------------------------------------------
 
@@ -205,8 +303,8 @@ class TestLeaseSuffixMigration(TransactionCase):
             lease_status=0,
         )
 
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
-        self.migration.migrate(self.env.cr, "19.0.1.0.8")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
+        self.migration.migrate(self.env.cr, "19.0.1.0.10")
 
         self.assertEqual(lease.lease_id, "216-034-03-0101/01")
         self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")

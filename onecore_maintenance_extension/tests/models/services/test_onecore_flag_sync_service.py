@@ -192,8 +192,8 @@ class TestSyncPestControl(FlagSyncTestMixin, TransactionCase):
             MockApi.return_value.fetch_block_reason_captions.return_value = [
                 "SKADEDJUR"
             ]
-            MockApi.return_value.fetch_pest_blocked_rental_ids.side_effect = Exception(
-                "boom"
+            MockApi.return_value.fetch_pest_blocked_rental_ids.side_effect = (
+                Exception("boom")
             )
             changed = self.service.sync_pest_control()
 
@@ -542,6 +542,25 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
 
         self.assertEqual(changed, 0)
 
+    def test_unchanged_run_with_no_debit_date_on_either_side_writes_nothing(self):
+        """The normal state of a Gällande contract: Xpand has no
+        lastDebitDate yet, so the stored Date reads as False while the
+        freshly-parsed one is None. The two are not equal in Python, so
+        without normalising the parsed value the "nothing moved" guard never
+        short-circuits and every open ärende with a running contract takes an
+        UPDATE (write_uid/write_date) on every single cron run - exactly what
+        this module's no-per-record-timestamp design exists to avoid."""
+        self._request_with_lease(lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease("216-034-03-0101/01", status="Current")
+            ]
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 0)
+
     def test_request_without_a_lease_is_skipped(self):
         create_maintenance_request(self.env, space_caption="Tvättstuga")
         self._configure_onecore()
@@ -650,8 +669,8 @@ class TestPopulateOnCreate(FlagSyncTestMixin, TransactionCase):
         self._configure_onecore()
 
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_pest_blocked_rental_ids.side_effect = (
-                Exception("boom")
+            MockApi.return_value.fetch_pest_blocked_rental_ids.side_effect = Exception(
+                "boom"
             )
             request = self._apartment_request(rental_id=BLOCKED_RENTAL_ID)
             self.assertFalse(self.service.populate_pest_control(request))

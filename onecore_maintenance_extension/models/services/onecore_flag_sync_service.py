@@ -435,7 +435,15 @@ class OneCoreFlagSyncService:
                 continue
 
             new_status = normalize_lease_status(fresh.get("status"))
-            new_last_debit_date = fields.Date.from_string(fresh.get("lastDebitDate"))
+            # "or False", not the bare parse: to_date returns None for a
+            # missing lastDebitDate (the normal state of a Gällande contract),
+            # while an empty stored Date reads back as False - and None !=
+            # False, so without this the guard below never short-circuits and
+            # every running contract takes a no-op write() (which still bumps
+            # write_uid/write_date) on every run.
+            new_last_debit_date = (
+                fields.Date.to_date(fresh.get("lastDebitDate")) or False
+            )
             status_changed = new_status != lease.lease_status
             if not status_changed and new_last_debit_date == lease.last_debit_date:
                 continue
