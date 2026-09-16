@@ -2,7 +2,7 @@
 
 {
     "name": "ONECore Web Extension",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "author": "Bostads-AB-Mimer",
     "sequence": 100,
     "category": "Hidden",
