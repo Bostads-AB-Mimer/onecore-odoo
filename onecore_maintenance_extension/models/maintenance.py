@@ -647,19 +647,22 @@ class OneCoreMaintenanceRequest(
             )
 
     @api.depends("recently_added_tenant")
-    @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
         # "Ny kund" (badge label; field/method names keep the older "new
         # customer info" wording, MIM-1953) means exactly what it says: the
         # tenant was back-filled from the OneCore API onto a request that had
-        # none — a Mimer data-quality flag, not tenant communication, so it
-        # never reaches external contractors. Tenant messages moved to
-        # has_unread_customer_message (MIM-1960).
-        is_external = ExternalContractorService(self.env).is_external_contractor()
+        # none. Tenant messages moved to has_unread_customer_message
+        # (MIM-1960).
+        #
+        # Shown to both audiences. It started as a Mimer-only data-quality
+        # flag, but a newly attached tenant is equally actionable for an
+        # external contractor — it is who they can now contact about the
+        # ärende, and they already read the tenant's details on the same form.
+        # No depends_context("uid"): the value is one shared fact, so keying
+        # the compute cache per user would only fragment it (same reasoning as
+        # customer_message_unread).
         for record in self:
-            record.has_unread_new_customer_info = (
-                False if is_external else record.recently_added_tenant
-            )
+            record.has_unread_new_customer_info = record.recently_added_tenant
 
     @api.depends("last_customer_message_at", "customer_message_ack_at")
     def _compute_customer_message_unread(self):
@@ -764,15 +767,23 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Clear the "Ny kund" flag for every Mimer user on the request.
+        """Clear the "Ny kund" flag for everyone on the request.
 
         There is no timestamp: the signal *is* recently_added_tenant, so
-        clearing the flag is the acknowledgement. Internal only — the flag also
-        drives _order for everyone, and contractors never see the badge.
+        clearing the flag is the acknowledgement. Shared and first-click-wins
+        across both audiences, the same rule as
+        action_acknowledge_customer_message — the first person to click, Mimer
+        handler or external contractor, silences it for everyone, and the
+        `if` below makes the second clicker a no-op.
+
+        Note the side effect a contractor's click now has: recently_added_tenant
+        also drives _order (see _order at the top of this model), so clearing it
+        drops the ärende back down Mimer's kanban as well. That is accepted —
+        one shared signal means one shared dismissal. Unlike the
+        customer-message ack, nothing is posted to the tenant here, so a second
+        click cannot produce a duplicate receipt.
         """
         self.ensure_one()
-        if ExternalContractorService(self.env).is_external_contractor():
-            return True
         if self.recently_added_tenant:
             self.recently_added_tenant = False
         self.invalidate_recordset(["has_unread_new_customer_info"])
