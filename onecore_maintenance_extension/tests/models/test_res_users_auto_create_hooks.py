@@ -25,6 +25,22 @@ class TestAutoCreateHooks(TransactionCase):
 
         self.assertEqual(values["notification_type"], "inbox")
 
+    def test_relink_hook_adds_request_admin_for_an_employee_only(self):
+        """Every mimer.nu account needs Admin Ärendehantering; the external
+        contractors are the one group that works without it."""
+        from ..utils.test_utils import (
+            create_external_contractor_user,
+            create_internal_user,
+        )
+
+        manager_id = self.env.ref("maintenance.group_equipment_manager").id
+        employee = create_internal_user(self.env)
+        contractor = create_external_contractor_user(self.env)
+        Users = self.env["res.users"]
+
+        self.assertIn(manager_id, Users._auto_relink_group_ids(employee))
+        self.assertNotIn(manager_id, Users._auto_relink_group_ids(contractor))
+
     def test_hooks_merge_with_the_other_modules_contribution(self):
         """The hooks are cooperative (getattr(super()) rather than a plain
         override) because this module and onecore_auth do not depend on each
