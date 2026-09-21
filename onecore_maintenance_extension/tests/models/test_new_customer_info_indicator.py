@@ -1,10 +1,14 @@
-"""Tests for the "Ny kundinfo" notification (MIM-1844).
+"""Tests for the "Ny kund" notification (MIM-1844).
 
 MIM-1960 split the channels: a Mina-sidor tenant message is now
-"Meddelande från kund" (see test_customer_message_indicator.py). "Ny kundinfo"
-means exactly what the name says: recently_added_tenant, a Mimer-internal
-data-quality flag (tenant back-filled from the OneCore API). There is no
+"Meddelande från kund" (see test_customer_message_indicator.py). "Ny kund"
+means exactly what the name says: recently_added_tenant, the tenant was
+back-filled from the OneCore API onto a request that had none. There is no
 timestamp — the signal *is* the flag, so acknowledging it just clears it.
+
+Both audiences see it. Acknowledgement is shared and first-click-wins, the
+same rule as "Meddelande från kund" (906947cd): the first person to click,
+from Mimer or from an external contractor, clears it for everyone.
 """
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
@@ -99,11 +103,42 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
         self.assertFalse(self.request.recently_added_tenant)
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
 
-    def test_external_contractor_does_not_see_recently_added_tenant(self):
-        # recently_added_tenant is a Mimer-internal data-quality flag (tenant
-        # back-filled from the OneCore API) — not tenant communication.
+    def test_external_contractor_sees_recently_added_tenant(self):
+        # A newly attached tenant is actionable for the contractor too — it is
+        # who they can now contact about the ärende.
         self.request.recently_added_tenant = True
+        self.assertTrue(self._refresh(self.external_user).has_unread_new_customer_info)
+
+    def test_external_ack_clears_the_flag_for_mimer(self):
+        # Shared, first-click-wins across audiences: the contractor clicking
+        # "Markera ny kund som läst" silences it for Mimer as well.
+        self.request.recently_added_tenant = True
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_new_customer_info()
+        self.assertFalse(self.request.recently_added_tenant)
+        self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
+
+    def test_internal_ack_clears_the_flag_for_external(self):
+        # The mirror of the above — whoever is first clears it for both sides.
+        self.request.recently_added_tenant = True
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_new_customer_info()
+        self.assertFalse(self.request.recently_added_tenant)
         self.assertFalse(self._refresh(self.external_user).has_unread_new_customer_info)
+
+    def test_second_ack_is_a_no_op(self):
+        # The `if self.recently_added_tenant` guard: acking an already-cleared
+        # request must not raise, whichever side clicks second.
+        self.request.recently_added_tenant = True
+        self.request.with_user(
+            self.internal_user
+        ).action_acknowledge_new_customer_info()
+        self.request.with_user(
+            self.external_user
+        ).action_acknowledge_new_customer_info()
+        self.assertFalse(self.request.recently_added_tenant)
 
     def test_no_customer_message_means_no_unread(self):
         self.assertFalse(self._refresh(self.internal_user).has_unread_new_customer_info)
@@ -116,10 +151,10 @@ class TestHasUnreadNewCustomerInfo(TransactionCase):
 @tagged("onecore")
 class TestRecentlyAddedTenantFormVisibility(TransactionCase):
     """The "Ny hyresgäst, ärendet är uppdaterat" marker on the shared request
-    form is a Mimer-internal data-quality badge, like the internal-only branch
-    in _compute_has_unread_new_customer_info. There is only one request form
-    view, and external contractors use it too, so the marker needs an explicit
-    group guard (MIM-1844 review).
+    form must stay in step with _compute_has_unread_new_customer_info: both
+    audiences see the badge, so both see the marker. There is only one request
+    form view and external contractors use it too, so what this pins down is
+    the *absence* of a group guard on the marker.
     """
 
     MARKER = "Ny hyresgäst, ärendet är uppdaterat"
@@ -139,5 +174,5 @@ class TestRecentlyAddedTenantFormVisibility(TransactionCase):
     def test_internal_user_gets_the_marker(self):
         self.assertIn(self.MARKER, self._form_arch(self.internal_user))
 
-    def test_external_contractor_does_not_get_the_marker(self):
-        self.assertNotIn(self.MARKER, self._form_arch(self.external_user))
+    def test_external_contractor_gets_the_marker(self):
+        self.assertIn(self.MARKER, self._form_arch(self.external_user))

@@ -640,13 +640,11 @@
                                         invisible="tenant_id or not empty_tenant">Ingen
                                         hyresgäst</div>
 
-                                    <!-- Mimer-internal data-quality flag: the tenant was
-                                         back-filled from the OneCore API, it is not tenant
-                                         communication. Never shown to external contractors,
-                                         matching the internal-only branch in
-                                         _compute_has_unread_new_customer_info. -->
+                                    <!-- The tenant was back-filled from the OneCore API onto
+                                         a request that had none. Shown to both audiences,
+                                         matching _compute_has_unread_new_customer_info and the
+                                         "Ny kund" kanban badge — deliberately no group guard. -->
                                     <div class="mb-3 fw-bold"
-                                        groups="!onecore_maintenance_extension.group_external_contractor"
                                         invisible="not recently_added_tenant">
                                         <span
                                             class="mimer-badge mimer-badge-green mb-1 fs-7 px-2 py-2">
