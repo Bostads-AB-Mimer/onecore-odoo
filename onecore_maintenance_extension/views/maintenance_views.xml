@@ -22,12 +22,11 @@
                         <field name="owner_user_id" />
                         <field name="stage_id" />
                         <field string="Resursgrupp" name="maintenance_team_id" />
-                        <!-- MIM-1970: who ordered the request, as opposed to
-                             who it sits with. Stored at create, so the facet
-                             answers the same thing in May as it did in March -->
-                        <field string="Beställande resursgrupp" name="ordering_team_id" />
-                        <field string="Beställande distrikt (kod)"
-                            name="ordering_cost_center_code" />
+                        <!-- MIM-1970/2011: who ordered the request (the
+                             orderer's AD department), as opposed to who it
+                             sits with. Stored at create, so the facet answers
+                             the same thing in May as it did in March -->
+                        <field string="Beställande avdelning" name="ordering_department" />
                         <field string="Distrikt" name="cost_center_name" />
                         <field string="Distriktkod" name="cost_center_code" />
                         <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
@@ -105,24 +104,23 @@
                         <filter string="Inaktiva ärenden" name="inactive"
                             domain="[('archive', '=', True)]" />
                         <separator />
-                        <!-- MIM-1970: beställare per distrikt, matchat på
-                             kostnadsställe. Skriver man i stället teamnamnet i
-                             sökrutan blir domänen en ilike på det (översättbara,
-                             omdöpningsbara) namnet, och en sparad favorit tystnar
-                             den dag någon byter namn på gruppen — namnen HAR bytts
-                             i prod. Klickvägen här är den stabila, och den som
-                             1975/1976/1977 ska bygga sina favoriter på.
-                             Koderna speglar data/maintenance.team.csv. -->
+                        <!-- MIM-1970/2011: beställare per distrikt. Värdena är
+                             avdelningsnamnen exakt som AD stavar dem (en
+                             stavning per enhet efter städningen), stämplade på
+                             ärendet vid create. Klickvägen är den som
+                             1975/1976/1977 bygger sina favoriter på. -->
                         <filter string="Beställt av Distrikt Mitt" name="ordered_by_mitt"
-                            domain="[('ordering_cost_center_code', '=', '61110')]" />
+                            domain="[('ordering_department', '=', 'Distrikt Mitt')]" />
                         <filter string="Beställt av Distrikt Norr" name="ordered_by_norr"
-                            domain="[('ordering_cost_center_code', '=', '61120')]" />
+                            domain="[('ordering_department', '=', 'Distrikt Norr')]" />
                         <filter string="Beställt av Distrikt Öst" name="ordered_by_ost"
-                            domain="[('ordering_cost_center_code', '=', '61130')]" />
+                            domain="[('ordering_department', '=', 'Distrikt Öst')]" />
                         <filter string="Beställt av Distrikt Väst" name="ordered_by_vast"
-                            domain="[('ordering_cost_center_code', '=', '61140')]" />
+                            domain="[('ordering_department', '=', 'Distrikt Väst')]" />
+                        <!-- Studentteam (resursgruppen) motsvarar AD-enheten
+                             "Utemiljö- och studentenheten". -->
                         <filter string="Beställt av Studentteam" name="ordered_by_student"
-                            domain="[('ordering_cost_center_code', '=', '61150')]" />
+                            domain="[('ordering_department', '=', 'Utemiljö- och studentenheten')]" />
                         <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
@@ -138,9 +136,9 @@
                                 context="{'group_by': 'cost_center_name'}" />
                             <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
                                 context="{'group_by': 'kvv_area_code'}" />
-                            <filter string='Beställande resursgrupp' name='ordering_team'
+                            <filter string='Beställande avdelning' name='ordering_department'
                                 domain="[]"
-                                context="{'group_by': 'ordering_team_id'}" />
+                                context="{'group_by': 'ordering_department'}" />
                         </group>
                     </search>
                 </xpath>
@@ -826,15 +824,11 @@
                                             name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
-                                        <!-- MIM-1970: vem som beställde, till skillnad
-                                             från raden ovan som är var ärendet ligger nu.
-                                             Stämplas vid create och ändras aldrig, så den
-                                             står readonly. Dold när den saknas: gamla
-                                             ärenden får sitt värde först av backfillen. -->
-                                        <field
-                                            name="ordering_team_id"
-                                            options="{'no_create': True, 'no_open': True}"
-                                            invisible="not ordering_team_id" />
+                                        <!-- MIM-1970: "Beställande avdelning" is
+                                             deliberately not shown here. It is a
+                                             follow-up facet (search view, list
+                                             column), not something the handler
+                                             needs while working the request. -->
                                         <field name="user_id"
                                             domain="maintenance_team_domain" />
                                         <label for="schedule_date" />
@@ -1036,7 +1030,7 @@
                         <field name="address" optional="show" />
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
-                        <field name="ordering_team_id" optional="hide" />
+                        <field name="ordering_department" optional="hide" />
                         <!-- Ifylld = beställaren är härledd i efterhand av backfillen,
                              tom = registrerad vid create. Utan den här kolumnen går det
                              inte att se i UI:t om värdet är en gissning. -->

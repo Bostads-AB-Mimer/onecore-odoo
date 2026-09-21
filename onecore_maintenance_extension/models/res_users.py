@@ -4,22 +4,20 @@ from odoo import fields, models
 class ResUsers(models.Model):
     _inherit = "res.users"
 
-    # MIM-2011: the user's AD unit (Entra ID ``officeLocation``), written at
+    # MIM-2011: the user's department (Entra ID ``officeLocation``), written at
     # every SSO login by onecore_auth from the Keycloak userinfo claim, and by
     # the one-off seed import for the password users who never log in via
-    # SSO. Stored raw, exactly as AD has it: normalisation happens at lookup
-    # (maintenance_ad_unit.normalize_ad_unit) so both write paths yield the
-    # same data. Deliberately not readonly — the import wizard hides readonly
-    # fields, and the seed import is the only way the ~260 password users ever
-    # get a value.
+    # SSO. Stored as AD has it (stripped); AD is kept to one spelling per unit,
+    # so there is no normalisation or mapping on top. Copied onto every request
+    # the user orders as "Beställande avdelning" (OrderingDepartmentService).
+    # Deliberately not readonly — the import wizard hides readonly fields, and
+    # the seed import is the only way the ~260 password users ever get a value.
     ad_office_location = fields.Char(
-        string="AD-enhet",
+        string="Avdelning",
         copy=False,
         help=(
-            "Enheten enligt AD (officeLocation). Skrivs automatiskt vid "
-            "inloggning via Keycloak, eller via import. Styr vilken "
-            "resursgrupp som blir Beställande resursgrupp på ärenden som "
-            "användaren skapar, via mappningen under Ärendehantering → "
-            "Konfiguration → AD-enheter."
+            "Avdelningen enligt AD (officeLocation). Skrivs automatiskt vid "
+            "inloggning via Keycloak, eller via import. Blir Beställande "
+            "avdelning på ärenden som användaren skapar."
         ),
     )

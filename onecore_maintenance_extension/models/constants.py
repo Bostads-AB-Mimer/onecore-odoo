@@ -68,7 +68,7 @@ PRIORITY_OPTIONS = [
 ]
 
 # Creation origin options. MIMER_NU_ORIGIN is the tenant self-service inflow;
-# OrderingTeamService keys its Kundcenter rule on it.
+# OrderingDepartmentService keys its Kundcenter rule on it.
 MIMER_NU_ORIGIN = "mimer-nu"
 CREATION_ORIGINS = [(MIMER_NU_ORIGIN, "Mimer.nu"), ("internal", "Internt")]
 

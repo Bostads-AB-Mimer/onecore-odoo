@@ -18,7 +18,7 @@ from .services import (
     MaintenanceStageManager,
     ManagementAreaService,
     OneCoreFlagSyncService,
-    OrderingTeamService,
+    OrderingDepartmentService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -272,46 +272,40 @@ class OneCoreMaintenanceRequest(
     )
 
     # ============================================================================
-    # ORDERING TEAM — beställande resursgrupp (MIM-1970)
+    # ORDERING DEPARTMENT — beställande avdelning (MIM-1970, MIM-2011)
     # ============================================================================
     # Who ordered the request, as opposed to who it currently sits with
-    # (maintenance_team_id). Stamped by OrderingTeamService on the write path
-    # only — create and the backfill cron — and deliberately never derived on
-    # read. Three reasons it has to be stored:
-    #   1. create_uid names a person, not a resource group, and a person can
-    #      belong to several teams and move between them.
-    #   2. Deriving at read time rewrites history: "ordered by the district in
-    #      March" must not become another answer in May.
-    #   3. Mina sidor-ärenden arrive over XML-RPC with a technical integration
-    #      user as create_uid, so a derivation is meaningless for the largest
-    #      inflow. Those resolve to Kundcenter from creation_origin instead.
-    ordering_team_id = fields.Many2one(
-        "maintenance.team",
-        string="Beställande resursgrupp",
+    # (maintenance_team_id). A department (the orderer's AD unit), not a
+    # resource group: a resource group is a work queue, the department is the
+    # organisational unit the business wants to follow up on. Stamped by
+    # OrderingDepartmentService on the write path only — create and the
+    # backfill cron — and deliberately never derived on read:
+    #   1. Deriving at read time rewrites history: "ordered by Distrikt Öst in
+    #      March" must not become another answer in May because the person
+    #      changed department.
+    #   2. Mina sidor-ärenden arrive over XML-RPC with a technical integration
+    #      user as create_uid, which has no department. Those resolve to
+    #      Kundcenter from creation_origin instead.
+    ordering_department = fields.Char(
+        "Beställande avdelning",
         readonly=True,
-        # Not indexed by default in Odoo 19. This is the backfill cron's only
-        # filter column and the group-by key behind MIM-1975/1976/1977.
+        # The backfill cron's filter column and the group-by key behind
+        # MIM-1975/1976/1977.
         index=True,
-        help="Resursgruppen som beställde ärendet, registrerad när ärendet "
-        "skapades. Skiljer sig från Resursgrupp, som är den grupp ärendet "
-        "ligger hos just nu.",
-    )
-    ordering_cost_center_code = fields.Char(
-        "Beställande distrikt (kod)",
-        readonly=True,
-        index=True,
-        help="Kostnadsstället för den beställande resursgruppen, kopierat när "
-        "ärendet skapades så distriktsfiltret slipper joina mot resursgruppen.",
+        help="Avdelningen (enligt AD) som beställde ärendet, registrerad när "
+        "ärendet skapades. Ärenden från Mina sidor registreras på Kundcenter. "
+        "Skiljer sig från Resursgrupp, som är den grupp ärendet ligger hos "
+        "just nu.",
     )
     ordering_backfilled_at = fields.Datetime(
         "Beställare härledd i efterhand",
         readonly=True,
         help="Satt av backfill-jobbet. Är det ifyllt tillsammans med en "
-        "beställare är beställaren en gissning, härledd ur vem som skapade "
-        "ärendet och vilken grupp den personen tillhör idag — inte registrerad "
-        "när ärendet skapades. Är det ifyllt utan beställare har jobbet tittat "
-        "på ärendet men inte kunnat härleda någon; skaparen saknar resursgrupp. "
-        "Tomt = ärendet stämplades vid create och är alltså ingen gissning.",
+        "beställande avdelning är avdelningen en gissning, härledd ur vem som "
+        "skapade ärendet och vilken avdelning den personen har idag — inte "
+        "registrerad när ärendet skapades. Är det ifyllt utan avdelning har "
+        "jobbet tittat på ärendet men skaparen saknar avdelning. Tomt = "
+        "ärendet stämplades vid create och är alltså ingen gissning.",
     )
 
     # ============================================================================
@@ -1183,7 +1177,7 @@ class OneCoreMaintenanceRequest(
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
         flag_sync_service = OneCoreFlagSyncService(self.env)
-        ordering_team_service = OrderingTeamService(self.env)
+        ordering_department_service = OrderingDepartmentService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -1208,7 +1202,7 @@ class OneCoreMaintenanceRequest(
             flag_sync_service.populate_pest_control(request)
             # MIM-1970: record who ordered the request while we still know.
             # Skipped when the caller stamped the field itself.
-            ordering_team_service.populate(request)
+            ordering_department_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -1259,29 +1253,8 @@ class OneCoreMaintenanceRequest(
             and stage_manager.is_atersand_stage(vals["stage_id"])
             and any(record.stage_id.id != vals["stage_id"] for record in self)
         )
-        # MIM-2011: which records actually get a *different*
-        # owner in this write. Captured before super().write(), same as
-        # master_key_changed_ids below — afterwards record.owner_user_id
-        # already holds the new value and the old one is gone.
-        # Key presence in vals is not enough: a caller that resubmits the full
-        # field set (bulk server action, XML-RPC, a form posting every field)
-        # sends owner_user_id unchanged, and treating that as a hand-over
-        # would discard the stamped ordering team and fall back to the
-        # membership derivation — the exact wrong-team bug MIM-2011 fixes.
-        owner_changed_ids = set()
         if entering_atersand:
             vals["user_id"] = False
-            if vals.get("owner_user_id"):
-                # Only a hand-over to a *different, real* owner counts.
-                # Clearing the owner (owner_user_id=False) is not one: there
-                # is no new owner whose team could be the intended target, and
-                # the stamp is still the truest answer to who ordered it.
-                new_owner_id = vals["owner_user_id"]
-                owner_changed_ids = {
-                    record.id
-                    for record in self
-                    if (record.owner_user_id.id or False) != new_owner_id
-                }
             if external_contractor_service.is_external_contractor():
                 # Keep the returning contractor's access after the team
                 # switch. web_save re-reads the record in the same
@@ -1360,9 +1333,7 @@ class OneCoreMaintenanceRequest(
         if entering_atersand:
             team_to_record_ids = {}
             for record in self:
-                team = stage_manager.resolve_return_team(
-                    record, owner_changed=record.id in owner_changed_ids
-                )
+                team = stage_manager.resolve_return_team(record)
                 if team and record.maintenance_team_id != team:
                     team_to_record_ids.setdefault(team.id, []).append(record.id)
             for team_id, record_ids in team_to_record_ids.items():
@@ -1379,15 +1350,15 @@ class OneCoreMaintenanceRequest(
         Read-only mirror of the routing done in write() when actually
         entering Återsänd — used by the statusbar confirmation dialog so the
         user sees the real destination *before* the click commits anything.
-        owner_changed=False always: a plain statusbar click never changes
-        Ägare in the same action, so this matches what write() will do for
-        the click being confirmed.
+        A plain statusbar click never changes Ägare in the same action, so
+        resolving on the current record matches what write() will do for the
+        click being confirmed.
         """
         self.ensure_one()
         stage_manager = MaintenanceStageManager(self.env)
         if not stage_manager.is_atersand_stage(target_stage_id):
             return False
-        team = stage_manager.resolve_return_team(self, owner_changed=False)
+        team = stage_manager.resolve_return_team(self)
         return team.name if team else False
 
     def _track_loan_product_changes(self, vals):
@@ -1710,11 +1681,11 @@ class OneCoreMaintenanceRequest(
         return OneCoreFlagSyncService(self.env).sync_lease_status()
 
     @api.model
-    def _cron_backfill_ordering_team(self, limit=5000):
-        """Scheduled action (hourly): stamp "Beställande resursgrupp" on
-        requests created before MIM-1970, guessed from who created them.
+    def _cron_backfill_ordering_department(self, limit=5000):
+        """Scheduled action (hourly): stamp "Beställande avdelning" on
+        requests that have none, from the orderer's AD department today.
 
         One-off in practice: the domain is self-consuming, so once the backlog
         is stamped this is a query that returns nothing. Writes only the
         ordering_* fields — never Resursgrupp, Resurs or Steg."""
-        return OrderingTeamService(self.env).backfill_batch(limit=limit)
+        return OrderingDepartmentService(self.env).backfill_batch(limit=limit)

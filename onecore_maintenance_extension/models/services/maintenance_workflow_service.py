@@ -7,9 +7,12 @@ from datetime import datetime
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
-from .ordering_team_service import OrderingTeamService
+from ..constants import MIMER_NU_ORIGIN
 
 _logger = logging.getLogger(__name__)
+
+# MIM-1916: resolve teams by xml-id, never by their (translatable) name.
+KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
 
 class MaintenanceStageManager:
@@ -139,61 +142,55 @@ class MaintenanceStageManager:
         atersand = self._get_atersand_stage()
         return bool(atersand) and stage_id == atersand.id
 
-    def resolve_return_team(self, record, owner_changed=False):
+    def kundcenter_team(self):
+        """The Kundcenter team, or an empty recordset when missing or archived.
+
+        env.ref is a plain browse and ignores ``active``; the search() is what
+        keeps an archived Kundcenter from being a hand-back target, same as
+        every other team lookup here (test_team_fallback_skips_archived_kundcenter).
+        """
+        team = self.env.ref(KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
+        if not team:
+            return self.env["maintenance.team"]
+        return self.env["maintenance.team"].sudo().search([("id", "=", team.id)], limit=1)
+
+    def resolve_orderer_team(self, orderer):
+        """First (active) team ``orderer`` is a member of, or an empty recordset."""
+        if not orderer:
+            return self.env["maintenance.team"]
+        return (
+            self.env["maintenance.team"]
+            .sudo()
+            .search([("member_ids", "in", [orderer.id])], limit=1)
+        )
+
+    def resolve_return_team(self, record):
         """Team to hand a returned (Återsänd) request back to (MIM-486).
 
-        MIM-2011: the ordering team stamped on the request wins when it is
-        still active — that *is* who ordered it, resolved with the category
-        and AD rules at create time, and a hand-back should go where the
-        order came from. Exception: ``owner_changed``, i.e. the same write
-        that moves the stage also handed the request to a *different, real*
-        owner. Then the hand-over was deliberate and the new owner's team is
-        the intended target, not the stamp from the old owner
-        (test_owner_change_in_same_write_uses_new_orderer_team). Clearing the
-        owner is not a hand-over — there is no new owner to aim at — so the
-        stamp still wins there.
+        The orderer's first resource group by membership, falling back to
+        Kundcenter. Deliberately *not* the stamped "Beställande avdelning"
+        (MIM-1970/2011): a department is an attribute of a person, not a
+        queue a request can sit in, so it cannot be a target. An orderer who
+        is in no resource group does not work the Odoo queues at all, so a
+        hand-back "to their group" would reach nobody — Kundcenter, who
+        distribute every request in the organisation, is the right target
+        for those.
 
-        The caller decides ``owner_changed`` because only it can: this runs
-        after super().write(), so ``record.owner_user_id`` is already the new
-        value and the old one is gone. "owner_user_id is a key in vals" is
-        not the same question — a caller that resubmits every field sends an
-        unchanged owner too, and answering yes there drops the stamp for no
-        reason.
+        Runs after super().write(), so a write that changes owner_user_id and
+        the stage together hands the request to the new owner's team.
 
-        Otherwise the pre-2011 derivation: the orderer's first team, falling
-        back to Kundcenter. Returns an empty recordset if nothing resolves;
-        the caller then leaves the team unchanged."""
-        service = OrderingTeamService(self.env)
-        if not owner_changed and record.ordering_team_id:
-            # search(), not a field read: an archived stamped team must fall
-            # through to the derivation, same rule as every team lookup here.
-            stamped = (
-                self.env["maintenance.team"]
-                .sudo()
-                .search([("id", "=", record.ordering_team_id.id)], limit=1)
-            )
-            if stamped:
-                return stamped
-        orderer = record.owner_user_id or record.create_uid
-        # The same chain create() uses, via the one place it is defined.
-        # Skipping the AD step here would strand exactly the
-        # population this ticket exists for: a new owner in no resource group
-        # but with a mapped AD unit would be handed to Kundcenter instead of
-        # their own group, and so would every request with no stamp at all.
-        #
-        # MIM-1970: kundcenter_team() resolves by xml-id (MIM-1916) and skips
-        # an archived team, so this last fallback can never hand a request
-        # back to a team nobody works in.
-        team = (
-            service._first_team(
-                lambda: service._preferred_category_team(
-                    record.maintenance_request_category_id, orderer
-                ),
-                lambda: service._ad_team(orderer),
-                lambda: service.resolve_orderer_team(orderer),
-            )
-            or service.kundcenter_team()
-        )
+        Mina sidor requests without an owner go to Kundcenter regardless of
+        the integration user's membership: a tenant ordered them, and the
+        technical account's team says nothing about that.
+
+        kundcenter_team() resolves by xml-id (MIM-1916) and skips an archived
+        team, so the fallback can never hand a request back to a team nobody
+        works in. Returns an empty recordset if nothing resolves; the caller
+        then leaves the team unchanged."""
+        orderer = record.owner_user_id
+        if not orderer and record.creation_origin != MIMER_NU_ORIGIN:
+            orderer = record.create_uid
+        team = self.resolve_orderer_team(orderer) or self.kundcenter_team()
         if not team:
             _logger.warning(
                 "MIM-486: Kundcenter team missing or archived; leaving "
@@ -228,11 +225,11 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
-        # Beställande resursgrupp (OrderingTeamService) — stamped by create and
-        # the backfill cron. The backfill writes without the creating_records
-        # context, so without this every backfilled request gets a chatter note
-        "ordering_team_id",
-        "ordering_cost_center_code",
+        # Beställande avdelning (OrderingDepartmentService) — stamped by create
+        # and the backfill cron. The backfill writes without the
+        # creating_records context, so without this every backfilled request
+        # gets a chatter note
+        "ordering_department",
         "ordering_backfilled_at",
     }
 

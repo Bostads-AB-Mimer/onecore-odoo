@@ -32,11 +32,12 @@ class ResUsers(models.Model):
 
     @api.model
     def _sync_ad_office_location(self, login, validation):
-        """Copy the AD unit claim onto the user, when there is one.
+        """Copy the AD department claim onto the user, when there is one.
 
-        Stored raw: normalisation is the reader's job
-        (onecore_maintenance_extension.maintenance_ad_unit.normalize_ad_unit),
-        so the SSO path and the seed import yield identical data.
+        Stored stripped but otherwise as AD has it: AD is kept to one
+        spelling per unit, and OrderingDepartmentService
+        (onecore_maintenance_extension) copies the value onto requests
+        verbatim, so the SSO path and the seed import must yield identical data.
 
         Never raises. The OAuth controller turns any exception here into a
         failed login (oauth_error=2), and a malformed claim must not lock
@@ -68,11 +69,11 @@ class ResUsers(models.Model):
             if not isinstance(value, str):
                 # A multivalued protocol mapper delivers a list, and str()
                 # would happily store "['Kundcenterenheten']" — no exception,
-                # so the except below never fires, and normalize_ad_unit then
-                # silently matches no maintenance.ad.unit row with nothing in
-                # the log to explain why. The mapper is created by hand in
-                # Keycloak and the spec says multivalued OFF, so this is a
-                # configuration mistake worth shouting about.
+                # so the except below never fires, and every request the user
+                # orders would then carry that literal as its department with
+                # nothing in the log to explain why. The mapper is created by
+                # hand in Keycloak and the spec says multivalued OFF, so this
+                # is a configuration mistake worth shouting about.
                 _logger.warning(
                     "MIM-2011: Keycloak claim %r for %s is %s, expected a "
                     "string. Check that the protocol mapper has multivalued "

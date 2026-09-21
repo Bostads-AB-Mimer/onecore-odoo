@@ -105,37 +105,53 @@
         </record>
 
         <!--
-        MIM-1970: backfill of "Beställande resursgrupp" on requests created
-        before the field existed. The orderer is guessed from who created the
-        request and which team they belong to today - ordering_backfilled_at
-        marks every guessed row so it stays distinguishable from the ones
-        stamped at create. Pure DB work, no HTTP, so the batch is large.
-        Self-consuming: once the backlog is stamped this is one query that
-        returns nothing. Writes ONLY the ordering_* fields - never
-        Resursgrupp/Resurs/Steg.
+        MIM-1970/2011: backfill of "Beställande avdelning" on requests that
+        have none - created before the field existed, or by someone whose AD
+        department had not yet reached Odoo. The orderer's department is
+        read as it is today; ordering_backfilled_at marks every guessed row
+        so it stays distinguishable from the ones stamped at create. Pure DB
+        work, no HTTP, so the batch is large. Self-consuming: once the
+        backlog is stamped this is one query that returns nothing. Writes
+        ONLY the ordering_* fields - never Resursgrupp/Resurs/Steg.
 
-        SHIPPED INACTIVE ON PURPOSE. The five district teams (Vast, Ost, Norr,
-        Mitt, Studentteam) are archived in production until the kvartersvardar
-        start working in Odoo, and Odoo's search() excludes archived records -
-        so the derivation cannot see them. Their 50 members would be stamped
-        with their functional group (Fastighetsservice, Driftenheten, ...)
-        instead of their district, permanently: the domain is self-consuming,
-        so the cron never revisits a stamped request. MIM-1975/1976 would then
-        be built on top of an empty answer.
+        SHIPPED INACTIVE ON PURPOSE, like every other backfill here. The
+        department reaches res.users through the Keycloak login hook, at each
+        person's next SSO login after the protocol mapper went live. The
+        backfill leaves a request alone while its orderer is an active SSO
+        user who has not logged in yet, and gives up (stamps "looked, could
+        not tell") only for archived or never-linked users - so it converges
+        on its own and can be switched on as soon as the mapper is live.
 
-        Turn it on in Installningar -> Teknisk -> Schemalagda atgarder AFTER
-        the district teams are unarchived. Until then the field is still set
-        correctly on every newly created request - only the backfill waits.
+        Turn it on in Installningar -> Teknisk -> Schemalagda atgarder once
+        the mapper exists in prod-Keycloak. Until then the field is still set
+        correctly on every newly created request whose orderer has a value.
         -->
-        <record id="ir_cron_backfill_ordering_team" model="ir.cron">
-            <field name="name">Ärenden: härled beställande resursgrupp</field>
+        <record id="ir_cron_backfill_ordering_department" model="ir.cron">
+            <field name="name">Ärenden: härled beställande avdelning</field>
             <field name="model_id" ref="maintenance.model_maintenance_request"/>
             <field name="state">code</field>
-            <field name="code">model._cron_backfill_ordering_team()</field>
+            <field name="code">model._cron_backfill_ordering_department()</field>
             <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">hours</field>
             <field name="active" eval="False"/>
         </record>
+    </data>
+
+    <!--
+    Outside the noupdate block on purpose. The first version of MIM-1970
+    shipped a cron "Ärenden: härled beställande resursgrupp" that called
+    _cron_backfill_ordering_team(), a method that no longer exists. It never
+    reached prod, but the epic/dev databases have it, and noupdate="1" means
+    an upgrade would otherwise leave it behind - inactive, right next to its
+    replacement, waiting for somebody to switch on the wrong one.
+
+    By search, not by id: the id form logs a warning with a traceback on every
+    upgrade where the record is missing, which is every upgrade in prod. The
+    explicit active leaf is what makes the search see an inactive cron.
+    -->
+    <data>
+        <delete model="ir.cron"
+            search="[('code', '=', 'model._cron_backfill_ordering_team()'), ('active', 'in', [True, False])]"/>
     </data>
 </odoo>
