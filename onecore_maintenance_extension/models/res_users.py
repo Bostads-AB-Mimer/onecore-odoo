@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class ResUsers(models.Model):
@@ -21,3 +21,40 @@ class ResUsers(models.Model):
             "avdelning på ärenden som användaren skapar."
         ),
     )
+
+    # ------------------------------------------------------------------
+    # MIM-2010: what this module adds to a user onecore_auth creates at their
+    # first Keycloak login. The policy lives here, not in onecore_auth: that
+    # module knows about logins, this one knows what it takes to work with
+    # requests.
+    #
+    # getattr(super()) instead of a plain super() call, on purpose. This
+    # module and onecore_auth do not depend on each other, so their load
+    # order — and with it the MRO — is undefined. A plain override would be
+    # silently skipped whenever this class happens to load first, and a plain
+    # super() call would raise when onecore_auth is not installed at all.
+    # Written this way both definitions run, in either order, and this one
+    # is inert on its own.
+    # ------------------------------------------------------------------
+    @api.model
+    def _auto_create_group_ids(self):
+        """Admin Ärendehantering. Without it an internal user sees no
+        requests at all (tests/security/test_basic_user.py)."""
+        parent = getattr(super(), "_auto_create_group_ids", None)
+        group_ids = set(parent() if parent else [])
+        group_ids.add(self.env.ref("maintenance.group_equipment_manager").id)
+        return list(group_ids)
+
+    @api.model
+    def _auto_create_user_values(self, validation):
+        """Notifications "In Odoo" instead of Odoo's default "By e-mail".
+
+        The "Olästa meddelanden" filter is restricted to
+        mail.group_mail_notification_type_inbox, and the unread indicators
+        only read inbox notifications — a user left on the default would see
+        neither, unlike the users an admin sets up by hand.
+        """
+        parent = getattr(super(), "_auto_create_user_values", None)
+        values = dict(parent(validation) if parent else {})
+        values["notification_type"] = "inbox"
+        return values
