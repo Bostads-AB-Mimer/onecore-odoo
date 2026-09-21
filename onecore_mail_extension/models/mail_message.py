@@ -17,6 +17,29 @@ LOG_CATEGORY_EVENT = "event"
 LOG_CATEGORY_INTERNAL_NOTE = "internal_note"
 LOG_CATEGORY_COMMUNICATION = "communication"
 
+# ============================================================================
+# SENDER SHOWN TO THE TENANT (MIM-2040)
+# ============================================================================
+# Message types the tenant sees on Mina sidor and that we send — i.e. the
+# work-order service's MESSAGE_DOMAIN minus from_tenant, which the tenant wrote
+# themselves. The failed_*/partial variants are absent on purpose: they are
+# never the type a caller asks for, only what create() rewrites a tenant_mail
+# or tenant_sms into once a send fails, and by then the sender is already
+# captured.
+TENANT_FACING_MESSAGE_TYPES = frozenset(
+    {
+        "receipt_to_tenant",
+        "tenant_sms",
+        "tenant_mail",
+        "tenant_mail_and_sms",
+        "tenant_my_pages",
+    }
+)
+# Not wrapped in _(): this is stored data read by a tenant on Mimer.nu, not UI
+# for the Odoo user writing it, so it must not follow the author's language.
+TENANT_AUTHOR_MIMER = "Mimer"
+TENANT_AUTHOR_CONTRACTOR = "Mimers Leverantör"
+
 
 class OneCoreMailMessage(models.Model):
     _inherit = "mail.message"
@@ -49,6 +72,19 @@ class OneCoreMailMessage(models.Model):
         string="Får fästa",
         compute="_compute_can_pin",
         store=False,
+    )
+    # MIM-2040 — the sender Mina sidor shows beside an outbound message, read by
+    # the work-order service alongside the message body. Stored rather than
+    # computed on read: it is written once, from who the author was and which
+    # resource group the request belonged to at that moment, so reassigning a
+    # request later cannot rewrite what the tenant was told at the time. Empty
+    # on everything the tenant does not see, and on from_tenant.
+    onecore_tenant_author_name = fields.Char(
+        string="Avsändare mot hyresgäst",
+        copy=False,
+        help="Namnet hyresgästen ser på Mina sidor: Mimer, eller "
+        "'Mimers Leverantör - <resursgrupp>' när en extern entreprenör "
+        "svarar. Sätts när meddelandet skapas och ändras aldrig.",
     )
 
     @api.depends(
@@ -288,10 +324,47 @@ class OneCoreMailMessage(models.Model):
                 err,
             )
 
+    def _tenant_facing_author_name(self, res_id):
+        """The sender name the tenant sees on Mina sidor for one message.
+
+        Only membership of group_external_contractor is tested, with Mimer as
+        the default — the internal side is not a group we can enumerate, so
+        anyone we fail to recognise is attributed to Mimer rather than by name.
+
+        The resource group is taken from the request rather than from the
+        author's teams: a contractor can be a member of several, and the
+        request's team is the one they are answering on behalf of. It is also
+        what the SMS/e-post sign-off already uses.
+        """
+        # security/maintenance.xml adds base.user_root to
+        # group_external_contractor, so OdooBot would otherwise be announced to
+        # the tenant as a supplier. Anything posted as the superuser is Mimer's
+        # own automation.
+        if self.env.user._is_superuser() or not self.env.user.has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        ):
+            return TENANT_AUTHOR_MIMER
+        team_name = ""
+        if res_id and "maintenance.request" in self.env:
+            # search() rather than browse(): a res_id the acting user cannot
+            # read must degrade to the bare label, not raise.
+            record = self.env["maintenance.request"].search([("id", "=", res_id)])
+            team_name = record.maintenance_team_id.name or ""
+        if not team_name:
+            return TENANT_AUTHOR_CONTRACTOR
+        return f"{TENANT_AUTHOR_CONTRACTOR} - {team_name}"
+
     @api.model_create_multi
     def create(self, values_list):
         pending_my_pages = []
         for values in values_list:
+            # Captured before the dispatch below, which rewrites message_type
+            # into a failed_* variant when a send fails (MIM-2040).
+            if values.get("message_type") in TENANT_FACING_MESSAGE_TYPES:
+                values["onecore_tenant_author_name"] = self._tenant_facing_author_name(
+                    values.get("res_id")
+                )
+
             if values["message_type"].startswith("tenant_"):
                 the_record = self.env["maintenance.request"].search(
                     [("id", "=", values["res_id"])]
