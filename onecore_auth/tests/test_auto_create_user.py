@@ -327,16 +327,55 @@ class TestAutoCreateUser(TransactionCase):
         self.assertEqual(user.ad_office_location, "Distrikt Student")
         self.assertTrue(any("re-linked" in line for line in logs.output))
 
-    def test_relink_keeps_the_users_groups(self):
-        """Re-linking touches the three oauth fields and nothing else: no
-        Admin Ärendehantering handed to somebody who was deliberately
-        given less."""
+    def test_relinked_employee_gets_request_admin_and_loses_nothing(self):
+        """Every mimer.nu account needs Admin Ärendehantering — there is no
+        other way to work in Odoo the way Mimer does (Sebastian 2026-09-21).
+        Found by testing locally: a re-linked account with only the basic
+        role landed in Discuss and could see no requests. Groups are only
+        added; whatever the person already had stays."""
+        extra = self.env.ref("base.group_partner_manager")
         user = self._password_user("begransad@mimer.nu")
+        user.write({"group_ids": [(4, extra.id)]})
+        self.assertFalse(user.has_group("maintenance.group_equipment_manager"))
         groups_before = user.group_ids
 
-        self._signin("sub-begransad", "begransad@mimer.nu")
+        with self.assertLogs(LOGGER, INFO) as logs:
+            self._signin("sub-begransad", "begransad@mimer.nu")
+
+        self.assertTrue(user.has_group("maintenance.group_equipment_manager"))
+        self.assertLessEqual(groups_before, user.group_ids)
+        self.assertTrue(any("added group ids" in line for line in logs.output))
+
+    def test_relinked_employee_who_already_has_it_is_not_rewritten(self):
+        user = self._password_user("harredan@mimer.nu")
+        user.write(
+            {"group_ids": [(4, self.env.ref("maintenance.group_equipment_manager").id)]}
+        )
+        groups_before = user.group_ids
+
+        with self.assertLogs(LOGGER, INFO) as logs:
+            self._signin("sub-harredan", "harredan@mimer.nu")
 
         self.assertEqual(user.group_ids, groups_before)
+        self.assertFalse(any("added group ids" in line for line in logs.output))
+
+    def test_relinked_contractor_is_not_promoted(self):
+        """External contractors are the one group that works without Admin
+        Ärendehantering. They normally never get here (the domain gate), but
+        one with a mimer.nu address must stay a contractor."""
+        contractor_group = self.env.ref(
+            "onecore_maintenance_extension.group_external_contractor"
+        )
+        user = self._password_user("entreprenor@mimer.nu")
+        user.write({"group_ids": [(4, contractor_group.id)]})
+        groups_before = user.group_ids
+
+        login = self._signin("sub-entreprenor", "entreprenor@mimer.nu")
+
+        self.assertEqual(login, "entreprenor@mimer.nu")
+        self.assertEqual(user.oauth_uid, "sub-entreprenor")
+        self.assertEqual(user.group_ids, groups_before)
+        self.assertFalse(user.has_group("maintenance.group_equipment_manager"))
 
     def test_stale_subject_is_overwritten(self):
         """The AD account was recreated and Keycloak issued a new subject —
@@ -474,6 +513,31 @@ class TestAutoCreateUser(TransactionCase):
         self.assertIn("could not re-link or create", logs.output[0])
         # The savepoint rolled back only our attempt: the cursor still works
         self.assertFalse(self._by_login("dbfel@mimer.nu"))
+
+    def test_create_works_when_the_request_has_no_user(self):
+        """Found by logging in for real (2026-09-21); no test or shell replay
+        could see it. /auth_oauth/signin is auth='none', so the transaction's
+        default environment has no user at all. create() leaves the avatar to
+        be computed at the next flush; left to the savepoint's exit, that
+        flush ran in the default environment, ir.attachment asked for the
+        current user's groups, got an empty res.users() and raised — after
+        "auto-created" had already been logged — and the login was denied.
+
+        Tests and the shell always have a uid, so the default environment is
+        swapped for a user-less one here to reproduce the request."""
+        from odoo import api
+
+        transaction = self.env.transaction
+        original = transaction.default_env
+        transaction.default_env = api.Environment(self.env.cr, None, {})
+        try:
+            with self.assertNoLogs(LOGGER, "ERROR"):
+                login = self._signin("sub-utan-uid", "utan.uid@mimer.nu", name="Utan Uid")
+        finally:
+            transaction.default_env = original
+
+        self.assertEqual(login, "utan.uid@mimer.nu")
+        self.assertTrue(self._by_login("utan.uid@mimer.nu"))
 
     def _signin_with_failing_create(self, error, concurrent_login):
         Users = self.env.registry["res.users"]

@@ -167,7 +167,17 @@ class ResUsers(models.Model):
 
         try:
             with self.env.cr.savepoint():
-                return self._relink_or_create(provider, validation, params, email)
+                login = self._relink_or_create(provider, validation, params, email)
+                # Flush here, in *this* environment. /auth_oauth/signin is
+                # auth='none': the transaction's default environment has no
+                # user at all, and that is the one the savepoint's exit (and
+                # the controller's commit) would flush in. create() leaves the
+                # avatar pending; computing it there makes ir.attachment ask
+                # for the groups of an empty res.users() and raise — after the
+                # user was created, so the login was denied and rolled back.
+                # self.env is the superuser the controller switched to.
+                self.env.flush_all()
+                return login
         except (pg_errors.UniqueViolation, *PG_CONCURRENCY_EXCEPTIONS_TO_RETRY):
             # Two requests for the same first login (a double click, two
             # tabs): the other one won. Re-raising for Odoo's request retry
@@ -257,18 +267,23 @@ class ResUsers(models.Model):
                     active.oauth_provider_id.display_name,
                 )
                 return None
-            active.write(
-                {
-                    "oauth_provider_id": provider,
-                    "oauth_uid": validation["user_id"],
-                    "oauth_access_token": params["access_token"],
-                }
-            )
+            values = {
+                "oauth_provider_id": provider,
+                "oauth_uid": validation["user_id"],
+                "oauth_access_token": params["access_token"],
+            }
+            # Groups are only ever added, never removed or replaced: whatever
+            # an admin gave the person by hand stays.
+            missing = set(self._auto_relink_group_ids(active)) - set(active.all_group_ids.ids)
+            if missing:
+                values["group_ids"] = [(4, group_id) for group_id in sorted(missing)]
+            active.write(values)
             _logger.info(
-                "MIM-2010: re-linked existing user %s (%s) to Keycloak subject %s",
+                "MIM-2010: re-linked existing user %s (%s) to Keycloak subject %s%s",
                 active.login,
                 active.name,
                 validation["user_id"],
+                ", added group ids %s" % sorted(missing) if missing else "",
             )
             return active.login
 
@@ -310,6 +325,17 @@ class ResUsers(models.Model):
         parent = getattr(super(), "_auto_create_group_ids", None)
         group_ids = set(parent() if parent else [])
         return list(group_ids | set(self._default_groups().ids))
+
+    @api.model
+    def _auto_relink_group_ids(self, user):
+        """Group ids an existing ``user`` must end up with when re-linked.
+
+        Nothing from this module: a re-link is about the Keycloak link, and
+        the account already has whatever access it was given. Other modules
+        add what no employee can work without (cooperative, same as above).
+        """
+        parent = getattr(super(), "_auto_relink_group_ids", None)
+        return list(parent(user) if parent else [])
 
     @api.model
     def _auto_create_user_values(self, validation):
