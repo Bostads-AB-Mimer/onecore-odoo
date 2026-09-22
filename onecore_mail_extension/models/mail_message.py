@@ -39,6 +39,32 @@ TENANT_FACING_MESSAGE_TYPES = frozenset(
 # for the Odoo user writing it, so it must not follow the author's language.
 TENANT_AUTHOR_MIMER = "Mimer"
 TENANT_AUTHOR_CONTRACTOR = "Mimers Leverantör"
+# The resource-group half of the label has the same requirement, but
+# maintenance.team.name is translate=True — a jsonb column resolved in whatever
+# language the reader happens to have. Left unpinned, the write path resolves
+# it in the posting user's language while the 19.0.1.0.1 backfill, whose env
+# carries no lang at all, resolves it as en_US — so one tenant's history would
+# carry both spellings of a resource group that was ever renamed. Both sides
+# go through tenant_author_lang() instead.
+TENANT_AUTHOR_LANG = "sv_SE"
+
+
+def tenant_author_lang(env):
+    """The one language the resource-group name is read in, write and backfill.
+
+    sv_SE where it is installed: that is the language Mimer's users see and
+    rename a resource group in, and Odoo's write path updates only the acting
+    language, so the Swedish value is the live one. en_US otherwise — env.lang
+    raises on a language that is not installed, and en_US always exists. Same
+    conditional as _update_maintenance_stages in
+    onecore_maintenance_extension/hooks.
+
+    Which of the two is chosen matters far less than that both sides choose the
+    same one for a given database.
+    """
+    if env["res.lang"]._get_data(code=TENANT_AUTHOR_LANG):
+        return TENANT_AUTHOR_LANG
+    return "en_US"
 
 
 class OneCoreMailMessage(models.Model):
@@ -324,7 +350,32 @@ class OneCoreMailMessage(models.Model):
                 err,
             )
 
-    def _tenant_facing_author_name(self, res_id):
+    def _tenant_facing_author(self, values):
+        """The user whose organisation answered, for one set of create values.
+
+        Read from the message's own author_id where it has one, so this agrees
+        with the 19.0.1.0.1 backfill — which has nothing but author_id to go on
+        — by construction, rather than by the coincidence that every
+        tenant-facing type happens to be posted by the acting user today. A
+        message_post(author_id=...) on someone else's behalf would otherwise be
+        labelled one way now and the other way by a re-run of the migration.
+
+        A partner with no res.users behind it falls back to the acting user:
+        an author we cannot resolve must not silently drop a contractor label.
+        """
+        author_partner_id = values.get("author_id")
+        if not author_partner_id or author_partner_id == self.env.user.partner_id.id:
+            return self.env.user
+        # sudo(): whether the label is right must not depend on whether the
+        # posting user happens to be allowed to read other users.
+        author = (
+            self.env["res.users"]
+            .sudo()
+            .search([("partner_id", "=", author_partner_id)], limit=1)
+        )
+        return author or self.env.user
+
+    def _tenant_facing_author_name(self, author, record=None):
         """The sender name the tenant sees on Mina sidor for one message.
 
         Only membership of group_external_contractor is tested, with Mimer as
@@ -340,16 +391,18 @@ class OneCoreMailMessage(models.Model):
         # group_external_contractor, so OdooBot would otherwise be announced to
         # the tenant as a supplier. Anything posted as the superuser is Mimer's
         # own automation.
-        if self.env.user._is_superuser() or not self.env.user.has_group(
+        if author._is_superuser() or not author.sudo().has_group(
             "onecore_maintenance_extension.group_external_contractor"
         ):
             return TENANT_AUTHOR_MIMER
         team_name = ""
-        if res_id and "maintenance.request" in self.env:
-            # search() rather than browse(): a res_id the acting user cannot
-            # read must degrade to the bare label, not raise.
-            record = self.env["maintenance.request"].search([("id", "=", res_id)])
-            team_name = record.maintenance_team_id.name or ""
+        if record:
+            team_name = (
+                record.with_context(
+                    lang=tenant_author_lang(self.env)
+                ).maintenance_team_id.name
+                or ""
+            )
         if not team_name:
             return TENANT_AUTHOR_CONTRACTOR
         return f"{TENANT_AUTHOR_CONTRACTOR} - {team_name}"
@@ -358,17 +411,32 @@ class OneCoreMailMessage(models.Model):
     def create(self, values_list):
         pending_my_pages = []
         for values in values_list:
+            message_type = values.get("message_type")
+
+            # One lookup, shared by the sender label and the SMS/e-post
+            # dispatch below — each used to search the same request separately.
+            #
+            # search() rather than browse(): a res_id the acting user cannot
+            # read must degrade to the bare label, not raise. model is part of
+            # the condition so a message posted on some other model cannot
+            # borrow an unrelated request's resource group — or, in the
+            # dispatch below, an unrelated tenant's phone number.
+            the_record = None
+            if "maintenance.request" in self.env:
+                the_record = self.env["maintenance.request"].browse()
+                if values.get("model") == "maintenance.request" and values.get(
+                    "res_id"
+                ):
+                    the_record = the_record.search([("id", "=", values["res_id"])])
+
             # Captured before the dispatch below, which rewrites message_type
             # into a failed_* variant when a send fails (MIM-2040).
-            if values.get("message_type") in TENANT_FACING_MESSAGE_TYPES:
+            if message_type in TENANT_FACING_MESSAGE_TYPES:
                 values["onecore_tenant_author_name"] = self._tenant_facing_author_name(
-                    values.get("res_id")
+                    self._tenant_facing_author(values), the_record
                 )
 
-            if values["message_type"].startswith("tenant_"):
-                the_record = self.env["maintenance.request"].search(
-                    [("id", "=", values["res_id"])]
-                )
+            if message_type and message_type.startswith("tenant_"):
                 subject = f"Ang. serviceanmälan: {the_record.name}"
                 body = values["body"].replace("<br>", "\\n")
 
@@ -630,4 +698,47 @@ EXPECTED_CATEGORIES = {
     # them being absent from the live selection instead of failing.
     "sms": LOG_CATEGORY_COMMUNICATION,
     "snailmail": LOG_CATEGORY_COMMUNICATION,
+}
+
+
+# The same guard as EXPECTED_CATEGORIES above, for the other decision a new
+# message_type forces (MIM-2040): does a tenant read this on Mina sidor?
+# tests/test_tenant_author_name.py::test_every_message_type_is_classified_as_
+# tenant_facing_or_not fails the build until a newly added type is answered
+# for here, and pins the True half against TENANT_FACING_MESSAGE_TYPES.
+#
+# Missing a tenant-facing type never leaks a name — the work-order adapter
+# falls back to "Mimer" for anything unlabelled — but it drops the contractor
+# attribution silently, with nothing else failing. That is exactly the bug this
+# field exists to fix, so it gets the same treatment as the log filter.
+EXPECTED_TENANT_FACING = {
+    # Base Odoo types (addons/mail/models/mail_message.py:119). None of these
+    # is ever published to Mimer.nu — they are Odoo's own chatter traffic.
+    "email": False,
+    "comment": False,
+    "email_outgoing": False,
+    "notification": False,
+    "auto_comment": False,
+    "out_of_office": False,
+    # Arrive via auto_install (see EXPECTED_CATEGORIES); outbound to a partner,
+    # never to a tenant through the work-order service.
+    "sms": False,
+    "snailmail": False,
+    # ONECore types (see the message_type selection_add above).
+    # The tenant wrote it; Mina sidor labels it "Du", so there is no sender of
+    # ours to capture.
+    "from_tenant": False,
+    "receipt_to_tenant": True,
+    "tenant_sms": True,
+    "tenant_mail": True,
+    "tenant_mail_and_sms": True,
+    "tenant_my_pages": True,
+    # False because a caller never asks for these: create() rewrites one of the
+    # types above into them once a send fails, by which point the label is
+    # already on the values. The tenant does see them.
+    "failed_tenant_sms": False,
+    "failed_tenant_mail": False,
+    "failed_tenant_mail_and_sms": False,
+    "tenant_mail_ok_and_sms_failed": False,
+    "tenant_mail_failed_and_sms_ok": False,
 }

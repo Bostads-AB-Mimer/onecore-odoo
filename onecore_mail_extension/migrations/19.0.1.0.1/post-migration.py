@@ -61,6 +61,37 @@ def contractor_partner_ids(env):
     return contractors.partner_id.ids
 
 
+def resource_groups(env):
+    """(id, name) for every resource group, archived ones included.
+
+    active_test=False because maintenance.team has an `active` field and a
+    supplier whose contract has ended is archived, not deleted. Without it
+    every historical message on an archived team's requests would fall through
+    to the bare "Mimers Leverantör" — and since rows are only ever filled in,
+    never overwritten, re-running the upgrade could not repair it.
+
+    lang goes through the same tenant_author_lang() as the write path, for the
+    same reason the label constants are not translated: maintenance.team.name
+    is translate=True, so an unpinned read here would resolve as en_US while
+    the write path resolved in the posting user's language, and one tenant's
+    history would carry both spellings of a renamed group.
+    """
+    from odoo.addons.onecore_mail_extension.models.mail_message import (
+        tenant_author_lang,
+    )
+
+    if "maintenance.team" not in env:
+        return [], []
+    teams = (
+        env["maintenance.team"]
+        .sudo()
+        .with_context(active_test=False, lang=tenant_author_lang(env))
+        .search([])
+    )
+    named = [team for team in teams if team.name]
+    return [team.id for team in named], [team.name for team in named]
+
+
 def backfill_tenant_author_names(env):
     """Fill onecore_tenant_author_name wherever it is still NULL."""
     from odoo.addons.onecore_mail_extension.models.mail_message import (
@@ -70,30 +101,34 @@ def backfill_tenant_author_names(env):
 
     cr = env.cr
     partner_ids = contractor_partner_ids(env)
+    team_ids, team_names = resource_groups(env)
 
-    if partner_ids and "maintenance.team" in env:
-        # One statement per resource group rather than a join on the team name:
+    if partner_ids and team_ids:
+        # The team names are joined in as an array rather than read in SQL:
         # maintenance.team.name is translate=True, i.e. a jsonb column, so SQL
-        # would have to pick a language out of the JSON. Teams number in the
-        # tens.
-        for team in env["maintenance.team"].sudo().search([]):
-            cr.execute(
-                """UPDATE mail_message m
-                      SET onecore_tenant_author_name = %s
-                     FROM maintenance_request r
-                    WHERE m.res_id = r.id
-                      AND m.model = 'maintenance.request'
-                      AND m.message_type IN %s
-                      AND m.onecore_tenant_author_name IS NULL
-                      AND m.author_id IN %s
-                      AND r.maintenance_team_id = %s""",
-                (
-                    f"{TENANT_AUTHOR_CONTRACTOR} - {team.name}",
-                    BACKFILL_MESSAGE_TYPES,
-                    tuple(partner_ids),
-                    team.id,
-                ),
-            )
+        # would have to pick a language out of the JSON — resource_groups()
+        # has already picked one. Teams number in the tens, so the array is
+        # small, and this stays a single pass over mail_message rather than one
+        # per resource group.
+        cr.execute(
+            """UPDATE mail_message m
+                  SET onecore_tenant_author_name = %s || ' - ' || t.name
+                 FROM maintenance_request r
+                 JOIN unnest(%s::int[], %s::text[]) AS t(id, name)
+                   ON t.id = r.maintenance_team_id
+                WHERE m.res_id = r.id
+                  AND m.model = 'maintenance.request'
+                  AND m.message_type = ANY(%s)
+                  AND m.onecore_tenant_author_name IS NULL
+                  AND m.author_id = ANY(%s)""",
+            (
+                TENANT_AUTHOR_CONTRACTOR,
+                team_ids,
+                team_names,
+                list(BACKFILL_MESSAGE_TYPES),
+                partner_ids,
+            ),
+        )
 
     if partner_ids:
         # Contractor-authored rows whose request no longer exists, or that were
@@ -101,18 +136,18 @@ def backfill_tenant_author_names(env):
         cr.execute(
             """UPDATE mail_message
                   SET onecore_tenant_author_name = %s
-                WHERE message_type IN %s
+                WHERE message_type = ANY(%s)
                   AND onecore_tenant_author_name IS NULL
-                  AND author_id IN %s""",
-            (TENANT_AUTHOR_CONTRACTOR, BACKFILL_MESSAGE_TYPES, tuple(partner_ids)),
+                  AND author_id = ANY(%s)""",
+            (TENANT_AUTHOR_CONTRACTOR, list(BACKFILL_MESSAGE_TYPES), partner_ids),
         )
 
     cr.execute(
         """UPDATE mail_message
               SET onecore_tenant_author_name = %s
-            WHERE message_type IN %s
+            WHERE message_type = ANY(%s)
               AND onecore_tenant_author_name IS NULL""",
-        (TENANT_AUTHOR_MIMER, BACKFILL_MESSAGE_TYPES),
+        (TENANT_AUTHOR_MIMER, list(BACKFILL_MESSAGE_TYPES)),
     )
 
 
@@ -127,10 +162,10 @@ def migrate(cr, version):
     cr.execute(
         """SELECT onecore_tenant_author_name LIKE %s, count(*)
              FROM mail_message
-            WHERE message_type IN %s
+            WHERE message_type = ANY(%s)
               AND onecore_tenant_author_name IS NOT NULL
          GROUP BY 1""",
-        (f"{TENANT_AUTHOR_CONTRACTOR} - %", BACKFILL_MESSAGE_TYPES),
+        (f"{TENANT_AUTHOR_CONTRACTOR} - %", list(BACKFILL_MESSAGE_TYPES)),
     )
     counts = dict(cr.fetchall())
     _logger.info(

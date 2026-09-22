@@ -70,17 +70,18 @@ class TestTenantAuthorNameBackfill(TransactionCase):
             }
         )
 
-    def _legacy_message(self, author, message_type, author_name=None):
+    def _legacy_message(self, author, message_type, author_name=None, record=None):
         """A message as prod holds it today: the right type, no author label.
 
         Created as a plain comment and then rewritten in SQL, so create()'s
         SMS/e-post dispatch is never involved — these stand in for rows written
         long before this field existed.
         """
+        record = self.request if record is None else record
         message = self.env["mail.message"].create(
             {
                 "model": "maintenance.request",
-                "res_id": self.request.id,
+                "res_id": record.id,
                 "body": "Gammalt meddelande",
                 "message_type": "comment",
                 "author_id": author.partner_id.id,
@@ -159,4 +160,33 @@ class TestTenantAuthorNameBackfill(TransactionCase):
         self.assertIn(self.external_user.partner_id.id, partner_ids)
         self.assertNotIn(
             self.env["res.users"].browse(SUPERUSER_ID).partner_id.id, partner_ids
+        )
+
+    def test_archived_resource_group_is_still_named(self):
+        # A supplier whose contract has ended is archived, not deleted, and
+        # maintenance.team has an `active` field — so search([]) would skip it
+        # and freeze the bare label into exactly the history that is hardest to
+        # recover. Rows are only ever filled in, so a re-run cannot repair it.
+        category_id = self.env.ref("onecore_maintenance_extension.category_1").id
+        team = self.env["maintenance.team"].create(
+            {
+                "name": "Utgången Leverantör AB",
+                "member_ids": [(6, 0, [self.external_user.id])],
+            }
+        )
+        request = self.env["maintenance.request"].create(
+            {
+                "name": "Gammalt ärende",
+                "maintenance_request_category_id": category_id,
+                "space_caption": "Lägenhet",
+                "hidden_from_my_pages": False,
+                "maintenance_team_id": team.id,
+            }
+        )
+        message = self._legacy_message(self.external_user, "tenant_sms", record=request)
+        team.active = False
+        self._run()
+        self.assertEqual(
+            message.onecore_tenant_author_name,
+            "Mimers Leverantör - Utgången Leverantör AB",
         )
