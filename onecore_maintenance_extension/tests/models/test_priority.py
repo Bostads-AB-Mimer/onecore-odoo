@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
@@ -129,3 +131,32 @@ class TestPriorityFields(TransactionCase):
                 self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=weeks
             )
             self.assertEqual(request.priority_days, weeks * 7)
+
+
+@tagged("onecore")
+class TestPriorityDueDate(TransactionCase):
+    def test_due_date_from_custom_weeks(self):
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=6,
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=42))
+
+    def test_akut_due_date_is_the_base_date(self):
+        """Akut is 0 days, not 'no priority' — due_date must still be set."""
+        request_date = date.today()
+        request = create_maintenance_request(
+            self.env, request_date=request_date, priority_expanded="0"
+        )
+        self.assertEqual(request.due_date, request_date)
+
+    def test_manual_due_date_survives_a_weeks_change(self):
+        request = create_maintenance_request(
+            self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=2
+        )
+        manual = date.today() + timedelta(days=99)
+        request.write({"priority_weeks": 4, "due_date": manual})
+        self.assertEqual(request.due_date, manual)
