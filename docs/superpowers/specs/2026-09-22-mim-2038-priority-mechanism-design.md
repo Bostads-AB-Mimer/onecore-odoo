@@ -96,9 +96,32 @@ to a handling stage. Keeping the nullable `Selection` as the picker means the
 set/unset question is still answered by a nullable column, and
 `maintenance_workflow_service.py` needs **no change at all**.
 
-The same trap applies to sorting and filtering, and is handled by writing
-`priority_days = False` (→ SQL `NULL`) when no priority is set, so unset
-ärenden do not sort and filter as if they were Akut.
+**And it applies to `priority_days` itself.** An earlier draft of this design
+proposed writing `priority_days = False` so that unset ärenden would be SQL
+`NULL` and not collide with Akut. That is not possible:
+
+```python
+# odoo/orm/fields_numeric.py:32
+def convert_to_column(self, value, record, values=None, validate=True):
+    return int(value or 0)
+```
+
+`fields.Integer` has `falsy_value = 0` and coerces `False` to `0` on the way
+into the column. There is no nullable integer in the Odoo ORM. So
+`priority_days` **is `0` for an unset ärende and `0` for Akut**, and cannot
+distinguish them — which is fine, because it is never asked to:
+
+> **`priority_days` answers "how many days". `priority_expanded` answers
+> "is a priority set". Never the other way round.**
+
+Every filter, every `invisible=`, and the stage gate go through
+`priority_expanded`, which is a nullable `Selection` and does distinguish the
+two. `priority_days` is used only for the arithmetic, for sorting and for
+grouping.
+
+`priority_label` is the one derived field that *is* nullable — `Char` stores
+`NULL` happily — so it is computed as `False` when `priority_expanded` is
+unset rather than rendering "Akut" on an unprioritised ärende.
 
 ## Model
 
@@ -139,27 +162,30 @@ priority_label = fields.Char(
 
 | `priority_expanded` | `priority_days` |
 |---|---|
-| unset | `False` (SQL `NULL`) |
-| `custom` | `7 * priority_weeks`, or `False` if weeks is unset/0 |
+| unset | `0` (meaningless; nothing reads it without checking `priority_expanded` first) |
+| `custom` | `7 * priority_weeks`, or `0` if weeks is unset |
 | anything else | `int(priority_expanded)` |
 
 `_compute_priority_label` — the one place that turns a day count back into
 Swedish, so list, kanban, mobile and the contractor-facing read-only block all
-agree:
+agree. It is also the nullable witness for "has a priority at all":
 
 | Condition | Label |
 |---|---|
-| `priority_days is False` | `False` |
+| `priority_expanded` unset | `False` |
 | `priority_days == 0` | `"Akut"` |
 | `priority_days % 7 == 0 and priority_days >= 14` | `"{n} veckor"` |
 | `priority_days == 1` | `"1 dag"` |
 | otherwise | `"{n} dagar"` |
 
-`_compute_due_date` changes from `int(record.priority_expanded)` to
-`record.priority_days`, guarded on `priority_days` not being `False`. Its
-`@api.depends` moves from `priority_expanded` to `priority_days`. The existing
-`_inverse_due_date` no-op stays — it is what lets a manually typed
-förfallodatum survive a flush, and that behaviour must not change.
+`_compute_due_date` changes only its day source — `int(record.priority_expanded)`
+becomes `record.priority_days` — and keeps its existing
+`if base_date and record.priority_expanded:` guard verbatim. That guard is
+already correct for Akut, because `priority_expanded` is the non-empty string
+`"0"` there, which is truthy in Python. Its `@api.depends` gains
+`priority_days`. The existing `_inverse_due_date` no-op stays — it is what lets
+a manually typed förfallodatum survive a flush, and that behaviour must not
+change.
 
 A `@api.constrains("priority_expanded", "priority_weeks")` rejects
 `custom` with weeks outside `1..PRIORITY_MAX_WEEKS`, in Swedish.
@@ -189,18 +215,28 @@ under Follow-ups.
 value. Replace with four ranges plus a group-by:
 
 ```xml
-<filter string="Akut"              name="priority_acute"   domain="[('priority_days', '=', 0)]" />
-<filter string="Inom 7 dagar"      name="priority_week"    domain="[('priority_days', '&gt;', 0), ('priority_days', '&lt;=', 7)]" />
-<filter string="8–30 dagar"        name="priority_month"   domain="[('priority_days', '&gt;', 7), ('priority_days', '&lt;=', 30)]" />
-<filter string="Längre än 30 dagar" name="priority_long"   domain="[('priority_days', '&gt;', 30)]" />
+<filter string="Akut"              name="priority_acute"   domain="[('priority_expanded', '=', '0')]" />
+<filter string="Inom 7 dagar"      name="priority_week"    domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 0), ('priority_days', '&lt;=', 7)]" />
+<filter string="8–30 dagar"        name="priority_month"   domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 7), ('priority_days', '&lt;=', 30)]" />
+<filter string="Längre än 30 dagar" name="priority_long"   domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 30)]" />
 ```
 
 plus `<filter string="Prioritet" name="group_priority" context="{'group_by': 'priority_days'}" />`
 in the group-by section, which now orders numerically because the column is an
 integer.
 
-Note that `('priority_days', '=', 0)` matches Akut and **not** unset, because
-unset is `NULL` — this is the payoff from writing `False` rather than `0`.
+**Every one of these leads with `priority_expanded`, not `priority_days`** —
+that is the rule from the previous section applied. The Akut filter keeps the
+form it already has today (`priority_expanded = '0'`), and the three ranges
+carry `('priority_expanded', '!=', False)` so an unprioritised ärende, whose
+`priority_days` is an incidental `0`, matches none of them.
+
+The group-by is the one place the `0` collision is visible: an unprioritised
+ärende groups together with Akut. Accepted — an ärende with no priority cannot
+reach a handling stage anyway (the stage gate), so the boards where grouping is
+used contain few of them. Switching the group-by to `priority_label` gives each
+its own bucket at the cost of alphabetical ordering, and is a one-line change if
+the collision turns out to matter in practice.
 
 ## Migration — `migrations/19.0.1.0.12/`
 
@@ -361,8 +397,9 @@ only. A *yes* to 5 replaces this whole design.
 Nothing below has been run yet; this is a design, not a verified
 implementation.
 
-- Confirm Odoo 19's `ORDER BY` null placement for `priority_days`, so unset
-  ärenden land where expected rather than at the top of an ascending sort.
+- Confirm how large the `priority_days == 0` collision is in practice — how
+  many ärenden carry no priority at all on the boards where grouping is used.
+  If it is more than a handful, move the group-by to `priority_label`.
 - Confirm the `varchar` sort claim empirically (it follows from the column
   type, but has not been observed).
 - Rehearse the migration against a restored copy of the production database —

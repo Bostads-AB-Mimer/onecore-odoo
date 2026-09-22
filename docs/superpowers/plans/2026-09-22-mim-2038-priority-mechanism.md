@@ -15,8 +15,8 @@
 - **All user-facing strings are Swedish.** Field labels, filter captions, error messages. Code, comments and identifiers are English.
 - **Commit messages are English**, and end with the `Co-Authored-By` trailer this repo's commits use.
 - **`priority_expanded` keeps its name, its `Selection` type, its nullability, and `'7'` as a valid value.** `onecore/services/work-order/src/services/work-order-service/adapters/odoo-adapter/index.ts:715` writes `priority_expanded: '7'` over XML-RPC. Breaking any of those four properties breaks another repo silently.
-- **Never let an `Integer` answer "is priority set?".** Odoo reads `NULL`/`False` as `0`, and Akut *is* 0 days. The set/unset question is answered by `priority_expanded` (nullable) only.
-- **`priority_days` is `False` (SQL `NULL`) when no priority is set** — never `0`. `0` means Akut.
+- **`priority_days` answers "how many days"; `priority_expanded` answers "is a priority set".** Never the other way round. Odoo's `fields.Integer` cannot hold `NULL` (`odoo/orm/fields_numeric.py:32`, `falsy_value = 0`, `convert_to_column` returns `int(value or 0)`), so `priority_days` is an incidental `0` for an unset ärende and a meaningful `0` for Akut. Every filter, every `invisible=`, and the stage gate go through `priority_expanded`, which is a nullable `Selection`.
+- **`priority_label` is the nullable display witness** — `False` when `priority_expanded` is unset, so an unprioritised ärende never renders as "Akut".
 - Tests run with `./run_tests.sh` (fresh throwaway DB, `--test-tags=onecore`). There is no per-test runner; to iterate on one class, run odoo-bin directly with `--test-tags=/onecore_maintenance_extension:TestClassName`.
 - Formatters: Black for Python, RedHat XML formatter for XML.
 - Never `git add .` or `git add docs/` — stage files explicitly.
@@ -40,8 +40,8 @@ The day/label arithmetic lives in one pure module so the model *and* the migrati
   - `constants.PRIORITY_CUSTOM: str` (`"custom"`)
   - `constants.PRIORITY_MAX_WEEKS: int` (`52`)
   - `constants.LEGACY_PRIORITY_WEEKS: dict[str, int]` — legacy Selection value → weeks
-  - `utils.priority.priority_days_from(preset: str | bool, weeks: int | bool) -> int | bool`
-  - `utils.priority.priority_label_for(days: int | bool) -> str | bool`
+  - `utils.priority.priority_days_from(preset: str | bool, weeks: int) -> int` — always an int; `0` when no preset
+  - `utils.priority.priority_label_for(days: int) -> str` — always a string; the unset case is the model's job, not this helper's
 
 - [ ] **Step 1: Write the failing test**
 
@@ -68,17 +68,19 @@ class TestPriorityHelpers(TransactionCase):
         self.assertEqual(priority_days_from(PRIORITY_CUSTOM, 3), 21)
         self.assertEqual(priority_days_from(PRIORITY_CUSTOM, 26), 182)
 
-    def test_days_is_false_when_unset(self):
-        """Unset must be False, not 0 — 0 is Akut."""
-        self.assertIs(priority_days_from(False, False), False)
+    def test_days_is_zero_without_a_preset(self):
+        """0 here is incidental, not Akut. Odoo Integers cannot be NULL, so
+        the caller must check priority_expanded before trusting this."""
+        self.assertEqual(priority_days_from(False, 0), 0)
 
-    def test_days_is_false_when_custom_without_weeks(self):
-        self.assertIs(priority_days_from(PRIORITY_CUSTOM, 0), False)
-        self.assertIs(priority_days_from(PRIORITY_CUSTOM, False), False)
+    def test_days_is_zero_when_custom_without_weeks(self):
+        self.assertEqual(priority_days_from(PRIORITY_CUSTOM, 0), 0)
+        self.assertEqual(priority_days_from(PRIORITY_CUSTOM, False), 0)
 
-    def test_label_akut_is_not_confused_with_unset(self):
+    def test_label_for_zero_is_akut(self):
+        """The helper is pure arithmetic: 0 days is Akut. Suppressing the
+        label for an unprioritised ärende is the model's job, not this one's."""
         self.assertEqual(priority_label_for(0), "Akut")
-        self.assertIs(priority_label_for(False), False)
 
     def test_label_days_and_weeks(self):
         self.assertEqual(priority_label_for(1), "1 dag")
@@ -168,10 +170,12 @@ Create `onecore_maintenance_extension/models/utils/priority.py`:
 Kept pure and record-free so the model and the 19.0.1.0.12 migration share
 one implementation of the rules rather than two that can drift.
 
-The load-bearing convention: a day count of 0 means Akut, and False means no
-priority has been chosen. They are NOT interchangeable — Odoo reads a NULL
-Integer as 0, so anything that decides "is priority set?" must look at the
-nullable Selection, never at the day count.
+The load-bearing convention: these helpers do arithmetic and nothing else.
+A day count of 0 means Akut. It does NOT mean "no priority" — and it cannot
+be made to, because odoo/orm/fields_numeric.py:32 coerces False to 0 on the
+way into an int4 column, so there is no nullable integer in the ORM. Anything
+that decides "is a priority set?" must look at the nullable priority_expanded
+Selection, never at a day count.
 """
 
 from ..constants import PRIORITY_CUSTOM
@@ -184,23 +188,25 @@ MIN_DAYS_FOR_WEEKS = 14
 
 
 def priority_days_from(preset, weeks):
-    """Number of days to förfallodatum, or False when no priority is set.
+    """Number of days to förfallodatum.
+
+    Always returns an int, because fields.Integer cannot hold NULL — see the
+    module docstring. A return of 0 means Akut *only* when preset is truthy;
+    callers that need "is a priority set at all" must ask priority_expanded.
 
     Args:
         preset: a value from constants.PRIORITY_PRESETS, or False.
         weeks: number of weeks, only meaningful when preset is PRIORITY_CUSTOM.
     """
     if not preset:
-        return False
+        return 0
     if preset == PRIORITY_CUSTOM:
-        return DAYS_PER_WEEK * weeks if weeks else False
+        return DAYS_PER_WEEK * weeks if weeks else 0
     return int(preset)
 
 
 def priority_label_for(days):
-    """Swedish rendering of a day count, or False when no priority is set."""
-    if days is False or days is None:
-        return False
+    """Swedish rendering of a day count. Always returns a string."""
     if days == 0:
         return "Akut"
     if days >= MIN_DAYS_FOR_WEEKS and days % DAYS_PER_WEEK == 0:
@@ -246,8 +252,8 @@ git commit -m "MIM-2038: add pure priority day/label helpers and new presets"
 - Produces, on `maintenance.request`:
   - `priority_expanded` — `Selection(PRIORITY_PRESETS)`, stored, nullable (unchanged name/type)
   - `priority_weeks` — `Integer`, stored
-  - `priority_days` — `Integer`, stored compute, readonly, `False` when unset
-  - `priority_label` — `Char`, stored compute, readonly
+  - `priority_days` — `Integer`, stored compute, readonly; `0` when unset (incidental — never read it without checking `priority_expanded`)
+  - `priority_label` — `Char`, stored compute, readonly; `False` when `priority_expanded` is unset. This is the nullable witness.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -281,17 +287,31 @@ class TestPriorityFields(TransactionCase):
         self.assertEqual(request.priority_days, 28)
         self.assertEqual(request.priority_label, "4 veckor")
 
-    def test_unset_priority_leaves_days_null(self):
-        """The 0-vs-NULL regression test. An unset ärende must not look like Akut."""
+    def test_unset_priority_is_not_mistaken_for_akut(self):
+        """The 0-collision regression test.
+
+        priority_days is 0 for BOTH an unset ärende and an Akut one — Odoo
+        Integers cannot be NULL. So the label must stay empty, and the Akut
+        filter must key on priority_expanded, which is nullable and does tell
+        them apart. If either assertion here fails, some caller has started
+        trusting priority_days to answer a question it cannot answer.
+        """
         request = create_maintenance_request(self.env, priority_expanded=False)
-        self.assertFalse(request.priority_days)
         self.assertFalse(request.priority_label)
 
         akut = create_maintenance_request(self.env, priority_expanded="0")
+        self.assertEqual(akut.priority_label, "Akut")
+
+        both = (request | akut).ids
         matches_akut = self.env["maintenance.request"].search(
-            [("id", "in", (request | akut).ids), ("priority_days", "=", 0)]
+            [("id", "in", both), ("priority_expanded", "=", "0")]
         )
         self.assertEqual(matches_akut, akut, "unset must not match the Akut filter")
+
+        has_priority = self.env["maintenance.request"].search(
+            [("id", "in", both), ("priority_expanded", "!=", False)]
+        )
+        self.assertEqual(has_priority, akut, "unset must not match the range filters")
 
     def test_custom_rejects_weeks_out_of_range(self):
         for weeks in (0, -1, 53):
@@ -346,8 +366,9 @@ In `maintenance.py`, replace the `priority_expanded` field at lines 115-119 with
         " 'Välj antal veckor'.",
     )
     # The day count is the arithmetic priority_expanded used to carry itself.
-    # False (SQL NULL) means no priority is set; 0 means Akut. Keeping those
-    # distinct is why the picker above is still a nullable Selection.
+    # It is 0 both for Akut and for an ärende with no priority at all, because
+    # fields.Integer cannot hold NULL (odoo/orm/fields_numeric.py:32). Ask
+    # priority_expanded, never this, whether a priority is set.
     priority_days = fields.Integer(
         "Prioritet (dagar)",
         compute="_compute_priority_days",
@@ -374,10 +395,16 @@ In `maintenance.py`, immediately above `_compute_due_date` (around line 844), ad
                 record.priority_expanded, record.priority_weeks
             )
 
-    @api.depends("priority_days")
+    @api.depends("priority_expanded", "priority_days")
     def _compute_priority_label(self):
         for record in self:
-            record.priority_label = priority_label_for(record.priority_days)
+            # Char IS nullable, so this is the one derived field that can say
+            # "no priority" — hence the priority_expanded guard.
+            record.priority_label = (
+                priority_label_for(record.priority_days)
+                if record.priority_expanded
+                else False
+            )
 
     @api.constrains("priority_expanded", "priority_weeks")
     def _check_priority_weeks(self):
@@ -465,14 +492,15 @@ Expected: FAIL — `_compute_due_date` still calls `int(record.priority_expanded
 Replace lines 844-852 of `maintenance.py` with:
 
 ```python
-    @api.depends("request_date", "start_date", "priority_days")
+    @api.depends("request_date", "start_date", "priority_expanded", "priority_days")
     def _compute_due_date(self):
         for record in self:
             base_date = record.start_date if record.start_date else record.request_date
 
-            # `is not False` rather than a truthiness test: priority_days is 0
-            # for Akut, whose förfallodatum is the base date itself.
-            if base_date and record.priority_days is not False:
+            # The guard stays on priority_expanded, exactly as before: it is
+            # the nullable field, and it is truthy for Akut because "0" is a
+            # non-empty string. priority_days only supplies the number.
+            if base_date and record.priority_expanded:
                 record.due_date = fields.Date.add(
                     base_date, days=record.priority_days
                 )
@@ -480,7 +508,7 @@ Replace lines 844-852 of `maintenance.py` with:
 
 Leave `_inverse_due_date` exactly as it is — the no-op is what lets a manually typed förfallodatum survive a flush.
 
-**Watch out:** Odoo may hand the compute an `int` rather than the literal `False` for an unset record. If `test_unset_priority_leaves_days_null` or an existing `test_schedule_date_warning` case fails after this change, use `if base_date and record.priority_days not in (False, None):` — and if Odoo has already coerced it to `0`, fall back to gating on `record.priority_expanded` instead, which is the nullable field and always tells the truth.
+**The only change here is the day source.** `int(record.priority_expanded)` becomes `record.priority_days`; the guard is untouched. Do not rewrite the guard to test `priority_days` — it is `0` for an unset ärende as well as for Akut, so a truthiness test there would stop setting förfallodatum on every Akut ärende, and an `is not False` test would set one on every unprioritised ärende.
 
 - [ ] **Step 4: Update the existing due-date tests**
 
@@ -673,16 +701,16 @@ Replace `maintenance_views.xml:46-67` (the block from `<filter string="Akut"` th
                              antal veckor is free-form, so a filter per literal
                              value is no longer writable. -->
                         <filter string="Akut" name="priority_acute"
-                            domain="[('priority_days', '=', 0)]" />
+                            domain="[('priority_expanded', '=', '0')]" />
                         <filter string="Inom 7 dagar" name="priority_week"
-                            domain="[('priority_days', '&gt;', 0), ('priority_days', '&lt;=', 7)]" />
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 0), ('priority_days', '&lt;=', 7)]" />
                         <filter string="8–30 dagar" name="priority_month"
-                            domain="[('priority_days', '&gt;', 7), ('priority_days', '&lt;=', 30)]" />
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 7), ('priority_days', '&lt;=', 30)]" />
                         <filter string="Längre än 30 dagar" name="priority_long"
-                            domain="[('priority_days', '&gt;', 30)]" />
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 30)]" />
 ```
 
-`('priority_days', '=', 0)` matches Akut and **not** unset, because unset is SQL `NULL`. Task 2's `test_unset_priority_leaves_days_null` covers exactly this.
+**Every domain leads with `priority_expanded`, never with `priority_days` alone.** `priority_days` is `0` for an unprioritised ärende as well as for Akut, so the Akut filter keys on `priority_expanded = '0'` (the form it already has today) and each range carries `('priority_expanded', '!=', False)` to exclude ärenden with no priority. Task 2's `test_unset_priority_is_not_mistaken_for_akut` asserts both halves.
 
 - [ ] **Step 2: Add the group-by**
 
@@ -699,7 +727,7 @@ Run `./run-local-odoo.sh onecore_maintenance_extension` and confirm:
 - All four priority filters return plausible sets and an ärende with no priority appears in none of them.
 - Grouping by Prioritet orders groups numerically (`0, 1, 5, 7, 10, 14, …`) rather than as text.
 - The old filter names are gone from the Filter menu with no console error — a saved user filter referencing a removed `name` is the thing most likely to complain here.
-- **Where unset ärenden land when sorting on `priority_days`.** The spec flags this as unverified: `priority_days` is `NULL` for them, and Postgres sorts `NULL` last ascending, but Odoo may add its own `NULLS FIRST/LAST`. Sort the column both ways with at least one unprioritised ärende present and record what actually happens. If they land at the top of an ascending sort and that reads as wrong, say so rather than fixing it here — it is a view-level `order` change, not a model change.
+- **Where unset ärenden land when grouping on `priority_days`.** They have `priority_days = 0`, the same as Akut, so they share the Akut group. Confirm that is what happens, and report how many such ärenden the board actually shows. If the collision is noisy in practice, switching the group-by to `priority_label` gives them their own empty bucket at the cost of alphabetical group ordering — report it rather than changing it here.
 
 - [ ] **Step 4: Commit**
 
