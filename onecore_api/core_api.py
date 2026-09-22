@@ -433,18 +433,68 @@ class CoreApi:
         )
 
     def fetch_maintenance_units(self, id, location_type):
+        """Every maintenance unit of type ``location_type`` on property ``id``."""
         content = self._get_json(
             f"/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
+        )
+        return self.filter_maintenance_units_by_location_type(content, location_type)
+
+    def fetch_maintenance_units_for_rental_id(self, rental_id, location_type):
+        """The maintenance units that SERVE rental object ``rental_id``.
+
+        Backed by Xpand's residence -> unit relation (baxyk), so for a laundry
+        room this is the one the tenant is actually assigned to, not every
+        laundry room on the property. Empty when the object has no relation.
+        """
+        content = self._get_json(
+            f"/maintenance-units/by-rental-id/{urllib.parse.quote(str(rental_id), safe='')}"
         )
         return self.filter_maintenance_units_by_location_type(content, location_type)
 
     def filter_maintenance_units_by_location_type(
         self, maintenance_units, location_type
     ):
-        return filter(
-            lambda maintenance_unit: maintenance_unit["type"] == location_type,
-            maintenance_units,
-        )
+        # A list, not a lazy filter: callers merge and deduplicate the result.
+        return [
+            maintenance_unit
+            for maintenance_unit in maintenance_units or []
+            if maintenance_unit["type"] == location_type
+        ]
+
+    def fetch_maintenance_units_for_object(
+        self, rental_id, property_code, location_type
+    ):
+        """Units to offer for a rental object: the serving ones first, flagged
+        ``serves_rental_object``, then the rest of the property's units so the
+        handler can still let the user pick another one. Deduplicated on id.
+        """
+        # The serving lookup is an enhancement: if OneCore cannot answer, the
+        # user still gets the property's units to pick from, nothing
+        # preselected. Only transport/HTTP errors — a bug must still surface.
+        try:
+            serving = self.fetch_maintenance_units_for_rental_id(
+                rental_id, location_type
+            )
+        except requests.RequestException as err:
+            _logger.warning(
+                "Could not fetch serving maintenance units for %s: %s", rental_id, err
+            )
+            serving = []
+        on_property = self.fetch_maintenance_units(property_code, location_type)
+
+        units = []
+        seen = set()
+        for unit in serving:
+            if unit["id"] in seen:
+                continue
+            seen.add(unit["id"])
+            units.append({**unit, "serves_rental_object": True})
+        for unit in on_property:
+            if unit["id"] in seen:
+                continue
+            seen.add(unit["id"])
+            units.append({**unit, "serves_rental_object": False})
+        return units
 
     def fetch_parking_space(self, id):
         return self._get_json(
@@ -664,6 +714,9 @@ class CoreApi:
 
             if leases and len(leases) > 0:
                 data = []
+                # A renewed contract is two leases on one object; fetch that
+                # object's units once, not once per lease.
+                units_by_object = {}
 
                 for lease in leases:
                     # Skip if lease is None or missing required fields.
@@ -686,14 +739,26 @@ class CoreApi:
                             )
                             continue
 
-                        maintenance_units = (
-                            self.fetch_maintenance_units(
-                                fetched_data["property"]["code"], location_type
-                            )
-                            if kind in KINDS_WITH_MAINTENANCE_UNITS
+                        maintenance_units = []
+                        if (
+                            kind in KINDS_WITH_MAINTENANCE_UNITS
                             and location_type in MAINTENANCE_UNIT_TYPES
-                            else []
-                        )
+                        ):
+                            property_code = fetched_data["property"]["code"]
+                            rental_id = lease["rentalPropertyId"]
+                            if rental_id not in units_by_object:
+                                # Xpand's residence -> unit relation only covers
+                                # apartments; a facility gets the property's units.
+                                units_by_object[rental_id] = (
+                                    self.fetch_maintenance_units_for_object(
+                                        rental_id, property_code, location_type
+                                    )
+                                    if kind == "residence"
+                                    else self.fetch_maintenance_units(
+                                        property_code, location_type
+                                    )
+                                )
+                            maintenance_units = units_by_object[rental_id]
 
                         data.append(
                             build_form_item(
@@ -746,8 +811,10 @@ class CoreApi:
                         rental_property = self.fetch_residence(value)
                         if rental_property:
                             maintenance_units = (
-                                self.fetch_maintenance_units(
-                                    rental_property["property"]["code"], location_type
+                                self.fetch_maintenance_units_for_object(
+                                    value,
+                                    rental_property["property"]["code"],
+                                    location_type,
                                 )
                                 if location_type in MAINTENANCE_UNIT_TYPES
                                 else []
