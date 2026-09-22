@@ -32,6 +32,8 @@ The day/label arithmetic lives in one pure module so the model *and* the migrati
 - Modify: `onecore_maintenance_extension/models/utils/__init__.py`
 - Modify: `onecore_maintenance_extension/models/constants.py:54-68`
 - Test: `onecore_maintenance_extension/tests/models/test_priority.py` (create)
+- Modify: `onecore_maintenance_extension/tests/__init__.py` — **required**, add `from .models import test_priority`. Odoo's loader (`odoo/tests/loader.py:_get_tests_modules`) discovers only modules explicitly imported in the addon's `tests` package; an unregistered test file is silently never collected. That file's opening comment says so.
+- Modify: `onecore_maintenance_extension/tests/models/__init__.py` — add `from . import test_priority`, matching every other file in that package.
 
 **Interfaces:**
 - Consumes: nothing.
