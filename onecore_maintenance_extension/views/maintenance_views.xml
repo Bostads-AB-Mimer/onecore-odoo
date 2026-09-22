@@ -220,9 +220,9 @@
                     </div>
 
                     <div class="d-flex w-100 justify-content-between justify-content-md-start"
-                        invisible="not priority_expanded">
-                        <label class="me-1" for="priority_expanded" string="Prioritet" />
-                        <field class="ms-1 text-end text-md-start" name="priority_expanded"
+                        invisible="not priority_label">
+                        <label class="me-1" for="priority_label" string="Prioritet" />
+                        <field class="ms-1 text-end text-md-start" name="priority_label"
                             readonly="1" />
                     </div>
                     <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start"
@@ -769,6 +769,11 @@
                                         <field
                                             name="priority_expanded"
                                             readonly="user_is_external_contractor" />
+                                        <field
+                                            name="priority_weeks"
+                                            invisible="priority_expanded != 'custom'"
+                                            required="priority_expanded == 'custom'"
+                                            readonly="user_is_external_contractor" />
                                         <field name="due_date"
                                             help="Det datum ärendet ska vara utfört"
                                             readonly="user_is_external_contractor" />
@@ -963,7 +968,8 @@
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="stage_id" />
                     <field name="color" />
-                    <field name="priority_expanded" />
+                    <field name="priority_label" />
+                    <field name="priority_days" />
                     <field name="due_date" />
                     <field name="schedule_date_date" />
                     <field name="schedule_date_after_due_date" />
@@ -1034,7 +1040,7 @@
                         <field name="closed_date" options="{'show_time': false}" optional="hide" />
                         <field name="returned_date" options="{'show_time': false}" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
-                        <field name="priority_expanded" optional="hide" />
+                        <field name="priority_label" optional="hide" />
                         <field name="creation_origin" optional="hide" />
                         <field name="space_caption" optional="hide" />
                         <field name="tenant_name" optional="hide" />
