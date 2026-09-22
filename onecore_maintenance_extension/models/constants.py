@@ -50,22 +50,36 @@ SEARCH_TYPES = [
     ("propertyName", "Fastighetsnamn"),
 ]
 
-# Priority options with time periods
-PRIORITY_OPTIONS = [
+PRIORITY_CUSTOM = "custom"
+
+# Prioritet presets. The value of every non-custom entry IS the number of days
+# to förfallodatum — see models/utils/priority.py. PRIORITY_CUSTOM is the
+# escape hatch (MIM-2038): the day count then comes from priority_weeks.
+# '7' must stay a valid value: onecore's work-order odoo-adapter writes it
+# over XML-RPC when creating besiktning requests.
+PRIORITY_PRESETS = [
     ("0", "Akut"),
     ("1", "1 dag"),
     ("5", "5 dagar"),
     ("7", "7 dagar"),
     ("10", "10 dagar"),
-    ("14", "2 veckor"),
-    ("21", "3 veckor"),
-    ("28", "4 veckor"),
-    ("35", "5 veckor"),
-    ("42", "6 veckor"),
-    ("56", "8 veckor"),
-    ("183", "6 månader"),
-    ("365", "mer än 1 år"),
+    (PRIORITY_CUSTOM, "Välj antal veckor"),
 ]
+
+PRIORITY_MAX_WEEKS = 52
+
+# Legacy Selection values MIM-2038 retired, mapped to the weeks that replace
+# them. Consumed by migrations/19.0.1.0.12/pre-migration.py.
+LEGACY_PRIORITY_WEEKS = {
+    "14": 2,
+    "21": 3,
+    "28": 4,
+    "35": 5,
+    "42": 6,
+    "56": 8,
+    "183": 26,
+    "365": 52,
+}
 
 # Creation origin options. MIMER_NU_ORIGIN is the tenant self-service inflow;
 # OrderingDepartmentService keys its Kundcenter rule on it.
