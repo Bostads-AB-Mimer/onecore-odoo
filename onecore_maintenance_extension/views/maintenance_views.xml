@@ -375,17 +375,17 @@
                                         <field name="create_date" invisible="1" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Tvättstuga'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_id" string="Tvättstuga"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_option_id" string="Lekplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Lekplats'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_id" string="Lekplats"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_option_id" string="Miljöbod"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Miljöbod'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_id" string="Miljöbod"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_code" string="Kod"
