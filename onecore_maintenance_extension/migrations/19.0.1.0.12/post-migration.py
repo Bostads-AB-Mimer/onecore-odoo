@@ -6,6 +6,14 @@ not init_models() recomputed it while filling the new priority_days column.
 
 Idempotent: the restore is guarded on IS DISTINCT FROM and the backup column
 is dropped once it has been applied, so a second run finds nothing to do.
+
+If you are watching this upgrade's log: "restored due_date on 0 request(s)"
+below is the expected outcome, not a sign the migration did not run. The
+rehearsal for this release found that init_models() does not in fact dirty
+due_date in this Odoo/Postgres combination, so the backup/restore pair here
+is deliberate insurance rather than a fix for an observed problem. The lines
+worth checking for a non-zero count are the pre-migration's "backed up" and
+"remapped" ones instead.
 """
 
 import logging
