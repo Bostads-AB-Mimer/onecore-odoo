@@ -1,12 +1,12 @@
 from datetime import date, timedelta
 
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
 from ...models.constants import PRIORITY_CUSTOM, LEGACY_PRIORITY_WEEKS
 from ...models.utils.priority import priority_days_from, priority_label_for
-from ..utils.test_utils import create_maintenance_request
+from ..utils.test_utils import create_internal_user, create_maintenance_request
 
 
 @tagged("onecore")
@@ -160,3 +160,57 @@ class TestPriorityDueDate(TransactionCase):
         manual = date.today() + timedelta(days=99)
         request.write({"priority_weeks": 4, "due_date": manual})
         self.assertEqual(request.due_date, manual)
+
+
+@tagged("onecore")
+class TestPriorityStageGate(TransactionCase):
+    """maintenance_workflow_service gates handling stages on priority being
+    set. Akut is 0 days, and Odoo reads a NULL Integer as 0 — so if that gate
+    is ever moved from priority_expanded onto priority_days, every Akut ärende
+    silently becomes unmovable. These two tests are the tripwire."""
+
+    def setUp(self):
+        super().setUp()
+        self.stage_vantar = self.env["maintenance.stage"].search(
+            [("name", "=", "Väntar på handläggning")]
+        )
+        self.stage_tilldelad = self.env["maintenance.stage"].search(
+            [("name", "=", "Resurs tilldelad")]
+        )
+        self.internal_user = create_internal_user(self.env)
+
+    def test_akut_request_can_move_to_a_handling_stage(self):
+        """Akut (priority_days == 0, same as unset) must still be movable.
+
+        The user is assigned in the same write as the stage change, so
+        ``has_user`` is true from ``vals`` and the resource check is
+        skipped — the only thing standing between this write and success is
+        the priority gate.
+        """
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, priority_expanded="0"
+        )
+        self.assertEqual(request.priority_days, 0)
+
+        request.write(
+            {"stage_id": self.stage_tilldelad.id, "user_id": self.internal_user.id}
+        )
+        self.assertEqual(request.stage_id, self.stage_tilldelad)
+
+    def test_request_without_priority_is_still_blocked(self):
+        """A genuinely unset priority must still block the move — and for
+        the priority reason specifically.
+
+        ``_validate_priority_set`` (maintenance_workflow_service.py:107) runs
+        before ``_validate_unassigned_resource`` inside ``handle_stage_change``
+        (maintenance_workflow_service.py:28-36), so this record — created with
+        no priority and no resource — already raises the priority UserError
+        first. Asserting on the exact message (rather than any UserError)
+        keeps this test honest even if that ordering is ever reversed.
+        """
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, priority_expanded=False
+        )
+
+        with self.assertRaisesRegex(UserError, "Prioritet måste anges"):
+            request.write({"stage_id": self.stage_tilldelad.id})
