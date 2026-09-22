@@ -203,13 +203,14 @@ unchanged, followed by `priority_weeks` with
 sentinel. `invisible="not priority_label"`.
 
 **List (`:1046`), kanban (`:975`), mobile (`views/mobile_view.xml:36`)** —
-show `priority_label`; additionally load `priority_days` in the list so the
-Prioritet column can be made sortable in a follow-up. `priority_label` is a
-stored `Char`, so it would sort alphabetically — **sort on `priority_days`, not
-on the label.** Making the visible column sort numerically while showing the
-label needs a small OWL field widget (the repo already has the
-`*_field_*.js` pattern); that is deliberately **out of scope** here and noted
-under Follow-ups.
+show `priority_label`; additionally load `priority_days` in the kanban field
+block so the Prioritet column can be made sortable in a follow-up.
+`priority_label` is a stored `Char`, so it would sort alphabetically — **sort
+on `priority_days`, not on the label.** Making the visible column sort
+numerically while showing the label needs a small OWL field widget (the repo
+already has the `*_field_*.js` pattern) and a view change to load
+`priority_days` where the sortable column actually lives; that is deliberately
+**out of scope** here and noted under Follow-ups.
 
 **Quick-filters (`:46-67`)** — the 11 per-value filters cannot survive a free
 value. Replace with four ranges plus a group-by:
@@ -227,9 +228,13 @@ integer.
 
 **Every one of these leads with `priority_expanded`, not `priority_days`** —
 that is the rule from the previous section applied. The Akut filter keeps the
-form it already has today (`priority_expanded = '0'`), and the three ranges
-carry `('priority_expanded', '!=', False)` so an unprioritised ärende, whose
-`priority_days` is an incidental `0`, matches none of them.
+form it already has today (`priority_expanded = '0'`). The three ranges'
+`priority_days > 0/7/30` bounds already exclude an unprioritised ärende on
+their own, since its `priority_days` is an incidental `0` that fails every
+one of those `>` comparisons; the `('priority_expanded', '!=', False)` guard
+on each is defence-in-depth, not what does the excluding — it documents the
+rule in the domain itself, in case a range's lower bound is ever loosened to
+include `0`.
 
 The group-by is the one place the `0` collision is visible: an unprioritised
 ärende groups together with Akut. Accepted — an ärende with no priority cannot
@@ -348,12 +353,20 @@ All Python, `@tagged("onecore")` on `TransactionCase`, run via `./run_tests.sh`.
 asserting that a manually written `due_date` still survives a later priority
 change (`:118`).
 
-**`tests/migrations/test_priority_migration.py`** (new) — exercise the mapping
-table and, critically, assert `due_date` is byte-identical before and after for
-a row that starts at `183`. Check whether the repo has an existing pattern for
-testing migrations; if not, extract the mapping into a pure function in
-`constants.py` and unit-test that, with the SQL verified by hand on a restored
-copy (see Verification).
+**`tests/migrations/test_priority_migration.py`** (new) — loads
+`pre-migration.py` and `post-migration.py` by file path (the same
+`importlib.util.spec_from_file_location` idiom already used by
+`tests/models/services/test_lease_suffix_migration.py` for the 19.0.1.0.10
+migration, since a version-numbered directory is not a valid Python package
+name) and calls their functions directly against the test cursor inside a
+`TransactionCase`. Retired values are seeded via raw SQL, since they are no
+longer valid `Selection` entries and `create()`/`write()` reject them. Covers:
+every one of the eight retired values remaps to `custom` with the matching
+`priority_weeks` (not just the ones the pre-release rehearsal happened to
+touch); a still-valid preset and a `NULL` priority are left untouched; and a
+full backup/restore round trip — back up, perturb `due_date`, restore, assert
+the original value returns — which is the regression test for
+`_remap_retired_values` ever being reordered ahead of `_backup_due_date`.
 
 **`tests/utils/test_utils.py:147`** seeds `"7"` — still valid, no change.
 
