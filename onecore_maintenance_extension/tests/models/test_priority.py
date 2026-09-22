@@ -1,8 +1,10 @@
+from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
 from ...models.constants import PRIORITY_CUSTOM, LEGACY_PRIORITY_WEEKS
 from ...models.utils.priority import priority_days_from, priority_label_for
+from ..utils.test_utils import create_maintenance_request
 
 
 @tagged("onecore")
@@ -64,3 +66,66 @@ class TestPriorityHelpers(TransactionCase):
                 1,
                 "legacy value %s must not move by more than a day" % value,
             )
+
+
+@tagged("onecore")
+class TestPriorityFields(TransactionCase):
+    def test_preset_sets_days_and_label(self):
+        request = create_maintenance_request(self.env, priority_expanded="10")
+        self.assertEqual(request.priority_days, 10)
+        self.assertEqual(request.priority_label, "10 dagar")
+
+    def test_custom_weeks_sets_days_and_label(self):
+        request = create_maintenance_request(
+            self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=9
+        )
+        self.assertEqual(request.priority_days, 63)
+        self.assertEqual(request.priority_label, "9 veckor")
+
+    def test_changing_weeks_recomputes_days(self):
+        request = create_maintenance_request(
+            self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=2
+        )
+        request.write({"priority_weeks": 4})
+        self.assertEqual(request.priority_days, 28)
+        self.assertEqual(request.priority_label, "4 veckor")
+
+    def test_unset_priority_is_not_mistaken_for_akut(self):
+        """The 0-collision regression test.
+
+        priority_days is 0 for BOTH an unset ärende and an Akut one — Odoo
+        Integers cannot be NULL. So the label must stay empty, and the Akut
+        filter must key on priority_expanded, which is nullable and does tell
+        them apart. If either assertion here fails, some caller has started
+        trusting priority_days to answer a question it cannot answer.
+        """
+        request = create_maintenance_request(self.env, priority_expanded=False)
+        self.assertFalse(request.priority_label)
+
+        akut = create_maintenance_request(self.env, priority_expanded="0")
+        self.assertEqual(akut.priority_label, "Akut")
+
+        both = (request | akut).ids
+        matches_akut = self.env["maintenance.request"].search(
+            [("id", "in", both), ("priority_expanded", "=", "0")]
+        )
+        self.assertEqual(matches_akut, akut, "unset must not match the Akut filter")
+
+        has_priority = self.env["maintenance.request"].search(
+            [("id", "in", both), ("priority_expanded", "!=", False)]
+        )
+        self.assertEqual(has_priority, akut, "unset must not match the range filters")
+
+    def test_custom_rejects_weeks_out_of_range(self):
+        for weeks in (0, -1, 53):
+            with self.assertRaises(ValidationError):
+                create_maintenance_request(
+                    self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=weeks
+                )
+
+    def test_custom_accepts_range_bounds(self):
+        for weeks in (1, 52):
+            request = create_maintenance_request(
+                self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=weeks
+            )
+            self.assertEqual(request.priority_days, weeks * 7)
