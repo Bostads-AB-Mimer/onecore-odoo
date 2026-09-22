@@ -22,6 +22,29 @@ class TestPriorityHelpers(TransactionCase):
         self.assertEqual(priority_days_from(PRIORITY_CUSTOM, 3), 21)
         self.assertEqual(priority_days_from(PRIORITY_CUSTOM, 26), 182)
 
+    def test_preset_beats_a_leftover_weeks_value(self):
+        """Branch-ordering regression, not arithmetic.
+
+        Nothing ever clears priority_weeks when a request leaves 'custom' —
+        not the form, not write(), not the 19.0.1.0.12 migration (which
+        WRITES priority_weeks on every migrated row and never touches it
+        again). So a migrated ärende permanently carries a priority_weeks of
+        2..52 no matter what preset it is later given, and the only thing
+        that keeps priority_days correct is that priority_days_from checks
+        `preset == PRIORITY_CUSTOM` before it ever looks at weeks — see the
+        `if preset == PRIORITY_CUSTOM` / `return int(preset)` ordering in
+        priority.py. If a future edit checked `if weeks:` first instead, this
+        test would start failing while every other preset-only test (which
+        all pass weeks=False) would keep passing.
+
+        Akut is the case that matters most: a migrated "6 månader" ärende
+        (priority_weeks=26) re-prioritised to Akut must land on 0 days, not
+        182 — the difference between a same-day and a six-months-out
+        förfallodatum on the most urgent class of ärende.
+        """
+        self.assertEqual(priority_days_from("0", 26), 0)
+        self.assertEqual(priority_days_from("7", 26), 7)
+
     def test_days_is_zero_without_a_preset(self):
         """0 here is incidental, not Akut. Odoo Integers cannot be NULL, so
         the caller must check priority_expanded before trusting this."""
@@ -131,6 +154,21 @@ class TestPriorityFields(TransactionCase):
                 self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=weeks
             )
             self.assertEqual(request.priority_days, weeks * 7)
+
+    def test_preset_beats_a_leftover_priority_weeks_on_the_model(self):
+        """Model-level twin of TestPriorityHelpers.test_preset_beats_a_leftover_weeks_value.
+
+        Nothing on this model ever clears priority_weeks when leaving
+        'custom' — reproduces a migrated-then-reprioritised ärende directly
+        through create(), the same way a handläggare would trigger it: pick
+        Akut on a request that (as every migrated legacy row does) already
+        carries a non-zero priority_weeks from the 19.0.1.0.12 migration.
+        """
+        request = create_maintenance_request(
+            self.env, priority_expanded="0", priority_weeks=26
+        )
+        self.assertEqual(request.priority_days, 0)
+        self.assertEqual(request.priority_label, "Akut")
 
 
 @tagged("onecore")

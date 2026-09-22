@@ -4,8 +4,12 @@ See migrations/19.0.1.0.12/pre-migration.py for why the backup exists: this
 script is the half that guarantees no ärende's förfallodatum moved, whether or
 not init_models() recomputed it while filling the new priority_days column.
 
-Idempotent: the restore is guarded on IS DISTINCT FROM and the backup column
-is dropped once it has been applied, so a second run finds nothing to do.
+Idempotent: the backup column is dropped once this has run, and the
+column_exists guard above returns early when it is already gone — that is
+what makes a second run a no-op. IS DISTINCT FROM only limits which rows the
+first run's UPDATE touches; it does not by itself make a rerun safe, since a
+second run would find the column already dropped before it ever reaches that
+UPDATE.
 
 If you are watching this upgrade's log: "restored due_date on 0 request(s)"
 below is the expected outcome, not a sign the migration did not run. The

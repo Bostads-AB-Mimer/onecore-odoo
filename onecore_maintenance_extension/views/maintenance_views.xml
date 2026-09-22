@@ -128,7 +128,7 @@
                             <filter string='Beställande avdelning' name='ordering_department'
                                 domain="[]"
                                 context="{'group_by': 'ordering_department'}" />
-                            <filter string='Prioritet' name='priority' domain="[]"
+                            <filter string='Prioritet' name='group_priority' domain="[]"
                                 context="{'group_by': 'priority_days'}" />
                         </group>
                     </search>
