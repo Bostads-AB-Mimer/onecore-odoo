@@ -28,3 +28,4 @@ from .services import test_external_contractor_service
 from . import test_direct_lookup
 from . import test_backfill_wizard
 from . import test_remove
+from . import test_priority
