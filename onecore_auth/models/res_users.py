@@ -21,9 +21,9 @@ import re
 
 from psycopg2 import errors as pg_errors
 
-from odoo import SUPERUSER_ID, api, models
+from odoo import api, models
 from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
-from odoo.tools import email_normalize
+from odoo.tools import email_normalize, email_split
 from odoo.tools.mail import email_domain_extract, email_escape_char
 
 _logger = logging.getLogger(__name__)
@@ -95,16 +95,20 @@ class ResUsers(models.Model):
         of "Namn <x@mimer.nu>" and accepts "@mimer.nu" with an empty local
         part, while a hand-rolled split reads the claim "mimer.nu" as a domain
         of its own and lets it through the allowlist.
+
+        "Is one bare address" is checked with email_split, not by comparing
+        against a lowercased copy: email_normalize keeps a non-ASCII local
+        part as it is ("Åsa.Öberg@" stays), so that comparison rejected every
+        such address with a warning that pointed at the wrong cause.
         """
         if not isinstance(claim, str):
             return False
         raw = claim.strip()
         if not _PLAIN_ADDRESS.match(raw):
             return False
-        normalized = email_normalize(raw)
-        if not normalized or normalized != raw.lower():
+        if email_split(raw) != [raw]:
             return False
-        return normalized
+        return email_normalize(raw) or False
 
     @api.model
     def _signin_unknown_subject(self, provider, validation, params):
@@ -142,14 +146,36 @@ class ResUsers(models.Model):
             )
             return None
 
-        email = self._email_from_claim(validation.get("email"))
-        if not email:
+        normalized = self._email_from_claim(validation.get("email"))
+        if not normalized:
             _logger.warning(
                 "MIM-2010: Keycloak login denied for subject %s: no usable "
                 "email in Keycloak userinfo (got %r). Check that the client "
                 "has the 'email' client scope.",
                 subject,
                 validation.get("email"),
+            )
+            return None
+        # Lowercased for matching and as the login (onecore_base_extension
+        # lowercases every login anyway); the normalised form is what gets
+        # stored as the contact e-mail.
+        email = normalized.lower()
+        # The address is only worth acting on if the IdP vouches for it. A
+        # user with a Keycloak session can change their own e-mail in the
+        # account console; the Microsoft sync resets it at the next brokered
+        # login, not before. Without this check that edited address would
+        # re-link a colleague's — possibly privileged — Odoo account to the
+        # editor's subject. Keycloak sets email_verified for brokered users
+        # only when the identity provider has "Trust Email" on, so that is a
+        # release prerequisite in prod (review of PR #292).
+        if validation.get("email_verified") is not True:
+            _logger.warning(
+                "MIM-2010: Keycloak login denied for %s: e-mail not verified by "
+                "the identity provider (email_verified=%r). Enable Trust Email "
+                "on the Keycloak identity provider; the flag is set at the "
+                "person's next login.",
+                email,
+                validation.get("email_verified"),
             )
             return None
         domains = self._auto_create_email_domains()
@@ -167,7 +193,9 @@ class ResUsers(models.Model):
 
         try:
             with self.env.cr.savepoint():
-                login = self._relink_or_create(provider, validation, params, email)
+                login = self._relink_or_create(
+                    provider, validation, params, email, normalized
+                )
                 # Flush here, in *this* environment. /auth_oauth/signin is
                 # auth='none': the transaction's default environment has no
                 # user at all, and that is the one the savepoint's exit (and
@@ -180,19 +208,19 @@ class ResUsers(models.Model):
                 return login
         except (pg_errors.UniqueViolation, *PG_CONCURRENCY_EXCEPTIONS_TO_RETRY):
             # Two requests for the same first login (a double click, two
-            # tabs): the other one won. Re-raising for Odoo's request retry
-            # is not an option — auth_oauth's controller catches every
-            # exception itself and turns it into oauth_error=2.
-            login = self._login_created_concurrently(provider, subject)
-            if login:
-                _logger.info(
-                    "MIM-2010: %s was created or re-linked by a concurrent "
-                    "login; using that user",
-                    email,
-                )
-                return login
-            _logger.exception(
-                "MIM-2010: could not re-link or create a user for Keycloak login %s",
+            # tabs, two browsers): the other one won. This one is denied, and
+            # the person's next attempt takes the stock path. There is no
+            # fallback that works: the two requests carry different access
+            # tokens and res.users has one oauth_access_token column, so
+            # whichever token is stored, the other request fails
+            # _check_credentials; the winner's row is also invisible to this
+            # request's REPEATABLE READ snapshot, so the department sync
+            # could not run on it either. Re-raising for Odoo's request retry
+            # is not an option: auth_oauth's controller catches every
+            # exception and turns it into oauth_error=2.
+            _logger.info(
+                "MIM-2010: %s was created or re-linked by a concurrent login; "
+                "this request is denied, a second attempt takes the normal path",
                 email,
             )
             return None
@@ -204,34 +232,22 @@ class ResUsers(models.Model):
             return None
 
     @api.model
-    def _login_created_concurrently(self, provider, subject):
-        """Login of the user another request just linked to ``subject``, or None.
-
-        In a transaction of its own: Odoo runs REPEATABLE READ, so the row
-        the other request committed is invisible to this request's snapshot
-        no matter how often it looks. The controller commits and then
-        authenticates in a fresh transaction too, so returning the login is
-        enough — both requests carry the same access token.
-        """
-        with self.env.registry.cursor() as cr:
-            users = api.Environment(cr, SUPERUSER_ID, {})["res.users"].search(
-                [("oauth_uid", "=", subject), ("oauth_provider_id", "=", provider)]
-            )
-            return users.login if len(users) == 1 else None
-
-    @api.model
-    def _relink_or_create(self, provider, validation, params, email):
+    def _relink_or_create(self, provider, validation, params, email, normalized):
         Users = self.sudo().with_context(active_test=False)
         # login, or the contact e-mail for accounts whose login differs.
         # Exact matches only — a near miss (a misspelt login) must surface as
-        # a new account in the log, not be guessed at. =ilike is a LIKE, so
-        # the address is escaped ("_" would otherwise match the "." in
-        # somebody else's address), and the hits are compared again in Python
-        # because the ORM may also apply unaccent.
+        # a new account in the log, not be guessed at. Case-insensitive on
+        # both: onecore_base_extension lowercases logins on write, but rows
+        # from before it can be "Firstname.Lastname@", and those must not get
+        # a duplicate. =ilike is a LIKE, so the address is escaped ("_" would
+        # otherwise match the "." in somebody else's address), and the hits
+        # are compared again in Python because the ORM may also apply unaccent.
+        pattern = email_escape_char(email)
         candidates = Users.search(
-            ["|", ("login", "=", email), ("email", "=ilike", email_escape_char(email))]
+            ["|", ("login", "=ilike", pattern), ("email", "=ilike", pattern)]
         ).filtered(
-            lambda user: user.login == email or email_normalize(user.email) == email
+            lambda user: (user.login or "").lower() == email
+            or (email_normalize(user.email) or "").lower() == email
         )
         # Active accounts first: an archived leftover with the same address
         # must not hide the account the person actually uses.
@@ -294,7 +310,7 @@ class ResUsers(models.Model):
                 # A present-but-empty name claim would reach create() as None
                 "name": (validation.get("name") or "").strip() or email,
                 "login": email,
-                "email": email,
+                "email": normalized,
                 "group_ids": [(6, 0, self._auto_create_group_ids())],
             }
         )

@@ -41,7 +41,11 @@ class TestAutoCreateUser(TransactionCase):
 
     def _signin(self, subject, email=None, users=None, **claims):
         users = self.env["res.users"] if users is None else users
-        validation = {"user_id": subject}
+        # email_verified defaults to True: that is what Keycloak sends for a
+        # brokered user when the identity provider has Trust Email on, and
+        # what every create/re-link test assumes. The verification tests
+        # override it.
+        validation = {"user_id": subject, "email_verified": True}
         if email is not None:
             validation["email"] = email
         validation.update(claims)
@@ -539,46 +543,159 @@ class TestAutoCreateUser(TransactionCase):
         self.assertEqual(login, "utan.uid@mimer.nu")
         self.assertTrue(self._by_login("utan.uid@mimer.nu"))
 
-    def _signin_with_failing_create(self, error, concurrent_login):
+    def test_concurrent_first_login_is_denied_honestly(self):
+        """A double click, two tabs or two browsers on the very first login:
+        the other request wins the INSERT (or the re-link write) and ours
+        fails on unique(login) or a serialization failure. There is no
+        fallback that works — the two requests carry different access
+        tokens and there is one oauth_access_token column, and the winner's
+        row is invisible to our REPEATABLE READ snapshot — so this request is
+        denied with an INFO line saying why, no ERROR, and the person's next
+        attempt takes the stock path (review of PR #292, finding 3)."""
+        from psycopg2 import errors as pg_errors
+
         Users = self.env.registry["res.users"]
-        with patch.object(Users, "create", autospec=True, side_effect=error), \
-                patch.object(
-                    Users,
-                    "_login_created_concurrently",
-                    autospec=True,
-                    return_value=concurrent_login,
-                ) as lookup:
-            login = self._signin("sub-samtidig", "samtidig@mimer.nu")
-        return login, lookup
-
-    def test_concurrent_first_login_uses_the_user_the_other_request_created(self):
-        """A double click on the very first login: the other request wins the
-        INSERT and ours fails on unique(login). Re-raising for Odoo's request
-        retry does not work — auth_oauth's controller catches everything and
-        shows oauth_error=2 — and under REPEATABLE READ our snapshot cannot
-        see the winner's row, so it is looked up in a transaction of its own
-        (patched here: a test transaction is never committed)."""
-        from psycopg2 import errors as pg_errors
-
         for error in (pg_errors.UniqueViolation, pg_errors.SerializationFailure):
-            with self.subTest(error=error.__name__), self.assertNoLogs(LOGGER, "ERROR"):
-                login, lookup = self._signin_with_failing_create(
-                    error("simulated"), "samtidig@mimer.nu"
-                )
+            with self.subTest(error=error.__name__), \
+                    patch.object(Users, "create", autospec=True, side_effect=error("simulated")), \
+                    self.assertNoLogs(LOGGER, "ERROR"), \
+                    self.assertLogs(LOGGER, INFO) as logs:
+                login = self._signin("sub-samtidig", "samtidig@mimer.nu")
 
-                self.assertEqual(login, "samtidig@mimer.nu")
-                self.assertEqual(lookup.call_args.args[1:], (self.provider.id, "sub-samtidig"))
+            self.assertIsNone(login)
+            self.assertFalse(self._by_login("samtidig@mimer.nu"))
+            self.assertTrue(any("concurrent login" in line for line in logs.output))
+            # The savepoint rolled back only our attempt: the cursor still works
+            self.assertTrue(self.Users.search_count([]))
 
-    def test_unique_violation_without_a_concurrent_winner_is_denied_and_logged(self):
-        from psycopg2 import errors as pg_errors
+    # ------------------------------------------------------------------
+    # email_verified (blocker in the review of PR #292)
+    # ------------------------------------------------------------------
+    def test_unverified_email_never_relinks(self):
+        """The takeover the review describes: a user with a Keycloak session
+        edits their own e-mail to a colleague's in the account console and
+        logs in before the Microsoft sync resets it. The address is only
+        acted on when the IdP vouches for it."""
+        colleague = self._password_user("kollega@mimer.nu")
+        for claim in (False, None, "true", 1):
+            with self.subTest(email_verified=claim), self.assertLogs(LOGGER, "WARNING") as logs:
+                login = self._signin("sub-angripare", "kollega@mimer.nu", email_verified=claim)
 
-        with self.assertLogs(LOGGER, "ERROR") as logs:
-            login, _lookup = self._signin_with_failing_create(
-                pg_errors.UniqueViolation("simulated"), None
-            )
+            self.assertIsNone(login)
+            self.assertFalse(colleague.oauth_uid)
+            self.assertIn("not verified by the identity provider", logs.output[0])
+
+    def test_missing_email_verified_claim_is_denied(self):
+        """Absent means unverified. The warning must not be the "no email"
+        one: the scope is fine, it is Trust Email on the IdP that is off."""
+        with self.assertLogs(LOGGER, "WARNING") as logs:
+            login = self._signin("sub-utan-flagga", "ny.utan.flagga@mimer.nu", email_verified=None)
 
         self.assertIsNone(login)
-        self.assertIn("could not re-link or create", logs.output[0])
+        self.assertFalse(self._by_login("ny.utan.flagga@mimer.nu"))
+        self.assertIn("Trust Email", logs.output[0])
+        self.assertNotIn("client scope", logs.output[0])
+
+    def test_unverified_email_never_creates(self):
+        """Creating a user under an unverified address is impersonation of
+        whoever will later own that address; denied on the create path too."""
+        with self.assertLogs(LOGGER, "WARNING"):
+            login = self._signin("sub-overifierad", "ny.overifierad@mimer.nu", email_verified=False)
+
+        self.assertIsNone(login)
+        self.assertFalse(self._by_login("ny.overifierad@mimer.nu"))
+
+    # ------------------------------------------------------------------
+    # Matching edge cases (review of PR #292, findings 4 and 5)
+    # ------------------------------------------------------------------
+    def test_mixed_case_legacy_login_is_relinked_not_duplicated(self):
+        """onecore_base_extension lowercases logins on write, but rows from
+        before it exist. With no contact e-mail, an exact login comparison
+        matched nothing and the person got a duplicate at first login."""
+        legacy = self._password_user("tmp.legacy@mimer.nu", email=False)
+        self.env.cr.execute(
+            "UPDATE res_users SET login = %s WHERE id = %s",
+            ("Firstname.Lastname@mimer.nu", legacy.id),
+        )
+        legacy.invalidate_recordset(["login"])
+        self.assertEqual(legacy.login, "Firstname.Lastname@mimer.nu")
+        count_before = self.Users.search_count([])
+
+        login = self._signin("sub-legacy", "firstname.lastname@mimer.nu")
+
+        self.assertEqual(login, "Firstname.Lastname@mimer.nu")
+        self.assertEqual(legacy.oauth_uid, "sub-legacy")
+        self.assertEqual(self.Users.search_count([]), count_before)
+
+    def test_non_ascii_local_part_is_accepted(self):
+        """email_normalize keeps a non-ASCII local part as it is, so comparing
+        it with a lowercased copy rejected every Å/Ä/Ö address with a warning
+        pointing at the e-mail scope. Swedish names are not far-fetched."""
+        with self.assertNoLogs(LOGGER, "WARNING"):
+            login = self._signin("sub-asa", "Åsa.Öberg@Mimer.nu", name="Åsa Öberg")
+
+        self.assertEqual(login, "åsa.öberg@mimer.nu")
+        user = self._by_login("åsa.öberg@mimer.nu")
+        self.assertEqual(len(user), 1)
+        self.assertEqual(user.oauth_uid, "sub-asa")
+
+        # Second login: stock path, no duplicate
+        self.assertEqual(self._signin("sub-asa", "Åsa.Öberg@Mimer.nu"), "åsa.öberg@mimer.nu")
+        self.assertEqual(len(self._by_login("åsa.öberg@mimer.nu")), 1)
+
+    def test_non_ascii_address_relinks_an_existing_account(self):
+        existing = self._password_user("kortnamn2", email="åsa.öberg@mimer.nu")
+
+        login = self._signin("sub-asa2", "Åsa.Öberg@mimer.nu")
+
+        self.assertEqual(login, "kortnamn2")
+        self.assertEqual(existing.oauth_uid, "sub-asa2")
+
+    # ------------------------------------------------------------------
+    # Migration (review of PR #292, finding 2)
+    # ------------------------------------------------------------------
+    def test_migration_adopts_a_hand_made_parameter(self):
+        """A parameter created under Systemparametrar has no xml id, so the
+        noupdate data record would INSERT a second row and hit the unique
+        key — inside the odoo-module-upgrade Job. The pre-migration registers
+        the hand-made row under the data file's xml id first."""
+        from importlib.machinery import SourceFileLoader
+        from pathlib import Path
+
+        migration = SourceFileLoader(
+            "onecore_auth_pre_migration_19_0_1_2",
+            str(Path(__file__).resolve().parents[1] / "migrations" / "19.0.1.2" / "pre-migration.py"),
+        ).load_module()
+        Params = self.env["ir.config_parameter"].sudo()
+        xmlid = "onecore_auth.param_auto_create_email_domains"
+
+        # Simulate the pre-upgrade database: no xml id, a hand-made value
+        self.env.ref(xmlid).unlink() if self.env.ref(xmlid, raise_if_not_found=False) else None
+        Params.search([("key", "=", AUTO_CREATE_DOMAINS_PARAM)]).unlink()
+        Params.set_param(AUTO_CREATE_DOMAINS_PARAM, "mimer.nu,exempel.se")
+        hand_made = Params.search([("key", "=", AUTO_CREATE_DOMAINS_PARAM)])
+        self.assertTrue(hand_made)
+        self.assertFalse(self.env.ref(xmlid, raise_if_not_found=False))
+
+        migration.migrate(self.env.cr, "19.0.1.1")
+        self.env.invalidate_all()
+
+        adopted = self.env.ref(xmlid)
+        self.assertEqual(adopted, hand_made)
+        self.assertEqual(adopted.value, "mimer.nu,exempel.se")
+        self.assertTrue(
+            self.env["ir.model.data"].search([("module", "=", "onecore_auth"),
+                                              ("name", "=", "param_auto_create_email_domains")]).noupdate
+        )
+
+        # Idempotent: a second run inserts nothing
+        migration.migrate(self.env.cr, "19.0.1.1")
+        self.assertEqual(
+            self.env["ir.model.data"].search_count(
+                [("module", "=", "onecore_auth"), ("name", "=", "param_auto_create_email_domains")]
+            ),
+            1,
+        )
 
     def test_non_string_email_is_treated_as_missing(self):
         with self.assertLogs(LOGGER, "WARNING"):
