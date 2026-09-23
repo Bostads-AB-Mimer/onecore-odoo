@@ -162,6 +162,34 @@ class TestTenantAuthorNameBackfill(TransactionCase):
             self.env["res.users"].browse(SUPERUSER_ID).partner_id.id, partner_ids
         )
 
+    def test_contractor_history_outside_the_request_team_gets_the_bare_label(self):
+        # Where the label actually went wrong in production: maintenance.team
+        # holds Mimer's own intake queues as well as supplier organisations, so
+        # a contractor who answered an errand still parked in one of our queues
+        # would be labelled with that queue — "Mimers Leverantör -
+        # Förvaltningsadministration" tells the tenant a Mimer department is a
+        # supplier of ours. The team names the supplier only when the author
+        # belongs to it.
+        category_id = self.env.ref("onecore_maintenance_extension.category_1").id
+        queue = self.env["maintenance.team"].create(
+            {
+                "name": "Förvaltningsadministration",
+                "member_ids": [(6, 0, [self.internal_user.id])],
+            }
+        )
+        request = self.env["maintenance.request"].create(
+            {
+                "name": "Ärende i intern kö",
+                "maintenance_request_category_id": category_id,
+                "space_caption": "Lägenhet",
+                "hidden_from_my_pages": False,
+                "maintenance_team_id": queue.id,
+            }
+        )
+        message = self._legacy_message(self.external_user, "tenant_sms", record=request)
+        self._run()
+        self.assertEqual(message.onecore_tenant_author_name, "Mimers Leverantör")
+
     def test_archived_resource_group_is_still_named(self):
         # A supplier whose contract has ended is archived, not deleted, and
         # maintenance.team has an `active` field — so search([]) would skip it

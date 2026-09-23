@@ -125,15 +125,67 @@ class TestTenantAuthorName(TransactionCase):
 
     def test_contractor_falls_back_to_bare_label_without_a_readable_request(self):
         # maintenance_team_id is required=True with a default, so a request
-        # always has a team; the only way to reach this branch is a message
-        # whose thread the acting contractor cannot read. The label must then
-        # degrade to the bare form, never to a dangling "Mimers Leverantör - ".
+        # always has a team; this branch is reached by a message whose thread
+        # the acting contractor cannot read (the sibling test below covers the
+        # other route — an author who is not on the request's team). The label
+        # must degrade to the bare form, never to a dangling
+        # "Mimers Leverantör - ".
         name = (
             self.env["mail.message"]
             .with_user(self.external_user)
             ._tenant_facing_author_name(self.external_user)
         )
         self.assertEqual(name, "Mimers Leverantör")
+
+    def _request_in_an_internal_queue(self):
+        """A request parked in one of Mimer's own queues, not a supplier's.
+
+        maintenance.team is a mixed taxonomy: alongside supplier organisations
+        it holds Mimer's own intake and admin queues —
+        "Förvaltningsadministration", "Kundcenter - Inkomna serviceanmälningar",
+        "Distrikt Väst". The external contractor is deliberately not a member.
+        """
+        queue = self.env["maintenance.team"].create(
+            {
+                "name": "Förvaltningsadministration",
+                "member_ids": [(6, 0, [self.internal_user.id])],
+            }
+        )
+        return self.env["maintenance.request"].create(
+            {
+                "name": "Ärende i intern kö",
+                "maintenance_request_category_id": self.env.ref(
+                    "onecore_maintenance_extension.category_1"
+                ).id,
+                "space_caption": "Lägenhet",
+                "hidden_from_my_pages": False,
+                "maintenance_team_id": queue.id,
+            }
+        )
+
+    def test_contractor_outside_the_request_team_gets_the_bare_label(self):
+        # The team name is the supplier's name only when the contractor
+        # actually belongs to that team. On an errand still sitting in one of
+        # our own queues it is a Mimer department, and
+        # "Mimers Leverantör - Förvaltningsadministration" tells the tenant
+        # that department is a supplier of ours.
+        name = self.env["mail.message"]._tenant_facing_author_name(
+            self.external_user, self._request_in_an_internal_queue()
+        )
+        self.assertEqual(name, "Mimers Leverantör")
+
+    def test_explicit_contractor_author_outside_the_team_gets_the_bare_label(self):
+        # The reachable write path. A contractor cannot post on a request whose
+        # team they are not in — maintenance_request_rule_external_contractor_
+        # group_readonly blocks it — but message_post(author_id=...) attributes
+        # a message to one, and _tenant_facing_author() takes the author from
+        # the values rather than from the acting user.
+        message = self._post(
+            self.internal_user,
+            record=self._request_in_an_internal_queue(),
+            author_partner=self.external_user.partner_id,
+        )
+        self.assertEqual(message.onecore_tenant_author_name, "Mimers Leverantör")
 
     def test_superuser_is_attributed_to_mimer(self):
         # security/maintenance.xml puts base.user_root in

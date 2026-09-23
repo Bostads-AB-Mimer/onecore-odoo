@@ -385,7 +385,9 @@ class OneCoreMailMessage(models.Model):
         The resource group is taken from the request rather than from the
         author's teams: a contractor can be a member of several, and the
         request's team is the one they are answering on behalf of. It is also
-        what the SMS/e-post sign-off already uses.
+        what the SMS/e-post sign-off already uses. That only holds while the
+        author is a member of that team, though — see below — so an author
+        outside it gets the bare label instead of a name that is not theirs.
         """
         # security/maintenance.xml adds base.user_root to
         # group_external_contractor, so OdooBot would otherwise be announced to
@@ -397,12 +399,22 @@ class OneCoreMailMessage(models.Model):
             return TENANT_AUTHOR_MIMER
         team_name = ""
         if record:
-            team_name = (
-                record.with_context(
-                    lang=tenant_author_lang(self.env)
-                ).maintenance_team_id.name
-                or ""
-            )
+            # sudo(): whether the label is right must not depend on whether the
+            # acting user is allowed to read the team's member list.
+            team = record.sudo().maintenance_team_id
+            # maintenance.team is a mixed taxonomy — alongside supplier
+            # organisations it holds Mimer's own queues
+            # ("Förvaltningsadministration", "Kundcenter - Inkomna
+            # serviceanmälningar", "Distrikt Väst"). Its name is the supplier's
+            # name only when the author actually belongs to it. A contractor
+            # answering an errand still parked in one of our queues would
+            # otherwise announce that Mimer department to the tenant as a
+            # supplier of ours, so an author outside the team falls back to the
+            # bare label rather than borrowing a name that is not theirs.
+            if author in team.member_ids:
+                team_name = (
+                    team.with_context(lang=tenant_author_lang(self.env)).name or ""
+                )
         if not team_name:
             return TENANT_AUTHOR_CONTRACTOR
         return f"{TENANT_AUTHOR_CONTRACTOR} - {team_name}"

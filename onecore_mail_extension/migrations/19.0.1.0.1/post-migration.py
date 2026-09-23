@@ -111,12 +111,24 @@ def backfill_tenant_author_names(env):
         # small, and this stays a single pass over mail_message rather than one
         # per resource group.
         cr.execute(
+            # The join through maintenance_team_users_rel is what keeps a Mimer
+            # queue out of the label: maintenance.team holds our own intake and
+            # admin teams ("Förvaltningsadministration", "Kundcenter - Inkomna
+            # serviceanmälningar") next to supplier organisations, and the
+            # team names the supplier only when the author belongs to it.
+            # Contractor rows that fall out here are caught by the bare-label
+            # pass below, the same direction the write path defaults in.
             """UPDATE mail_message m
                   SET onecore_tenant_author_name = %s || ' - ' || t.name
                  FROM maintenance_request r
                  JOIN unnest(%s::int[], %s::text[]) AS t(id, name)
                    ON t.id = r.maintenance_team_id
+                 JOIN maintenance_team_users_rel rel
+                   ON rel.maintenance_team_id = t.id
+                 JOIN res_users au
+                   ON au.id = rel.res_users_id
                 WHERE m.res_id = r.id
+                  AND au.partner_id = m.author_id
                   AND m.model = 'maintenance.request'
                   AND m.message_type = ANY(%s)
                   AND m.onecore_tenant_author_name IS NULL
