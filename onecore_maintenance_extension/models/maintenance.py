@@ -732,8 +732,14 @@ class OneCoreMaintenanceRequest(
         retroactively.
 
         Posted as the acking user, so the audit log records who acknowledged.
-        Mina sidor shows only a first name beside the body, and the body carries
-        the organisation name the tenant needs.
+
+        The body names the organisation because Mina sidor used to show only
+        the first word of the sender. MIM-2040 replaces that sender with
+        "Mimer" or "Mimers Leverantör - <resursgrupp>" and mina-sidor stops
+        truncating it, so once the whole chain is released the tenant sees the
+        organisation twice — beside the message and inside it. Harmless, but
+        the prefix has stopped earning its place; dropping it is a change to
+        tenant-facing copy and belongs with whoever owns that wording.
         """
         self.ensure_one()
         sender = "Mimer"
