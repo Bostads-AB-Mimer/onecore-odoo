@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- MIM-1975/1976: "Mitt distrikt" — the request list opened on the
+         requests in the districts whose resource groups the current user is
+         a member of. One menu entry for everyone; the in_my_district field
+         (models/mixins/search_fields_mixin.py) resolves the district per
+         user, which is what "a default view per resursgrupp" reduces to.
+
+         The search_default only takes effect once in_my_district is a filter
+         in the search view (hr_equipment_request_view_search_extension); until
+         then the action opens the plain active list. Kept out of
+         maintenance_views.xml on purpose: that file is being rewritten by
+         other PRs and the search view is merged last. -->
+    <record id="action_my_district_requests" model="ir.actions.act_window">
+        <field name="name">Mitt distrikt</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="view_mode">kanban,mobile,list,form,pivot,graph,calendar,activity</field>
+        <field name="mobile_view_mode">mobile</field>
+        <field name="context">{'search_default_in_my_district': 1, 'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Inga ärenden i ditt distrikt</p>
+            <p>
+                Här visas ärenden i de distrikt vars resursgrupper du är medlem
+                i, oavsett vilken resursgrupp ärendet ligger hos just nu.
+            </p>
+        </field>
+    </record>
+
+    <!-- Same view wiring as views/mobile_view.xml gives the stock action:
+         kanban first on desktop, the mobile view resolvable on phones. -->
+    <record id="action_my_district_requests_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="0" />
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="maintenance.hr_equipment_request_view_kanban" />
+        <field name="act_window_id" ref="action_my_district_requests" />
+    </record>
+    <record id="action_my_district_requests_view_mobile" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1" />
+        <field name="view_mode">mobile</field>
+        <field name="view_id" ref="hr_equipment_request_view_mobile" />
+        <field name="act_window_id" ref="action_my_district_requests" />
+    </record>
+
+    <menuitem
+        id="menu_my_district_requests"
+        name="Mitt distrikt"
+        parent="maintenance.menu_m_request"
+        action="action_my_district_requests"
+        groups="maintenance.group_equipment_manager"
+        sequence="2"
+    />
+</odoo>
