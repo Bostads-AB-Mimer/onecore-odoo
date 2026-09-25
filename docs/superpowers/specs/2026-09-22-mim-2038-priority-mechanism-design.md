@@ -66,7 +66,10 @@ Separate the two things the field currently conflates:
 
 - **`priority_expanded` stays the picker** — same name, same `Selection` type,
   same nullability. Presets shrink to Akut / 1 dag / 5 dagar / 7 dagar /
-  10 dagar, plus one new sentinel `custom` = *"Välj antal veckor"*.
+  10 dagar, plus one new sentinel `custom` = *"Antal veckor"*. (The ticket
+  says *"Välj antal veckor"*, but that reads as an instruction once saved, so
+  the option is *"Antal veckor"* and the form shows the week count on the same
+  row: *Prioritet: Antal veckor [9] veckor*.)
 - **`priority_days` becomes the arithmetic** — a new stored `Integer`, derived,
   and the single thing `due_date`, sorting, filtering and grouping read.
 
@@ -135,7 +138,7 @@ PRIORITY_PRESETS = [
     ("5", "5 dagar"),
     ("7", "7 dagar"),
     ("10", "10 dagar"),
-    (PRIORITY_CUSTOM, "Välj antal veckor"),
+    (PRIORITY_CUSTOM, "Antal veckor"),
 ]
 
 PRIORITY_MAX_WEEKS = 52
@@ -222,9 +225,12 @@ value. Replace with four ranges plus a group-by:
 <filter string="Längre än 30 dagar" name="priority_long"   domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 30)]" />
 ```
 
-plus `<filter string="Prioritet" name="group_priority" context="{'group_by': 'priority_days'}" />`
-in the group-by section, which now orders numerically because the column is an
-integer.
+plus `<filter string="Prioritet" name="group_priority" context="{'group_by': 'priority_label'}" />`
+in the group-by section. It groups on the label rather than `priority_days`
+because `priority_days` is `0` for both Akut and an unset ärende, which would put
+them in one group headed by a bare day count. `priority_label` is empty when no
+priority is set, so unset ärenden get their own group and the headings read
+*Akut*, *2 veckor* and so on. The price is alphabetical group order.
 
 **Every one of these leads with `priority_expanded`, not `priority_days`** —
 that is the rule from the previous section applied. The Akut filter keeps the

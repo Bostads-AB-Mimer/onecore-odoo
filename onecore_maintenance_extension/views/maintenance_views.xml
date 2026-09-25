@@ -128,8 +128,11 @@
                             <filter string='Beställande avdelning' name='ordering_department'
                                 domain="[]"
                                 context="{'group_by': 'ordering_department'}" />
+                            <!-- Group on the label, not priority_days: priority_days is 0
+                                 for both Akut and an unset ärende, so they would share a
+                                 group. The price is alphabetical group order. -->
                             <filter string='Prioritet' name='group_priority' domain="[]"
-                                context="{'group_by': 'priority_days'}" />
+                                context="{'group_by': 'priority_label'}" />
                         </group>
                     </search>
                 </xpath>
@@ -766,14 +769,27 @@
                                             help="Anger vilket datum ärendet kan påbörjas"
                                             readonly="user_is_external_contractor"
                                         />
-                                        <field
-                                            name="priority_expanded"
-                                            readonly="user_is_external_contractor" />
-                                        <field
-                                            name="priority_weeks"
-                                            invisible="priority_expanded != 'custom'"
-                                            required="priority_expanded == 'custom'"
-                                            readonly="user_is_external_contractor" />
+                                        <!-- One row, so a custom priority reads
+                                             "Antal veckor [9] veckor" rather than an
+                                             option name on a line of its own. Not
+                                             o_row: in an editable group Odoo stretches
+                                             every o_row widget to share the full width. -->
+                                        <label for="priority_expanded" />
+                                        <div class="d-flex align-items-baseline gap-2">
+                                            <field
+                                                name="priority_expanded"
+                                                class="oe_inline"
+                                                readonly="user_is_external_contractor" />
+                                            <field
+                                                name="priority_weeks"
+                                                nolabel="1"
+                                                class="oe_inline o_input_4ch"
+                                                invisible="priority_expanded != 'custom'"
+                                                required="priority_expanded == 'custom'"
+                                                readonly="user_is_external_contractor" />
+                                            <span invisible="priority_expanded != 'custom'">
+                                                veckor</span>
+                                        </div>
                                         <field name="due_date"
                                             help="Det datum ärendet ska vara utfört"
                                             readonly="user_is_external_contractor" />

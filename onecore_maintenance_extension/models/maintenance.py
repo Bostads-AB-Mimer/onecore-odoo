@@ -124,7 +124,7 @@ class OneCoreMaintenanceRequest(
         "Antal veckor",
         store=True,
         help="Antal veckor till förfallodatum. Används endast när prioritet är"
-        " 'Välj antal veckor'.",
+        " 'Antal veckor'.",
     )
     # The day count is the arithmetic priority_expanded used to carry itself.
     # It is 0 both for Akut and for an ärende with no priority at all, because

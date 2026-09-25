@@ -63,7 +63,7 @@ PRIORITY_PRESETS = [
     ("5", "5 dagar"),
     ("7", "7 dagar"),
     ("10", "10 dagar"),
-    (PRIORITY_CUSTOM, "Välj antal veckor"),
+    (PRIORITY_CUSTOM, "Antal veckor"),
 ]
 
 PRIORITY_MAX_WEEKS = 52
