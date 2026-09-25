@@ -191,6 +191,29 @@ class TestPriorityDueDate(TransactionCase):
         )
         self.assertEqual(request.due_date, request_date)
 
+    def test_custom_without_weeks_keeps_the_previous_due_date(self):
+        """Picking 'Antal veckor' before typing a number must not look like Akut.
+
+        The weeks box is empty (shown as 0) until the handläggare types in it,
+        and priority_days is 0 then. Saving is blocked by the constraint, but
+        the form's onchange still recomputes — so förfallodatum must hold
+        still instead of jumping to the base date, and the label stay empty.
+        Uses new() because that is the unsaved record the form works on.
+        """
+        request_date = date.today()
+        request = self.env["maintenance.request"].new(
+            {"request_date": request_date, "priority_expanded": "7"}
+        )
+        self.assertEqual(request.due_date, request_date + timedelta(days=7))
+
+        request.priority_expanded = PRIORITY_CUSTOM
+        self.assertEqual(request.due_date, request_date + timedelta(days=7))
+        self.assertFalse(request.priority_label)
+
+        request.priority_weeks = 3
+        self.assertEqual(request.due_date, request_date + timedelta(days=21))
+        self.assertEqual(request.priority_label, "3 veckor")
+
     def test_manual_due_date_survives_a_weeks_change(self):
         request = create_maintenance_request(
             self.env, priority_expanded=PRIORITY_CUSTOM, priority_weeks=2

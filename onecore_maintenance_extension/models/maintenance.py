@@ -877,10 +877,10 @@ class OneCoreMaintenanceRequest(
     def _compute_priority_label(self):
         for record in self:
             # Char IS nullable, so this is the one derived field that can say
-            # "no priority" — hence the priority_expanded guard.
+            # "no priority" — hence the guard, which asks priority_expanded.
             record.priority_label = (
                 priority_label_for(record.priority_days)
-                if record.priority_expanded
+                if record._has_priority_days()
                 else False
             )
 
@@ -899,11 +899,23 @@ class OneCoreMaintenanceRequest(
         for record in self:
             base_date = record.start_date if record.start_date else record.request_date
 
-            # The guard stays on priority_expanded, exactly as before: it is
-            # the nullable field, and it is truthy for Akut because "0" is a
-            # non-empty string. priority_days only supplies the number.
-            if base_date and record.priority_expanded:
+            # The guard asks priority_expanded, as before: it is the nullable
+            # field, and it is truthy for Akut because "0" is a non-empty
+            # string. priority_days only supplies the number.
+            if base_date and record._has_priority_days():
                 record.due_date = fields.Date.add(base_date, days=record.priority_days)
+
+    def _has_priority_days(self):
+        """Whether priority_days is a real day count (Akut's 0 included).
+
+        False with no priority, and also while 'Antal veckor' is picked but the
+        number not typed yet — the constraint blocks saving that, but onchange
+        still recomputes, and a 0 there must not read as Akut.
+        """
+        self.ensure_one()
+        if self.priority_expanded == PRIORITY_CUSTOM:
+            return bool(self.priority_weeks)
+        return bool(self.priority_expanded)
 
     def _inverse_due_date(self):
         # Presence of this inverse lets the stored computed field retain
