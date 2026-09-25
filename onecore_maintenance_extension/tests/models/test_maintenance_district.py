@@ -2,7 +2,7 @@
 and the "Tilldela resursgrupp" button.
 
 Covers the create() snapshot, the button action (notifications, contractor
-guard), the team seed, the cron record and the open_time_report refactor.
+guard), the team seed and the cron record.
 """
 from unittest.mock import patch
 
@@ -11,7 +11,6 @@ from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
 from ..utils.test_utils import (
-    create_building,
     create_external_contractor_user,
     create_internal_user,
     create_maintenance_request,
@@ -308,14 +307,3 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         self.assertEqual((backfill.interval_number, backfill.interval_type), (1, "hours"))
         self.assertIn("_cron_sync_kvv_areas", sync.code)
         self.assertEqual((sync.interval_number, sync.interval_type), (1, "days"))
-
-    def test_open_time_report_uses_property_code_chain(self):
-        apartment = self._apartment_request(estate_code="2201")
-        self.assertIn("p=2201", apartment.open_time_report()["url"])
-
-        building_request = create_maintenance_request(self.env, space_caption="Byggnad")
-        building = create_building(
-            self.env, maintenance_request_id=building_request.id, property_code="6601"
-        )
-        building_request.building_id = building.id
-        self.assertIn("p=6601", building_request.open_time_report()["url"])

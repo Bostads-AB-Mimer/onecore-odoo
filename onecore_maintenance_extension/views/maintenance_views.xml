@@ -782,13 +782,13 @@
                                         <field
                                             name="user_is_external_contractor" invisible="1" />
                                     </group>
-                                    <button name="open_time_report"
+                                    <button name="open_time_report_wizard"
                                         type="object"
-                                        string="Öppna tidrapport"
-                                        icon="fa-clock-o"
+                                        string="Rapportera tid"
+                                        icon="fa-calendar-plus-o"
                                         class="btn btn-secondary mt-2 mb-2 me-2"
-                                        help="Öppna tidrapporteringssystem"
-                                        invisible="user_is_external_contractor" />
+                                        help="Rapportera tid direkt från ärendet"
+                                        invisible="user_is_external_contractor or not id" />
                                     <button name="open_component_wizard"
                                         type="object"
                                         string="Uppdatera/lägg till Komponent"
