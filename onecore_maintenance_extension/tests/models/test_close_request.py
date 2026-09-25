@@ -25,6 +25,7 @@ from ...models.constants import (
     CLOSE_REQUEST_DECLINED_MESSAGE_TYPE,
     CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
 )
+from ...models.services import FieldChangeTracker
 
 
 def _sql_code(call):
@@ -256,3 +257,80 @@ class TestRequestCloseFromTenant(CloseRequestCase):
                 self._request_close(reason="Klart")
         mock_send_sms.assert_not_called()
         mock_send_email.assert_not_called()
+
+
+@tagged("onecore")
+class TestCloseRequestResolution(CloseRequestCase):
+    def setUp(self):
+        super().setUp()
+        self._as(self.mimer_user).request_close_from_tenant()
+
+    def test_accept_closes_the_case_and_resolves_the_request(self):
+        self.assertIs(self._as(self.internal_user).action_accept_close_request(), True)
+        request = self._fresh()
+        self.assertEqual(request.stage_id, self.stage_avslutad)
+        self.assertFalse(request.close_request_pending)
+        self.assertEqual(request.close_request_resolved_at, request.closed_date)
+
+    def test_contractor_cannot_accept_and_the_request_stays_pending(self):
+        with self.assertRaisesRegex(
+            UserError, "Du har inte behörighet att flytta detta ärende till Avslutad"
+        ):
+            self._as(self.external_user).action_accept_close_request()
+        request = self._fresh()
+        self.assertNotEqual(request.stage_id, self.stage_avslutad)
+        self.assertTrue(request.close_request_pending)
+
+    def test_stage_write_failing_after_the_update_leaves_the_request_pending(self):
+        # Fails after super().write() — the stage and the resolution are
+        # already in the database by then — so this proves the two roll back
+        # together, not merely that nothing had been written yet.
+        #
+        # create_maintenance_request() leaves `creating_records=True` on the
+        # returned recordset's context (see maintenance.py create()), which
+        # makes write() skip FieldChangeTracker entirely, so the patched
+        # post_change_notifications below would never actually run. Same
+        # override as test_master_key_change_indicator.py and
+        # test_maintenance_workflow_service.py use for the same reason.
+        with patch.object(
+            FieldChangeTracker,
+            "post_change_notifications",
+            side_effect=UserError("Testfel"),
+        ):
+            with self.assertRaisesRegex(UserError, "Testfel"):
+                self._as(self.internal_user).with_context(
+                    creating_records=False
+                ).action_accept_close_request()
+        request = self._fresh()
+        self.assertNotEqual(request.stage_id, self.stage_avslutad)
+        self.assertFalse(request.close_request_resolved_at)
+        self.assertTrue(request.close_request_pending)
+
+    def test_accept_when_already_handled_is_refused(self):
+        self._as(self.internal_user).action_accept_close_request()
+        with self.assertRaisesRegex(UserError, "Begäran om avslut är redan hanterad"):
+            self._as(self.internal_user).action_accept_close_request()
+
+    def test_drag_to_avslutad_resolves_a_pending_request(self):
+        self._as(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        request = self._fresh()
+        self.assertFalse(request.close_request_pending)
+        self.assertEqual(request.close_request_resolved_at, request.closed_date)
+
+    def test_other_stage_changes_leave_the_request_pending(self):
+        # Assigning a resource auto-moves the case to Resurs tilldelad.
+        self._as(self.internal_user).write({"user_id": self.internal_user.id})
+        request = self._fresh()
+        self.assertEqual(request.stage_id, self._stage("Resurs tilldelad"))
+        self.assertTrue(request.close_request_pending)
+
+    def test_closing_without_a_request_stamps_nothing(self):
+        other = create_maintenance_request(self.env, maintenance_team_id=self.team.id)
+        other.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertFalse(other.close_request_resolved_at)
+
+    def test_case_moved_out_of_avslutad_accepts_a_new_request(self):
+        self._as(self.internal_user).action_accept_close_request()
+        self._as(self.internal_user).write({"stage_id": self.stage_vantar.id})
+        self.assertIs(self._as(self.mimer_user).request_close_from_tenant(), True)
+        self.assertTrue(self._fresh().close_request_pending)

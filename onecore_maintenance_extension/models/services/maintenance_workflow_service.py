@@ -45,6 +45,13 @@ class MaintenanceStageManager:
 
         if new_stage.name == "Avslutad":
             updates["closed_date"] = fields.Datetime.now()
+            # MIM-2036: a tenant's close request cannot outlive the case being
+            # closed, whether through "Avsluta ärendet" or a drag to Avslutad.
+            # Same write as the stage, so a transition that fails validation
+            # leaves the request pending. Applied to the whole recordset: on a
+            # record without a pending request the extra stamp is inert.
+            if any(r.close_request_pending for r in record):
+                updates["close_request_resolved_at"] = updates["closed_date"]
         else:
             updates["closed_date"] = False
 
