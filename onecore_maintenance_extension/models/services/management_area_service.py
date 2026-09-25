@@ -51,7 +51,7 @@ class ManagementAreaService:
     def get_property_code(request):
         """Property code of the request's location, whatever the object type.
 
-        Same fallback order as the historical open_time_report chain, plus
+        Same fallback order as the historical time report link chain, plus
         the building's property for building-level requests.
         """
         return (

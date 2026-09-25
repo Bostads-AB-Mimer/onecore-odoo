@@ -6,11 +6,12 @@ import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .maintenance_time_report_wizard import WORK_ORDER_PREFIX
 from .services import (
     FieldChangeTracker,
     RecordManagementService,
@@ -1286,27 +1287,24 @@ class OneCoreMaintenanceRequest(
     # INTEGRATION METHODS
     # ============================================================================
 
-    def open_time_report(self):
+    def open_time_report_wizard(self):
         self.ensure_one()
-        # Property code of the request's location, whatever the space type
-        estate_code = ManagementAreaService.get_property_code(self)
-
-        base_url = self.env["ir.config_parameter"].get_param(
-            "time_report_base_url",
-            "https://apps.mimer.nu/version-test/tidsrapportering/",
+        if ExternalContractorService(self.env).is_external_contractor():
+            # The view hides the button; this guards RPC callers.
+            raise AccessError(
+                "Tidsrapportering är inte tillgänglig för externa entreprenörer."
+            )
+        property_code = ManagementAreaService.get_property_code(self)
+        wizard = self.env["maintenance.time.report.wizard"].create(
+            {
+                "maintenance_request_id": self.id,
+                "property_code": property_code,
+                "property_missing": not property_code,
+                "cost_center_code": self.cost_center_code,
+                "work_order_id": f"{WORK_ORDER_PREFIX}{self.id}",
+            }
         )
-
-        url = base_url
-        params = {"od": self.id}
-        if estate_code:
-            params["p"] = estate_code
-        url = f"{base_url}?{urllib.parse.urlencode(params)}"
-
-        return {
-            "type": "ir.actions.act_url",
-            "url": url,
-            "target": "self",
-        }
+        return wizard._reopen()
 
     def activity_update(self):
         """Override to completely suppress automatic maintenance activity creation.
