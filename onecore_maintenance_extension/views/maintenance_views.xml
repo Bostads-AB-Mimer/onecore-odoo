@@ -43,28 +43,17 @@
                         <filter string="Klart" name="done"
                             domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'done')]" />
                         <separator />
-                        <filter string="Akut" name="acute"
+                        <!-- MIM-2038: ranges rather than one filter per value —
+                             antal veckor is free-form, so a filter per literal
+                             value is no longer writable. -->
+                        <filter string="Akut" name="priority_acute"
                             domain="[('priority_expanded', '=', '0')]" />
-                        <filter string="1 dag" name="one_day"
-                            domain="[('priority_expanded', '=', '1')]" />
-                        <filter string="5 dagar" name="five_days"
-                            domain="[('priority_expanded', '=', '5')]" />
-                        <filter string="7 dagar" name="seven_days"
-                            domain="[('priority_expanded', '=', '7')]" />
-                        <filter string="10 dagar" name="ten_days"
-                            domain="[('priority_expanded', '=', '10')]" />
-                        <filter string="2 veckor" name="two_weeks"
-                            domain="[('priority_expanded', '=', '14')]" />
-                        <filter string="3 veckor" name="three_weeks"
-                            domain="[('priority_expanded', '=', '21')]" />
-                        <filter string="4 veckor" name="four_weeks"
-                            domain="[('priority_expanded', '=', '28')]" />
-                        <filter string="5 veckor" name="five_weeks"
-                            domain="[('priority_expanded', '=', '35')]" />
-                        <filter string="6 veckor" name="six_weeks"
-                            domain="[('priority_expanded', '=', '42')]" />
-                        <filter string="8 veckor" name="eight_weeks"
-                            domain="[('priority_expanded', '=', '56')]" />
+                        <filter string="Inom 7 dagar" name="priority_week"
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 0), ('priority_days', '&lt;=', 7)]" />
+                        <filter string="8–30 dagar" name="priority_month"
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 7), ('priority_days', '&lt;=', 30)]" />
+                        <filter string="Längre än 30 dagar" name="priority_long"
+                            domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 30)]" />
                         <separator />
                         <filter string="Ej schemalagt" name="unscheduled"
                             domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
@@ -139,6 +128,11 @@
                             <filter string='Beställande avdelning' name='ordering_department'
                                 domain="[]"
                                 context="{'group_by': 'ordering_department'}" />
+                            <!-- Group on the label, not priority_days: priority_days is 0
+                                 for both Akut and an unset ärende, so they would share a
+                                 group. The price is alphabetical group order. -->
+                            <filter string='Prioritet' name='group_priority' domain="[]"
+                                context="{'group_by': 'priority_label'}" />
                         </group>
                     </search>
                 </xpath>
@@ -229,9 +223,9 @@
                     </div>
 
                     <div class="d-flex w-100 justify-content-between justify-content-md-start"
-                        invisible="not priority_expanded">
-                        <label class="me-1" for="priority_expanded" string="Prioritet" />
-                        <field class="ms-1 text-end text-md-start" name="priority_expanded"
+                        invisible="not priority_label">
+                        <label class="me-1" for="priority_label" string="Prioritet" />
+                        <field class="ms-1 text-end text-md-start" name="priority_label"
                             readonly="1" />
                     </div>
                     <div class="mb-3 d-flex w-100 justify-content-between justify-content-md-start"
@@ -775,9 +769,27 @@
                                             help="Anger vilket datum ärendet kan påbörjas"
                                             readonly="user_is_external_contractor"
                                         />
-                                        <field
-                                            name="priority_expanded"
-                                            readonly="user_is_external_contractor" />
+                                        <!-- One row, so a custom priority reads
+                                             "Antal veckor [9] veckor" rather than an
+                                             option name on a line of its own. Not
+                                             o_row: in an editable group Odoo stretches
+                                             every o_row widget to share the full width. -->
+                                        <label for="priority_expanded" />
+                                        <div class="d-flex align-items-baseline gap-2">
+                                            <field
+                                                name="priority_expanded"
+                                                class="oe_inline"
+                                                readonly="user_is_external_contractor" />
+                                            <field
+                                                name="priority_weeks"
+                                                nolabel="1"
+                                                class="oe_inline o_input_4ch"
+                                                invisible="priority_expanded != 'custom'"
+                                                required="priority_expanded == 'custom'"
+                                                readonly="user_is_external_contractor" />
+                                            <span invisible="priority_expanded != 'custom'">
+                                                veckor</span>
+                                        </div>
                                         <field name="due_date"
                                             help="Det datum ärendet ska vara utfört"
                                             readonly="user_is_external_contractor" />
@@ -972,7 +984,8 @@
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="stage_id" />
                     <field name="color" />
-                    <field name="priority_expanded" />
+                    <field name="priority_label" />
+                    <field name="priority_days" />
                     <field name="due_date" />
                     <field name="schedule_date_date" />
                     <field name="schedule_date_after_due_date" />
@@ -1043,7 +1056,7 @@
                         <field name="closed_date" options="{'show_time': false}" optional="hide" />
                         <field name="returned_date" options="{'show_time': false}" optional="hide" />
                         <field name="maintenance_request_category_id" optional="hide" />
-                        <field name="priority_expanded" optional="hide" />
+                        <field name="priority_label" optional="hide" />
                         <field name="creation_origin" optional="hide" />
                         <field name="space_caption" optional="hide" />
                         <field name="tenant_name" optional="hide" />

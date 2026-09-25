@@ -5,11 +5,12 @@ import json
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
-from odoo.exceptions import AccessError, UserError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .utils.priority import priority_days_from, priority_label_for
 from .services import (
     FieldChangeTracker,
     RecordManagementService,
@@ -23,7 +24,9 @@ from .services import (
 from .constants import (
     SORTED_SPACES,
     SEARCH_TYPES,
-    PRIORITY_OPTIONS,
+    PRIORITY_PRESETS,
+    PRIORITY_CUSTOM,
+    PRIORITY_MAX_WEEKS,
     CREATION_ORIGINS,
     FORM_STATES,
     CUSTOMER_MESSAGE_TYPE,
@@ -113,9 +116,31 @@ class OneCoreMaintenanceRequest(
     master_key = fields.Boolean("Huvudnyckel", store=True)
 
     priority_expanded = fields.Selection(
-        PRIORITY_OPTIONS,
+        PRIORITY_PRESETS,
         string="Prioritet",
         store=True,
+    )
+    priority_weeks = fields.Integer(
+        "Antal veckor",
+        store=True,
+        help="Antal veckor till förfallodatum. Används endast när prioritet är"
+        " 'Antal veckor'.",
+    )
+    # The day count is the arithmetic priority_expanded used to carry itself.
+    # It is 0 both for Akut and for an ärende with no priority at all, because
+    # fields.Integer cannot hold NULL (odoo/orm/fields_numeric.py:32). Ask
+    # priority_expanded, never this, whether a priority is set.
+    priority_days = fields.Integer(
+        "Prioritet (dagar)",
+        compute="_compute_priority_days",
+        store=True,
+        readonly=True,
+    )
+    priority_label = fields.Char(
+        "Prioritet",
+        compute="_compute_priority_label",
+        store=True,
+        readonly=True,
     )
     due_date = fields.Date(
         "Förfallodatum",
@@ -841,15 +866,56 @@ class OneCoreMaintenanceRequest(
         for record in self:
             record.user_is_external_contractor = is_external
 
-    @api.depends("request_date", "start_date", "priority_expanded")
+    @api.depends("priority_expanded", "priority_weeks")
+    def _compute_priority_days(self):
+        for record in self:
+            record.priority_days = priority_days_from(
+                record.priority_expanded, record.priority_weeks
+            )
+
+    @api.depends("priority_expanded", "priority_days")
+    def _compute_priority_label(self):
+        for record in self:
+            # Char IS nullable, so this is the one derived field that can say
+            # "no priority" — hence the guard, which asks priority_expanded.
+            record.priority_label = (
+                priority_label_for(record.priority_days)
+                if record._has_priority_days()
+                else False
+            )
+
+    @api.constrains("priority_expanded", "priority_weeks")
+    def _check_priority_weeks(self):
+        for record in self:
+            if record.priority_expanded != PRIORITY_CUSTOM:
+                continue
+            if not 1 <= record.priority_weeks <= PRIORITY_MAX_WEEKS:
+                raise ValidationError(
+                    _("Antal veckor måste vara mellan 1 och %s.") % PRIORITY_MAX_WEEKS
+                )
+
+    @api.depends("request_date", "start_date", "priority_expanded", "priority_days")
     def _compute_due_date(self):
         for record in self:
             base_date = record.start_date if record.start_date else record.request_date
 
-            if base_date and record.priority_expanded:
-                record.due_date = fields.Date.add(
-                    base_date, days=int(record.priority_expanded)
-                )
+            # The guard asks priority_expanded, as before: it is the nullable
+            # field, and it is truthy for Akut because "0" is a non-empty
+            # string. priority_days only supplies the number.
+            if base_date and record._has_priority_days():
+                record.due_date = fields.Date.add(base_date, days=record.priority_days)
+
+    def _has_priority_days(self):
+        """Whether priority_days is a real day count (Akut's 0 included).
+
+        False with no priority, and also while 'Antal veckor' is picked but the
+        number not typed yet — the constraint blocks saving that, but onchange
+        still recomputes, and a 0 there must not read as Akut.
+        """
+        self.ensure_one()
+        if self.priority_expanded == PRIORITY_CUSTOM:
+            return bool(self.priority_weeks)
+        return bool(self.priority_expanded)
 
     def _inverse_due_date(self):
         # Presence of this inverse lets the stored computed field retain

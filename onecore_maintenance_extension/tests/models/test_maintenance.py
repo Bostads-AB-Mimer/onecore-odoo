@@ -12,6 +12,7 @@ from ..utils.test_utils import (
     create_property,
     create_building,
 )
+from ...models.constants import PRIORITY_CUSTOM
 from ...models.utils.helpers import get_tenant_name, get_main_phone_number
 
 
@@ -72,26 +73,35 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         self.assertEqual(request.due_date, expected_due_date)
 
     def test_due_date_with_priority_6_months(self):
-        """6 månader option should map to 183 days."""
+        """26 veckor (the former 6 månader option) should map to 182 days."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="183"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=26,
         )
-        self.assertEqual(request.due_date, request_date + timedelta(days=183))
+        self.assertEqual(request.due_date, request_date + timedelta(days=182))
 
     def test_due_date_with_priority_more_than_one_year(self):
-        """mer än 1 år option should map to 365 days."""
+        """52 veckor (the former mer än 1 år option) should map to 364 days."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="365"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=52,
         )
-        self.assertEqual(request.due_date, request_date + timedelta(days=365))
+        self.assertEqual(request.due_date, request_date + timedelta(days=364))
 
     def test_manual_due_date_persists_on_write(self):
         """Manually overriding due_date after auto-fill should survive save."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="42"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=6,
         )
         self.assertEqual(request.due_date, request_date + timedelta(days=42))
 
@@ -104,24 +114,28 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         """Changing priority without touching due_date should refresh the deadline."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="14"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=2,
         )
         self.assertEqual(request.due_date, request_date + timedelta(days=14))
 
-        request.write({"priority_expanded": "42"})
+        request.write({"priority_weeks": 6})
         self.assertEqual(request.due_date, request_date + timedelta(days=42))
 
     def test_explicit_due_date_wins_over_recompute(self):
         """Writing priority and due_date in the same vals should persist the user's due_date."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="14"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=2,
         )
 
         manual_due_date = request_date + timedelta(days=100)
-        request.write(
-            {"priority_expanded": "42", "due_date": manual_due_date}
-        )
+        request.write({"priority_weeks": 6, "due_date": manual_due_date})
         request.invalidate_recordset()
         self.assertEqual(request.due_date, manual_due_date)
 
@@ -132,7 +146,8 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         request = create_maintenance_request(
             self.env,
             request_date=request_date,
-            priority_expanded="42",
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=6,
             due_date=manual_due_date,
         )
         request.invalidate_recordset()
