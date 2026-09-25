@@ -3,7 +3,7 @@
 **Ticket:** [MIM-2036](https://linear.app/mimer-onecore/issue/MIM-2036/hyresgast-avslutar-arende-via-mina-sidor-mekanism)
 **Epic:** [MIM-1983](https://linear.app/mimer-onecore/issue/MIM-1983/epic-odoo-prioritized-ux-and-communication-improvements)
 **Date:** 2026-09-25
-**Status:** design approved in conversation; awaiting spec review
+**Status:** spec approved 2026-09-25; amended during planning (see *Amendments from planning*)
 
 | Repo | Branch | Base / PR target |
 |---|---|---|
@@ -93,7 +93,7 @@ Bodies are neutral so the same text reads right in the chatter and on Mina sidor
 
 1. Raise a `UserError` with a stable code-like message if the case is *Avslutad*,
    `hidden_from_my_pages`, or already `close_request_pending`.
-2. Post `close_request_from_tenant` (reason stripped of tags, newlines → `<br>`).
+2. Post `close_request_from_tenant` (reason HTML-escaped, newlines → `<br>`; whitespace-only counts as no reason).
 3. Set `close_requested_at = now`.
 
 A dedicated method rather than a `message_post` override keeps the rules in one
@@ -121,7 +121,8 @@ the case being closed.
   so it gets its own colour, plus a `fa-flag-checkered` icon so colour is not the
   only signal.
 - Badge "Hyresgäst vill avsluta" first in the badge column of
-  `maintenance_request_item.xml`, and in the form header and `mobile_view.xml`.
+  `maintenance_request_item.xml` (the mobile card reuses this template), and beside
+  the existing badges in the form.
 - Chatter signal in the same purple, following the customer-message signal in
   `tenant_chatter_patch.js`, with buttons *Avsluta ärendet* (hidden for external
   contractors) and *Avslå*.
@@ -139,27 +140,32 @@ the case being closed.
 
 **work-order service**
 
-- Odoo adapter: `closeWorkOrder` is replaced by `requestCloseWorkOrder(id, reason?)`,
-  calling `maintenance.request.request_close_from_tenant`. The three refusals map
-  to a typed `conflict` error; anything else stays an error.
+- Odoo adapter: new `requestCloseWorkOrder(id, reason?)` calling
+  `maintenance.request.request_close_from_tenant`. The three refusals map to a
+  typed `CloseRequestConflictError`; anything else stays an error. The existing
+  `closeWorkOrder` (a real stage change) stays: staff use it via property-tree's
+  inspection flow.
 - `MESSAGE_DOMAIN` gains `close_request_from_tenant` and `close_request_declined`.
 - `WORK_ORDER_FIELDS` gains `close_request_pending`; `transformWorkOrder` maps it
   to `CloseRequestPending`.
 - `messageAuthor` treats `close_request_from_tenant` like `from_tenant`.
-- Route `POST /workOrders/:id/close` keeps its path, accepts an optional
-  `{ reason }` body and returns 200 / 409 / 500.
+- New route `POST /workOrders/:id/close-request`, body `{ reason?: string }`,
+  returning 200 / 400 / 409 / 500. `POST /workOrders/:id/close` is unchanged.
+- `CloseRequestPending` goes on the service's own work-order schema
+  (`schemas.ts`), which reaches core through its Swagger and regenerated types.
 
-**libs/types** — `CloseRequestPending: z.boolean()` on the work-order schema, so
-core and Swagger pick it up without redeclaring it.
+**libs/types** — `CloseWorkOrderRequestSchema` (`{ reason?: string }`), shared by
+the service and core routes. libs/types has no work-order Zod schema to extend.
 
 **core**
 
-- The adapter already calls `/workOrders/{workOrderId}/close` through
-  `openapi-fetch`; regenerate `generated/api-types.ts` after the service's Swagger
-  gains the `reason` body and 409, then send the body.
-- The route `POST /work-orders/:workOrderId/close` passes the service status through. Today it checks an always-truthy
-  `AdapterResult` and answers 200 regardless.
-- `CoreWorkOrder` mapping gains `CloseRequestPending`.
+- Regenerate `generated/api-types.ts` from the service's Swagger, then add
+  adapter `requestCloseWorkOrder(id, reason?)` over `openapi-fetch`, mapping 409 to
+  `'conflict'`.
+- New route `POST /work-orders/:workOrderId/close-request` passing the outcome
+  through (200 / 400 / 409 / 500). The staff `/close` route is unchanged.
+- `closeRequestPending` in `CoreWorkOrderSchema` and every `CoreWorkOrder`
+  mapping, including `GET /work-orders/by-contact-code`, which the API reads.
 
 **Tests** — Jest for the adapter (domain, fields, refusal → conflict), the
 work-order route (409 path) and the core route (status passthrough).
@@ -168,16 +174,20 @@ work-order route (409 path) and the core route (status passthrough).
 
 - **Ownership check** in `CloseWorkOrderHandler` and `UpdateWorkOrderCommandHandler`:
   load the logged-in tenant's Odoo work orders by the contactCode from the token;
-  if the id is not among them, fail before calling core. The controller returns 403.
-  Today both endpoints act on any id.
+  if `"od-" + id` is not among them, fail before calling core. The controller
+  returns 403. Today both endpoints act on any id. The lookup must distinguish
+  "core failed" (502) from "not yours" (403), so it uses a variant of the list
+  call that reports failure instead of returning an empty list. Admin/developer
+  tokens, which have no contact code, lose the ability to act on arbitrary ids.
 - **Error propagation:** both controllers return the handler result — 204 on
   success, 409 passed through, 502 when core fails. Today both always return 204.
 - `CloseWorkOrderRequest` DTO with optional `Reason`. `OneCoreWorkOrderService`
   builds request bodies with a JSON serializer for both close and update instead
   of string concatenation.
 - `WorkOrderResponse` gains `CloseRequestPending`.
-- The endpoint URL `~/api/workorders/close/{id}` is unchanged, so the tenant
-  frontend and the API need not release in lockstep for the route itself.
+- The endpoint URL `~/api/workorders/close/{id}` is unchanged. Behind it,
+  `OneCoreWorkOrderService` now calls core `work-orders/{id}/close-request`.
+- The API gains a test project (`tests/Api.Tests`, xunit + Moq); none exists today.
 
 **Tests** — handler tests for foreign-id rejection, 409 passthrough and core
 failure.
@@ -223,7 +233,9 @@ once the API serializes bodies properly.
 
 onecore-odoo first (new method and fields must exist before work-order reads
 `close_request_pending` or calls `request_close_from_tenant`), then onecore, then
-API, then Webbappar. Odoo follows the standard three steps: `odoo-git-install`,
+**API and Webbappar back to back**: once the API serializes the update body
+properly, today's Mina sidor pre-escaping would store literal `\n` and `\"`, and
+Mina sidor without its hack against today's API sends broken JSON. Odoo follows the standard three steps: `odoo-git-install`,
 `odoo-module-upgrade`, then restart.
 
 ## Verification
@@ -235,6 +247,33 @@ API, then Webbappar. Odoo follows the standard three steps: `odoo-git-install`,
    id is rejected; a contractor sees only *Avslå*.
 3. Epic environment `epic-mim-1983` (the `epic-e2e` skill) before MIM-2036 is
    moved to Ready for Test.
+
+## Amendments from planning
+
+Found while drafting the plan against the real code:
+
+- **Staff also call `/close`.** property-tree closes stale inspection work orders
+  through core `POST /work-orders/{id}/close`. Decision: that route keeps meaning a
+  real close; the tenant request gets its own `/close-request` route in
+  work-order and core.
+- **Tenant-facing sender (MIM-2040).** `close_request_declined` is a
+  tenant-facing type and stores the deciding user's sender label, so a
+  contractor's decline reads "Mimers Leverantör - <resursgrupp>" rather than
+  "Mimer". `close_request_from_tenant` stores none.
+- **Row lock.** Odoo 19's `lock_for_update()` uses `SKIP LOCKED` and raises
+  without the conflict prefix; a plain `SELECT … FOR UPDATE` is used so the
+  losing concurrent call ends as `already_pending`.
+- **Second resolution.** Datetimes are second-precision, so a request in the same
+  second as a decline sets `close_requested_at` one second after
+  `close_request_resolved_at`.
+- **Field-change notes.** The two timestamps are added to
+  `FieldChangeTracker.SKIP_FIELDS` so stamping them posts no chatter note.
+- **Mina sidor's axios interceptor** swallows 401/403/404/409; the close and
+  update calls read the status themselves. The page's single dialog state becomes
+  per work order, which also fixes text typed on one card being sent from another.
+- **Known, not fixed here:** the existing core `closeWorkOrder` adapter reads a
+  `content` wrapper the service never sends; closed cases show no thread on Mina
+  sidor.
 
 ## Out of scope
 
