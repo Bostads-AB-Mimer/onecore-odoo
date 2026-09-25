@@ -62,10 +62,12 @@ class OneCoreMaintenanceRequest(
     models.Model,
 ):
     _inherit = "maintenance.request"
-    # Customer messages first — "ska sorteras högst upp i kanban vyn". _order
-    # takes stored columns only, hence the stored customer_message_unread
-    # boolean rather than the non-stored has_unread_customer_message.
-    _order = "customer_message_unread desc, recently_added_tenant desc, request_date desc"
+    # A tenant's close request first — the only signal that asks for a
+    # decision rather than an acknowledgement (MIM-2036) — then customer
+    # messages, "ska sorteras högst upp i kanban vyn". _order takes stored
+    # columns only, hence the stored booleans rather than their non-stored
+    # has_unread_* mirrors.
+    _order = "close_request_pending desc, customer_message_unread desc, recently_added_tenant desc, request_date desc"
     _unaccent = True
 
     # ============================================================================
@@ -239,6 +241,30 @@ class OneCoreMaintenanceRequest(
         string="Okvitterat meddelande från kund",
         compute="_compute_has_unread_customer_message",
         store=False,
+    )
+    # MIM-2036 — "Hyresgäst vill avsluta". Two timestamps rather than a flag,
+    # the same shape as last_customer_message_at / customer_message_ack_at: a
+    # new request after a decline re-raises the signal simply by being newer
+    # than the last resolution, with nothing to reset.
+    close_requested_at = fields.Datetime(
+        string="Avslut begärt av hyresgäst",
+        readonly=True,
+        copy=False,
+        help="Sätts när hyresgästen ber om att få ärendet avslutat via Mina sidor.",
+    )
+    close_request_resolved_at = fields.Datetime(
+        string="Begäran om avslut hanterad",
+        readonly=True,
+        copy=False,
+        help="Sätts när begäran avslås, när ärendet avslutas på begäran eller när "
+        "ärendet flyttas till Avslutad på annat sätt.",
+    )
+    # Stored, so _order can promote it and the kanban/mobile cards can read it
+    # without a compute per card.
+    close_request_pending = fields.Boolean(
+        string="Hyresgäst vill avsluta",
+        compute="_compute_close_request_pending",
+        store=True,
     )
     # Stored snapshot written only by OneCoreFlagSyncService (create path +
     # cron). Computing it per record would fire one OneCore call per kanban
@@ -700,6 +726,18 @@ class OneCoreMaintenanceRequest(
         # so the name views and JS already use needs no changes.
         for record in self:
             record.has_unread_customer_message = record.customer_message_unread
+
+    @api.depends("close_requested_at", "close_request_resolved_at")
+    def _compute_close_request_pending(self):
+        # One shared fact, like customer_message_unread — no depends_context.
+        # request_close_from_tenant keeps a new request strictly after the last
+        # resolution, so equal timestamps here always mean "resolved".
+        for record in self:
+            requested = record.close_requested_at
+            resolved = record.close_request_resolved_at
+            record.close_request_pending = bool(requested) and (
+                not resolved or requested > resolved
+            )
 
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
