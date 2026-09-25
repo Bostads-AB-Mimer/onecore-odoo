@@ -41,11 +41,19 @@
 
 ---
 
-### Task 0: Rebase the MIM-2036 branches once MIM-2040 has landed
+### Task 0: Move the stacked branches onto the epics once MIM-2040 has landed
+
+While MIM-2040 is still being merged, the MIM-2036 branches in onecore, onecore-odoo and Webbappar are **stacked** on the MIM-2040 branches, and work on them goes ahead. The API branch sits on its epic, because MIM-2040 does not touch the API. Keep PRs in the three stacked repos as drafts until this task is done. None of the stacked branches has an upstream set, so always push with an explicit `origin <branch>`.
+
+| Repo | Stacked on | Moves onto |
+|---|---|---|
+| onecore | `feature/mim-2040-tenant-facing-sender-on-work-order-messages` | `epic/mim-1983` |
+| onecore-odoo | `feature/mim-2040-se-till-att-avsandare-pa-meddelande-till-hyresgast-pa-mina` | `epic/mim-1983-epic-odoo-prioritized-ux-and-communication-improvements` |
+| Webbappar | `feature/mim-2040-show-full-sender-on-work-order-messages` | `epic/mim-1983-odoo-prioritized-ux-and-communication-improvements` |
 
 **Files:** none (git only)
 
-- [ ] **Step 1: Confirm MIM-2040 is in each epic**
+- [ ] **Step 1: Confirm MIM-2040 is merged into each epic**
 
 ```sh
 git -C onecore fetch -q && git -C onecore log --oneline origin/epic/mim-1983 | grep -m1 MIM-2040
@@ -53,18 +61,22 @@ git -C onecore-odoo fetch -q && git -C onecore-odoo log --oneline origin/epic/mi
 git -C mimer-nu/Webbappar fetch -q && git -C mimer-nu/Webbappar log --oneline origin/epic/mim-1983-odoo-prioritized-ux-and-communication-improvements | grep -m1 MIM-2040
 ```
 
-Expected: each command prints a MIM-2040 commit. If any prints nothing, stop. Do not start Task O1, C1 or M1 in that repo.
+Expected: each command prints a MIM-2040 commit. If a command prints nothing, leave that repo stacked.
 
-- [ ] **Step 2: Rebase each feature branch onto its epic**
+- [ ] **Step 2: Move each branch off MIM-2040 and onto its epic**
+
+`--onto` replays only the MIM-2036 commits. This works even if MIM-2040 was squash-merged or rebased on its way into the epic.
 
 ```sh
-git -C onecore rebase origin/epic/mim-1983 feature/mim-2036-hyresgast-avslutar-arende-via-mina-sidor-mekanism
-git -C onecore-odoo rebase origin/epic/mim-1983-epic-odoo-prioritized-ux-and-communication-improvements feat/mim-2036-hyresgast-avslutar-arende-via-mina-sidor-mekanism
-git -C mimer-nu/API rebase origin/epic/mim-1983-odoo-prioritized-ux-and-communication-improvements feature/mim-2036-hyresgast-avslutar-arende-via-mina-sidor-mekanism
-git -C mimer-nu/Webbappar rebase origin/epic/mim-1983-odoo-prioritized-ux-and-communication-improvements feature/mim-2036-hyresgast-avslutar-arende-via-mina-sidor-mekanism
+F=mim-2036-hyresgast-avslutar-arende-via-mina-sidor-mekanism
+git -C onecore rebase --onto origin/epic/mim-1983 origin/feature/mim-2040-tenant-facing-sender-on-work-order-messages feature/$F
+git -C onecore-odoo rebase --onto origin/epic/mim-1983-epic-odoo-prioritized-ux-and-communication-improvements origin/feature/mim-2040-se-till-att-avsandare-pa-meddelande-till-hyresgast-pa-mina feat/$F
+git -C mimer-nu/Webbappar rebase --onto origin/epic/mim-1983-odoo-prioritized-ux-and-communication-improvements origin/feature/mim-2040-show-full-sender-on-work-order-messages feature/$F
 ```
 
-Expected: every rebase ends clean. The only commit on these branches so far is the onecore-odoo spec/plan docs commit.
+The Webbappar MIM-2040 branch may have been rebased itself, and its old tip then no longer matches `origin/feature/mim-2040-…`. In that case, use the tip the MIM-2036 branch was actually stacked on (`git merge-base`) as the second argument.
+
+- [ ] **Step 3: Re-run each repo's suite, then take the PRs out of draft.** Run `./run_tests.sh` in onecore-odoo, `pnpm run build:libs && pnpm run typecheck && pnpm run lint && pnpm test` in onecore, and `pnpm run lint && pnpm run build` in mina-sidor. Force-push with `--force-with-lease origin <branch>`, and ask first.
 
 ---
 
