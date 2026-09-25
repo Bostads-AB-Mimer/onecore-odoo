@@ -15,25 +15,35 @@ class ParkingSpaceHandler(RentalObjectBaseHandler):
             )
             address_info = parking_space.get("address", {}) if parking_space else {}
 
-            parking_space_option = self.env["maintenance.parking.space.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": parking_space_info.get("name", "Namn saknas"),
-                    "code": parking_space_info.get("code"),
-                    "type_name": parking_space_info.get("parkingSpaceType", {}).get(
-                        "name"
-                    ),
-                    "type_code": parking_space_info.get("parkingSpaceType", {}).get(
-                        "code"
-                    ),
-                    "number": parking_space_info.get("parkingNumber"),
-                    "property_code": parking_space.get("propertyCode"),
-                    "property_name": parking_space.get("propertyName"),
-                    "address": address_info.get("streetAddress", ""),
-                    "postal_code": address_info.get("postalCode"),
-                    "city": address_info.get("city"),
-                }
+            # Reuse existing parking space option if one already exists for this space
+            rental_id = item.get("rental_id")
+            parking_space_option = self._existing_option(
+                "maintenance.parking.space.option", rental_id
             )
+
+            if not parking_space_option:
+                parking_space_option = self.env[
+                    "maintenance.parking.space.option"
+                ].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": parking_space_info.get("name", "Namn saknas"),
+                        "rental_id": rental_id,
+                        "code": parking_space_info.get("code"),
+                        "type_name": parking_space_info.get(
+                            "parkingSpaceType", {}
+                        ).get("name"),
+                        "type_code": parking_space_info.get(
+                            "parkingSpaceType", {}
+                        ).get("code"),
+                        "number": parking_space_info.get("parkingNumber"),
+                        "property_code": parking_space.get("propertyCode"),
+                        "property_name": parking_space.get("propertyName"),
+                        "address": address_info.get("streetAddress", ""),
+                        "postal_code": address_info.get("postalCode"),
+                        "city": address_info.get("city"),
+                    }
+                )
 
             # Only create lease and tenant options if lease data exists
             if lease:

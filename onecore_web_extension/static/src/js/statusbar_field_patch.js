@@ -74,12 +74,26 @@ patch(StatusBarField.prototype, {
       isMaintenanceRequest && item.label === "Återsänd" && !item.isSelected;
 
     // MIM-486: all users confirm before returning a request — the move
-    // hands the request back to the orderer's team.
+    // hands the request back to the team that originally created it, not
+    // the team the request most recently passed through, which is easy to
+    // assume and not what actually happens. Naming the real destination
+    // here (from preview_atersand_team, a read-only mirror of the routing
+    // write() does) lets people catch that mismatch before it commits.
     if (goingToAtersand) {
+      const teamName = await this.orm.call(
+        "maintenance.request",
+        "preview_atersand_team",
+        [[record.resId], item.value]
+      );
+      const body = teamName
+        ? `Ärendet skickas till ${teamName} — det är gruppen som ursprungligen skapade ärendet, inte den grupp du senast jobbat med det i.
+
+Vill du i stället att en specifik grupp ska ta över? Byt Resursgrupp direkt i stället för att återsända.`
+        : "Är du säker på att du vill återsända ärendet?";
       const confirmed = await ConfirmDialog(
         this.dialogService,
         "Bekräfta återsändning",
-        "Är du säker på att du vill återsända ärendet?"
+        body
       );
       if (!confirmed) {
         return;

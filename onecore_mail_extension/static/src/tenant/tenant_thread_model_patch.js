@@ -35,6 +35,16 @@ patch(Thread.prototype, {
                         }
                     );
                     break;
+                case "tenant_my_pages":
+                    notificationService.add(
+                        "Meddelandet publicerades på Mina sidor.",
+                        {
+                            title: "Publicerat!",
+                            type: "info",
+                            sticky: true,
+                        }
+                    );
+                    break;
                 case "failed_tenant_sms":
                     notificationService.add(
                         "Kunde inte skicka SMS till hyresgästen. Kontrollera så att telefonnumret stämmer.",

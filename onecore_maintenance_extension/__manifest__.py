@@ -3,7 +3,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore Maintenance Extension",
-    "version": "19.0.1.0.4",
+    "version": "19.0.1.0.11",
     "sequence": 100,
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
@@ -17,6 +17,8 @@
         "views/maintenance_team_view.xml",
         "views/mobile_view.xml",
         "views/maintenance_component_wizard_view.xml",
+        "views/backfill_wizard_view.xml",
+        "views/res_users_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",

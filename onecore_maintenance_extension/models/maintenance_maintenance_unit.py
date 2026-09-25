@@ -20,6 +20,9 @@ class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
     rental_property_option_id = fields.Many2one(
         "maintenance.rental.property.option", string="Rental Property Option"
     )
+    # True for the unit(s) Xpand says serve the rental property option — the one
+    # to preselect. The other units of the property are listed for manual pick.
+    serves_rental_object = fields.Boolean("Betjänar hyresobjektet", default=False)
 
 
 class OnecoreMaintenanceMaintenanceUnit(models.Model):

@@ -10,6 +10,8 @@ class OnecoreMaintenanceParkingSpaceOption(models.Model):
         "res.users", "Användare", default=lambda self: self.env.user
     )
     name = fields.Char("Namn", required=True)
+    # OneCore's rentalId — the object's identity, and what options are reused by.
+    rental_id = fields.Char("Hyresobjekt ID")
     code = fields.Char("Kod")
     type_name = fields.Char("P-platstyp")
     type_code = fields.Char("P-platstypkod")

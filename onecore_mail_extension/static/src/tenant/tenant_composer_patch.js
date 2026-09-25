@@ -17,11 +17,16 @@ patch(Composer.prototype, {
         this.tenantState = useState({
             sendSMS: false,
             sendEmail: false,
+            sendMyPages: true,
             informOpposite: false,
             userIsExternalContractor: false,
             tenantHasEmail: false,
             tenantHasPhoneNumber: false,
             isHiddenFromMyPages: false,
+            // Guards the send button while the async onMounted fetches are in
+            // flight: sendMyPages defaults to true, so without this a handler
+            // could publish to a hidden errand in the first few hundred ms.
+            tenantStateLoaded: false,
         });
 
         onMounted(async () => {
@@ -60,6 +65,7 @@ patch(Composer.prototype, {
             } catch (error) {
                 console.error("Error fetching external contractor state:", error);
             }
+            this.tenantState.tenantStateLoaded = true;
         });
     },
 
@@ -69,8 +75,21 @@ patch(Composer.prototype, {
     onEMailCheckboxChange(checked) {
         this.tenantState.sendEmail = checked;
     },
+    onMyPagesCheckboxChange(checked) {
+        this.tenantState.sendMyPages = checked;
+    },
     onInformOppositeChange(checked) {
         this.tenantState.informOpposite = checked;
+    },
+
+    // SMS and e-post messages are already published on Mina sidor, so those
+    // channels are notifications layered on top of a Mina sidor publication —
+    // never alternatives to it. Selecting either forces this box on.
+    get myPagesLocked() {
+        return this.tenantState.sendSMS || this.tenantState.sendEmail;
+    },
+    get myPagesChecked() {
+        return this.myPagesLocked || this.tenantState.sendMyPages;
     },
 
     // "Inform the opposite party" only applies to the internal Mimer <-> external
@@ -103,11 +122,17 @@ patch(Composer.prototype, {
     get isSendButtonDisabled() {
         if (
             this.props.type === "message" &&
-            this.thread?.model === "maintenance.request" &&
-            !this.tenantState.sendSMS &&
-            !this.tenantState.sendEmail
+            this.thread?.model === "maintenance.request"
         ) {
-            return true;
+            if (
+                !this.tenantState.tenantStateLoaded ||
+                this.tenantState.isHiddenFromMyPages
+            ) {
+                return true;
+            }
+            if (!this.myPagesChecked) {
+                return true;
+            }
         }
         return super.isSendButtonDisabled;
     },
@@ -115,8 +140,16 @@ patch(Composer.prototype, {
     get postData() {
         const data = super.postData;
         if (this.thread?.model === "maintenance.request") {
-            data.sendSMS = this.tenantState.sendSMS;
-            data.sendEmail = this.tenantState.sendEmail;
+            // Channel selection only exists in message mode. In note mode the
+            // checkboxes are not rendered, so these flags must not reach the
+            // store patch and steer message_type — sendMyPages defaults to true
+            // and would otherwise turn every internal log note into a Mina
+            // sidor publication.
+            if (this.props.type === "message") {
+                data.sendSMS = this.tenantState.sendSMS;
+                data.sendEmail = this.tenantState.sendEmail;
+                data.sendMyPages = this.myPagesChecked;
+            }
             data.informOpposite = this.tenantState.informOpposite;
         }
         return data;

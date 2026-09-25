@@ -14,6 +14,7 @@ from .models import test_maintenance_tenant
 from .models import test_maintenance_staircase
 from .models.handlers import test_base_handler
 from .models.handlers import test_handler_factory
+from .models.handlers import test_rental_property_handler
 from .models.services import test_maintenance_workflow_service
 from .models.services import test_maintenance_return_stage
 from .models.services import test_record_management_service
@@ -31,10 +32,19 @@ from .models import test_maintenance_pest_control
 from .models import test_maintenance_activity_suppression
 from .models import test_dialog_indicator
 from .models import test_master_key_change_indicator
+from .models import test_new_customer_info_indicator
+from .models import test_customer_message_indicator
 from .models import test_schedule_date_warning
 from .models import test_maintenance_district
+from .models import test_res_users_auto_create_hooks
 from .models.services import test_management_area_service
+from .models.services import test_onecore_flag_sync_service
+from .models.services import test_lease_suffix_migration
+from .models.services import test_ordering_department_service
 from . import test_stage_hook
 from .utils import test_component_utils
 from .utils import test_helpers
 from . import test_registration
+from .models import test_direct_lookup
+from .models import test_backfill_wizard
+from .models import test_remove

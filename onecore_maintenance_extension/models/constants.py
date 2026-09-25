@@ -67,8 +67,10 @@ PRIORITY_OPTIONS = [
     ("365", "mer än 1 år"),
 ]
 
-# Creation origin options
-CREATION_ORIGINS = [("mimer-nu", "Mimer.nu"), ("internal", "Internt")]
+# Creation origin options. MIMER_NU_ORIGIN is the tenant self-service inflow;
+# OrderingDepartmentService keys its Kundcenter rule on it.
+MIMER_NU_ORIGIN = "mimer-nu"
+CREATION_ORIGINS = [(MIMER_NU_ORIGIN, "Mimer.nu"), ("internal", "Internt")]
 
 # Form state options
 FORM_STATES = [
@@ -79,3 +81,12 @@ FORM_STATES = [
     ("maintenance-unit", "Underhållsenhet"),
     ("facility", "Lokal"),
 ]
+
+# Mail message types on the tenant <-> case channel.
+# CUSTOMER_MESSAGE_TYPE is written by onecore's work-order service
+# (odoo-adapter.addMessageToWorkOrder) when it forwards a Mina-sidor message.
+# RECEIPT_TO_TENANT_MESSAGE_TYPE is our reply confirming receipt; the selection
+# value itself is declared on mail.message in onecore_mail_extension, which
+# cannot import this module. Keep the two strings in sync.
+CUSTOMER_MESSAGE_TYPE = "from_tenant"
+RECEIPT_TO_TENANT_MESSAGE_TYPE = "receipt_to_tenant"

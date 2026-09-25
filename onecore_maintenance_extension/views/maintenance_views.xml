@@ -22,6 +22,11 @@
                         <field name="owner_user_id" />
                         <field name="stage_id" />
                         <field string="Resursgrupp" name="maintenance_team_id" />
+                        <!-- MIM-1970/2011: who ordered the request (the
+                             orderer's AD department), as opposed to who it
+                             sits with. Stored at create, so the facet answers
+                             the same thing in May as it did in March -->
+                        <field string="Beställande avdelning" name="ordering_department" />
                         <field string="Distrikt" name="cost_center_name" />
                         <field string="Distriktkod" name="cost_center_code" />
                         <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
@@ -72,6 +77,15 @@
                             domain="[('message_needaction', '=', True)]"
                             groups="mail.group_mail_notification_type_inbox" />
                         <separator />
+                        <!-- special_attention is a related non-stored field and
+                             cannot be searched directly; go through the stored
+                             column on the tenant. requires_pest_control is
+                             stored on the request itself. -->
+                        <filter string="Viktig kundinfo" name="special_attention"
+                            domain="[('tenant_id.special_attention', '=', True)]" />
+                        <filter string="Spärr skadedjur" name="requires_pest_control"
+                            domain="[('requires_pest_control', '=', True)]" />
+                        <separator />
                         <filter invisible="1" string="Mina aktiviteter" name="filter_activities_my"
                             domain="[('activity_user_id', '=', uid)]" />
                         <separator invisible="1" />
@@ -89,6 +103,24 @@
                             domain="[('archive', '=', False)]" />
                         <filter string="Inaktiva ärenden" name="inactive"
                             domain="[('archive', '=', True)]" />
+                        <separator />
+                        <!-- MIM-1970/2011: beställare per distrikt. Värdena är
+                             avdelningsnamnen exakt som AD stavar dem (en
+                             stavning per enhet efter städningen), stämplade på
+                             ärendet vid create. Klickvägen är den som
+                             1975/1976/1977 bygger sina favoriter på. -->
+                        <filter string="Beställt av Distrikt Mitt" name="ordered_by_mitt"
+                            domain="[('ordering_department', '=', 'Distrikt Mitt')]" />
+                        <filter string="Beställt av Distrikt Norr" name="ordered_by_norr"
+                            domain="[('ordering_department', '=', 'Distrikt Norr')]" />
+                        <filter string="Beställt av Distrikt Öst" name="ordered_by_ost"
+                            domain="[('ordering_department', '=', 'Distrikt Öst')]" />
+                        <filter string="Beställt av Distrikt Väst" name="ordered_by_vast"
+                            domain="[('ordering_department', '=', 'Distrikt Väst')]" />
+                        <!-- Studentteam (resursgruppen) motsvarar AD-enheten
+                             "Utemiljö- och studentenheten". -->
+                        <filter string="Beställt av Studentteam" name="ordered_by_student"
+                            domain="[('ordering_department', '=', 'Utemiljö- och studentenheten')]" />
                         <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
@@ -104,6 +136,9 @@
                                 context="{'group_by': 'cost_center_name'}" />
                             <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
                                 context="{'group_by': 'kvv_area_code'}" />
+                            <filter string='Beställande avdelning' name='ordering_department'
+                                domain="[]"
+                                context="{'group_by': 'ordering_department'}" />
                         </group>
                     </search>
                 </xpath>
@@ -122,6 +157,8 @@
                     <field name="has_unread_supplier_dialog" invisible="1" />
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
+                    <field name="has_unread_new_customer_info" invisible="1" />
+                    <field name="has_unread_customer_message" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -212,7 +249,7 @@
                         <!-- Block 1 -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
-                            <h2 class="accordion-header">
+                            <h2 class="accordion-header position-relative o-backfill-header">
                                 <!-- Accordion button on mobile -->
                                 <button name="accordion-button-1"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
@@ -226,11 +263,36 @@
                                     class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
                                     Objektsinformation
                                 </div>
+                                <!-- MIM-1841: add/change rental object (rentalId-bearing space types)
+                                     MIM-1840: remove rental object (object-only) -->
+                                <div
+                                    class="position-absolute top-50 end-0 translate-middle-y me-3 d-flex gap-2">
+                                    <button name="open_backfill_rental_object_wizard"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Lägg till / ändra hyresobjekt"
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
+                                        <i class="fa fa-pencil" />
+                                    </button>
+                                    <button name="action_remove_rental_object"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Ta bort hyresobjekt"
+                                        confirm="Ta bort hyresobjektet från ärendet? Detta kan inte ångras."
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal') or (not rental_property_id and not parking_space_id and not facility_id)">
+                                        <i class="fa fa-trash" />
+                                    </button>
+                                </div>
                             </h2>
                             <div id="flush-collapse1" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <field name="form_state" invisible="1" />
+                                    <!-- MIM-1840: the remove-object trash reads rental_property_id
+                                         (parking_space_id / facility_id are already in this view) -->
+                                    <field name="rental_property_id" invisible="1" />
                                     <group col="1"
                                         invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
@@ -313,17 +375,17 @@
                                         <field name="create_date" invisible="1" />
                                         <field name="maintenance_unit_option_id" string="Tvättstuga"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Tvättstuga'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_id" string="Tvättstuga"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Tvättstuga'" />
                                         <field name="maintenance_unit_option_id" string="Lekplats"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Lekplats'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_id" string="Lekplats"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Lekplats'" />
                                         <field name="maintenance_unit_option_id" string="Miljöbod"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
-                                            invisible="not maintenance_unit_option_id or create_date or space_caption != 'Miljöbod'" />
+                                            invisible="not (maintenance_unit_option_id or rental_property_option_id) or create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_id" string="Miljöbod"
                                             invisible="not maintenance_unit_id or not create_date or space_caption != 'Miljöbod'" />
                                         <field name="maintenance_unit_code" string="Kod"
@@ -535,7 +597,7 @@
                         <!-- Block 2 -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 me-md-2 mb-3">
-                            <h2 class="accordion-header">
+                            <h2 class="accordion-header position-relative o-backfill-header">
                                 <button name="accordion-button-3"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"
                                     type="button" data-bs-toggle="collapse"
@@ -547,19 +609,45 @@
                                     class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
                                     Hyresgäst
                                 </div>
+                                <!-- MIM-1841: add/change tenant
+                                     MIM-1840: remove tenant + contract (vacate) -->
+                                <div
+                                    class="position-absolute top-50 end-0 translate-middle-y me-3 d-flex gap-2">
+                                    <button name="open_backfill_tenant_wizard"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Lägg till / ändra hyresgäst"
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal')">
+                                        <i class="fa fa-pencil" />
+                                    </button>
+                                    <button name="action_remove_tenant"
+                                        type="object"
+                                        groups="maintenance.group_equipment_manager"
+                                        class="btn btn-link p-0 o-section-edit-btn"
+                                        title="Ta bort hyresgäst och kontrakt"
+                                        confirm="Ta bort hyresgästen och kontraktet från ärendet? Ärendet blir tomställt."
+                                        invisible="not create_date or user_is_external_contractor or space_caption not in ('Lägenhet', 'Bilplats', 'Lokal') or (not lease_id and not tenant_id)">
+                                        <i class="fa fa-trash" />
+                                    </button>
+                                </div>
                             </h2>
                             <div id="flush-collapse3" class="accordion-collapse collapse d-md-block"
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
 
                                     <div class="mb-3 fw-bold"
-                                        invisible="not empty_tenant">Ingen
+                                        invisible="tenant_id or not empty_tenant">Ingen
                                         hyresgäst</div>
 
+                                    <!-- The tenant was back-filled from the OneCore API onto
+                                         a request that had none. Shown to both audiences,
+                                         matching _compute_has_unread_new_customer_info and the
+                                         "Ny kund" kanban badge — deliberately no group guard. -->
                                     <div class="mb-3 fw-bold"
                                         invisible="not recently_added_tenant">
                                         <span
-                                            class="mimer-badge mb-1 fs-7 px-2 py-2">
+                                            class="mimer-badge mimer-badge-green mb-1 fs-7 px-2 py-2">
                                             Ny hyresgäst, ärendet är uppdaterat
                                         </span>
                                     </div>
@@ -567,6 +655,9 @@
                                     <group>
                                         <field name="empty_tenant" invisible="1" />
                                         <field name="recently_added_tenant" invisible="1" />
+                                        <field name="tenant_id" invisible="1" />
+                                        <!-- MIM-1840: the remove-tenant trash reads lease_id -->
+                                        <field name="lease_id" invisible="1" />
                                         <field name="lease_option_id" string="Kontrakt"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             invisible="not lease_option_id or create_date"
@@ -576,13 +667,24 @@
                                             placeholder="Inget kontrakt" />
                                         <field name="lease_type" invisible="not lease_type"
                                             string="Kontraktstyp" />
+                                        <!-- MIM-1954: lease_name recomputes from this whenever
+                                        ir_cron_sync_lease_status changes lease_status, so the two
+                                        stay consistent. lease_option_id's display name (shown only
+                                        before creation, above) is still a frozen snapshot - the
+                                        option is discarded once the case is created. -->
+                                        <field name="lease_status_label"
+                                            string="Kontraktsstatus"
+                                            invisible="not lease_status_label" />
 
                                         <!-- Behöver vi visa nedan? Satte invisible för nu -->
                                         <field name="lease_start_date"
                                             string="Startdatum"
                                             invisible="create_date and not lease_name" />
-                                        <field name="lease_end_date"
-                                            string="Slutdatum"
+                                        <!-- MIM-1954: last_debit_date, not lease_end_date - OneCore
+                                        never returns a true contract end date, only sista
+                                        debiteringsdatum, so lease_end_date is left unused here. -->
+                                        <field name="last_debit_date"
+                                            string="Sista debiteringsdatum"
                                             invisible="create_date and not lease_name" />
                                         <field name="tenant_option_id" string="Hyresgäst"
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
@@ -720,6 +822,11 @@
                                             name="maintenance_team_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
+                                        <!-- MIM-1970: "Beställande avdelning" is
+                                             deliberately not shown here. It is a
+                                             follow-up facet (search view, list
+                                             column), not something the handler
+                                             needs while working the request. -->
                                         <field name="user_id"
                                             domain="maintenance_team_domain" />
                                         <label for="schedule_date" />
@@ -885,9 +992,10 @@
                     <field name="create_date" />
                     <field name="master_key" />
                     <field name="hidden_from_my_pages" />
-                    <field name="new_mimer_notification" />
-                    <field name="recently_added_tenant" />
+                    <field name="has_unread_new_customer_info" />
+                    <field name="has_unread_customer_message" />
                     <field name="special_attention" />
+                    <field name="requires_pest_control" />
                     <field name="has_unread_supplier_dialog" />
                     <field name="has_unread_internal_dialog" />
                     <field name="has_unread_master_key_change" />
@@ -920,6 +1028,11 @@
                         <field name="address" optional="show" />
                         <field name="user_id" optional="show" />
                         <field name="maintenance_team_id" optional="show" />
+                        <field name="ordering_department" optional="hide" />
+                        <!-- Ifylld = beställaren är härledd i efterhand av backfillen,
+                             tom = registrerad vid create. Utan den här kolumnen går det
+                             inte att se i UI:t om värdet är en gissning. -->
+                        <field name="ordering_backfilled_at" optional="hide" />
                         <field name="cost_center_display" string="Distrikt" optional="show" />
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
@@ -938,6 +1051,7 @@
                         <field name="phone_number" optional="hide" />
                         <field name="email_address" optional="hide" />
                         <field name="special_attention" optional="hide" />
+                        <field name="requires_pest_control" optional="hide" />
                         <field name="pet" optional="hide" />
                         <field name="call_between" optional="hide" />
                         <field name="hearing_impaired" optional="hide" />

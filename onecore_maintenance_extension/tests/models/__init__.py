@@ -18,8 +18,15 @@ from . import test_schedule_date_warning
 from . import test_maintenance_floor_plan
 from . import test_maintenance_pest_control
 from . import test_maintenance_district
+from . import test_res_users_auto_create_hooks
+from . import test_new_customer_info_indicator
+from . import test_customer_message_indicator
 from .handlers import test_base_handler
 from .handlers import test_handler_factory
+from .handlers import test_rental_property_handler
 from .services import test_record_management_service
 from .services import test_maintenance_workflow_service
 from .services import test_external_contractor_service
+from . import test_direct_lookup
+from . import test_backfill_wizard
+from . import test_remove

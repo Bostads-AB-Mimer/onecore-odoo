@@ -7,7 +7,12 @@ from datetime import datetime
 from odoo import _, exceptions, fields
 from markupsafe import Markup
 
+from ..constants import MIMER_NU_ORIGIN
+
 _logger = logging.getLogger(__name__)
+
+# MIM-1916: resolve teams by xml-id, never by their (translatable) name.
+KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
 
 class MaintenanceStageManager:
@@ -16,7 +21,6 @@ class MaintenanceStageManager:
     PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad", "Återsänd")
 
     ATERSAND_STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
-    KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
     def __init__(self, env):
         self.env = env
@@ -138,28 +142,62 @@ class MaintenanceStageManager:
         atersand = self._get_atersand_stage()
         return bool(atersand) and stage_id == atersand.id
 
-    def resolve_return_team(self, record):
-        """Team to hand a returned (Återsänd) request back to: the orderer's
-        first team, falling back to Kundcenter (MIM-486). Returns an empty
-        recordset if neither resolves; the caller then leaves the team
-        unchanged."""
-        orderer = record.owner_user_id or record.create_uid
-        team = (
+    def kundcenter_team(self):
+        """The Kundcenter team, or an empty recordset when missing or archived.
+
+        env.ref is a plain browse and ignores ``active``; the search() is what
+        keeps an archived Kundcenter from being a hand-back target, same as
+        every other team lookup here (test_team_fallback_skips_archived_kundcenter).
+        """
+        team = self.env.ref(KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
+        if not team:
+            return self.env["maintenance.team"]
+        return self.env["maintenance.team"].sudo().search([("id", "=", team.id)], limit=1)
+
+    def resolve_orderer_team(self, orderer):
+        """First (active) team ``orderer`` is a member of, or an empty recordset."""
+        if not orderer:
+            return self.env["maintenance.team"]
+        return (
             self.env["maintenance.team"]
             .sudo()
             .search([("member_ids", "in", [orderer.id])], limit=1)
         )
+
+    def resolve_return_team(self, record):
+        """Team to hand a returned (Återsänd) request back to (MIM-486).
+
+        The orderer's first resource group by membership, falling back to
+        Kundcenter. Deliberately *not* the stamped "Beställande avdelning"
+        (MIM-1970/2011): a department is an attribute of a person, not a
+        queue a request can sit in, so it cannot be a target. An orderer who
+        is in no resource group does not work the Odoo queues at all, so a
+        hand-back "to their group" would reach nobody — Kundcenter, who
+        distribute every request in the organisation, is the right target
+        for those.
+
+        Runs after super().write(), so a write that changes owner_user_id and
+        the stage together hands the request to the new owner's team.
+
+        Mina sidor requests without an owner go to Kundcenter regardless of
+        the integration user's membership: a tenant ordered them, and the
+        technical account's team says nothing about that.
+
+        kundcenter_team() resolves by xml-id (MIM-1916) and skips an archived
+        team, so the fallback can never hand a request back to a team nobody
+        works in. Returns an empty recordset if nothing resolves; the caller
+        then leaves the team unchanged."""
+        orderer = record.owner_user_id
+        if not orderer and record.creation_origin != MIMER_NU_ORIGIN:
+            orderer = record.create_uid
+        team = self.resolve_orderer_team(orderer) or self.kundcenter_team()
         if not team:
-            # MIM-1916: resolve by xml-id, never by (translatable) name
-            team = self.env.ref(self.KUNDCENTER_TEAM_XML_ID, raise_if_not_found=False)
-            if not team:
-                _logger.warning(
-                    "MIM-486: Kundcenter team (%s) not found; leaving "
-                    "maintenance_team_id unchanged for request %s",
-                    self.KUNDCENTER_TEAM_XML_ID,
-                    record.id,
-                )
-        return team or self.env["maintenance.team"]
+            _logger.warning(
+                "MIM-486: Kundcenter team missing or archived; leaving "
+                "maintenance_team_id unchanged for request %s",
+                record.id,
+            )
+        return team
 
 
 class FieldChangeTracker:
@@ -175,7 +213,11 @@ class FieldChangeTracker:
         "has_loan_product",  # Custom logging in write()
         "loan_product_details",  # Custom logging in write()
         "master_key_changed_at",
-        "master_key_ack_at",
+        # Written on every inbound Mina-sidor message (MIM-1960) — the tenant's
+        # own message is already in the chatter; a field-change note on top of
+        # it is noise.
+        "last_customer_message_at",
+        "recently_added_tenant",  # technical flag, English label — never log
         # OneCore management-area snapshot (ManagementAreaService) — written
         # lazily from the button/backfill; not a user change worth a note
         "kvv_area_code",
@@ -183,6 +225,12 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
+        # Beställande avdelning (OrderingDepartmentService) — stamped by create
+        # and the backfill cron. The backfill writes without the
+        # creating_records context, so without this every backfilled request
+        # gets a chatter note
+        "ordering_department",
+        "ordering_backfilled_at",
     }
 
     def __init__(self, env):
