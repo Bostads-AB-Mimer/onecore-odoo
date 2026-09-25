@@ -2,14 +2,17 @@ import urllib.parse
 import uuid
 import logging
 import json
+from datetime import timedelta
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError, ValidationError
+from odoo.tools import SQL
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .utils.helpers import close_request_reason_html
 from .utils.priority import priority_days_from, priority_label_for
 from .services import (
     FieldChangeTracker,
@@ -31,6 +34,8 @@ from .constants import (
     FORM_STATES,
     CUSTOMER_MESSAGE_TYPE,
     RECEIPT_TO_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_CONFLICT_PREFIX,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -850,6 +855,81 @@ class OneCoreMaintenanceRequest(
         if self.recently_added_tenant:
             self.recently_added_tenant = False
         self.invalidate_recordset(["has_unread_new_customer_info"])
+        return True
+
+    # ============================================================================
+    # CLOSE REQUEST FROM TENANT (MIM-2036)
+    # ============================================================================
+    # The tenant only asks; an Odoo user decides — action_accept_close_request
+    # or the decline wizard — and any move to Avslutad also resolves the
+    # request (MaintenanceStageManager.handle_stage_change).
+
+    def _lock_for_close_request(self):
+        """Row-lock the request, then drop its cached values.
+
+        A blocking FOR UPDATE, deliberately not lock_for_update(): that uses
+        SKIP LOCKED and raises LockError, a UserError without
+        CLOSE_REQUEST_CONFLICT_PREFIX, which the work-order service would turn
+        into a 500. Here the second of two concurrent callers waits; under
+        REPEATABLE READ it then fails with a serialization error once the first
+        commits, Odoo's RPC layer retries it (odoo/service/model.py retrying),
+        and the retry reads the committed request and is refused as
+        already_pending.
+        """
+        self.ensure_one()
+        self.env.cr.execute(
+            SQL(
+                "SELECT id FROM %s WHERE id = %s FOR UPDATE",
+                SQL.identifier(self._table),
+                self.id,
+            )
+        )
+        self.invalidate_recordset()
+
+    def _raise_close_request_conflict(self, code):
+        # A code, not Swedish: the work-order service parses it into a 409 and
+        # no Odoo user ever reads it.
+        raise UserError(f"{CLOSE_REQUEST_CONFLICT_PREFIX}{code}")
+
+    def request_close_from_tenant(self, reason=None):
+        """The tenant asks for the case to be closed.
+
+        Called over XML-RPC by onecore's work-order service, as its
+        integration account, on the tenant's behalf. Refused — see
+        _raise_close_request_conflict — when the case is already Avslutad,
+        hidden from Mimer.nu, or already has a pending request.
+        """
+        self.ensure_one()
+        self._lock_for_close_request()
+        if self.stage_id.name == "Avslutad":
+            self._raise_close_request_conflict("closed")
+        if self.hidden_from_my_pages:
+            self._raise_close_request_conflict("hidden")
+        if self.close_request_pending:
+            self._raise_close_request_conflict("already_pending")
+
+        # Neutral wording, so the same body reads right in the chatter and on
+        # Mina sidor.
+        body = Markup("Begäran om att avsluta ärendet")
+        reason_html = close_request_reason_html(reason)
+        if reason_html:
+            body += Markup("<br/>Orsak: ") + reason_html
+        self.message_post(
+            body=body,
+            message_type=CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+            subtype_xmlid="mail.mt_note",
+        )
+
+        requested_at = fields.Datetime.now()
+        resolved_at = self.close_request_resolved_at
+        if resolved_at and requested_at <= resolved_at:
+            # Datetime has second resolution and pending needs the request
+            # strictly after the last resolution; asking again within the
+            # second of a decline would otherwise read as already resolved.
+            requested_at = resolved_at + timedelta(seconds=1)
+        # sudo(): same as message_post's last_customer_message_at write — the
+        # integration account need not hold write access on every field.
+        self.sudo().write({"close_requested_at": requested_at})
         return True
 
     def _send_creation_sms(self):

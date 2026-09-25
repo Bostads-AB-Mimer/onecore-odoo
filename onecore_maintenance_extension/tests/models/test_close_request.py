@@ -7,10 +7,13 @@ Moving the case to Avslutad any other way also resolves the request.
 """
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
+from odoo.exceptions import UserError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
+from odoo.tools import SQL
 
 from ..utils.test_utils import (
     create_external_contractor_user,
@@ -22,6 +25,12 @@ from ...models.constants import (
     CLOSE_REQUEST_DECLINED_MESSAGE_TYPE,
     CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
 )
+
+
+def _sql_code(call):
+    """The query text of one recorded cr.execute call."""
+    query = call.args[0] if call.args else call.kwargs.get("query")
+    return query.code if isinstance(query, SQL) else str(query)
 
 
 @tagged("onecore")
@@ -78,6 +87,15 @@ class CloseRequestCase(TransactionCase):
         self.request.invalidate_recordset()
         return self.request
 
+    def _messages(self, message_type):
+        return self.env["mail.message"].search(
+            [
+                ("model", "=", "maintenance.request"),
+                ("res_id", "=", self.request.id),
+                ("message_type", "=", message_type),
+            ]
+        )
+
 
 @tagged("onecore")
 class TestCloseRequestPending(CloseRequestCase):
@@ -129,3 +147,112 @@ class TestCloseRequestPending(CloseRequestCase):
             {"close_requested_at": fields.Datetime.now()}
         )
         self.assertEqual(len(self._fresh().message_ids), before)
+
+
+@tagged("onecore")
+class TestRequestCloseFromTenant(CloseRequestCase):
+    def _request_close(self, reason=None):
+        # Called exactly as onecore's work-order service does: XML-RPC as the
+        # integration account.
+        return self._as(self.mimer_user).request_close_from_tenant(reason=reason)
+
+    def _requests(self):
+        return self._messages(CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE)
+
+    def test_request_posts_the_message_and_sets_pending(self):
+        self.assertIs(self._request_close(), True)
+        message = self._requests()
+        self.assertEqual(len(message), 1)
+        self.assertIn("Begäran om att avsluta ärendet", message.body)
+        self.assertNotIn("Orsak", message.body)
+        self.assertEqual(message.author_id, self.mimer_user.partner_id)
+        # Tenant-authored: work-order takes the sender from author_id, so no
+        # tenant-facing sender may be stored (MIM-2040).
+        self.assertFalse(message.onecore_tenant_author_name)
+        request = self._fresh()
+        self.assertTrue(request.close_requested_at)
+        self.assertTrue(request.close_request_pending)
+
+    def test_reason_follows_orsak(self):
+        self._request_close(reason="  Allt fungerar igen  ")
+        self.assertIn("Orsak: Allt fungerar igen", self._requests().body)
+
+    def test_reason_containing_a_script_tag_is_escaped(self):
+        self._request_close(reason='<script>alert("x")</script>')
+        body = self._requests().body
+        # Escaped, not sanitised away: the HTML sanitiser would drop a live
+        # <script> element entirely, so the escaped text surviving is what
+        # proves the reason never reached the body as markup.
+        self.assertIn("&lt;script&gt;", body)
+        self.assertNotIn("<script", body)
+
+    def test_newlines_become_line_breaks(self):
+        self._request_close(reason="Rad ett\nRad två")
+        self.assertIn("Rad ett<br>Rad två", self._requests().body)
+
+    def test_whitespace_only_reason_is_treated_as_none(self):
+        self._request_close(reason="   \n\t  ")
+        self.assertNotIn("Orsak", self._requests().body)
+        self.assertTrue(self._fresh().close_request_pending)
+
+    def test_second_request_is_refused_as_already_pending(self):
+        self._request_close()
+        with self.assertRaisesRegex(
+            UserError, r"^close_request_conflict:already_pending$"
+        ):
+            self._request_close(reason="Igen")
+        self.assertEqual(len(self._requests()), 1)
+
+    def test_refused_when_the_case_is_closed(self):
+        self._as(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        with self.assertRaisesRegex(UserError, r"^close_request_conflict:closed$"):
+            self._request_close()
+        self.assertFalse(self._requests())
+        self.assertFalse(self._fresh().close_request_pending)
+
+    def test_refused_when_hidden_from_my_pages(self):
+        self.request.write({"hidden_from_my_pages": True})
+        with self.assertRaisesRegex(UserError, r"^close_request_conflict:hidden$"):
+            self._request_close()
+        self.assertFalse(self._requests())
+
+    def test_row_is_locked_before_the_checks(self):
+        # Two concurrent calls cannot be staged in a TransactionCase — every
+        # env shares one cursor — so this pins the mechanism instead: the lock
+        # is taken even on a call that is then refused, i.e. before the check.
+        self._request_close()
+        cr = self.env.cr
+        with patch.object(cr, "execute", wraps=cr.execute) as spy:
+            with self.assertRaises(UserError):
+                self._request_close()
+        locks = [
+            c
+            for c in spy.call_args_list
+            if "FOR UPDATE" in _sql_code(c) and "maintenance_request" in _sql_code(c)
+        ]
+        self.assertTrue(locks, "request_close_from_tenant must row-lock first")
+        self.assertNotIn("SKIP LOCKED", _sql_code(locks[0]))
+
+    def test_request_right_after_a_resolution_is_pending(self):
+        # Second resolution: a resolution stamped "now" would equal a request
+        # stamped "now", which the compute reads as resolved.
+        self.request.sudo().write(
+            {
+                "close_requested_at": fields.Datetime.now() - timedelta(minutes=1),
+                "close_request_resolved_at": fields.Datetime.now(),
+            }
+        )
+        self._request_close()
+        request = self._fresh()
+        self.assertGreater(
+            request.close_requested_at, request.close_request_resolved_at
+        )
+        self.assertTrue(request.close_request_pending)
+
+    def test_request_never_dispatches_a_real_sms_or_email(self):
+        mail_message_cls = type(self.env["mail.message"])
+        with patch.object(mail_message_cls, "_send_sms") as mock_send_sms:
+            with patch.object(mail_message_cls, "_send_email") as mock_send_email:
+                self._request_close(reason="Klart")
+        mock_send_sms.assert_not_called()
+        mock_send_email.assert_not_called()

@@ -3,6 +3,8 @@
 import logging
 import os
 
+from markupsafe import Markup
+
 _logger = logging.getLogger(__name__)
 
 # OneCore's lease status strings, mapped to the numeric codes used throughout
@@ -57,3 +59,17 @@ def select_active_lease(lease_records):
         if matches:
             return max(matches, key=lambda r: r.lease_number or "")
     return max(lease_records, key=lambda r: r.lease_number or "")
+
+
+def close_request_reason_html(reason):
+    """Free text for a close-request message body, or None when blank (MIM-2036).
+
+    Escaped, then line breaks as <br>: Mina sidor renders message bodies with
+    v-html, and the text is a tenant's or a handläggare's own words, so it must
+    never reach the body as markup. Markup.join escapes every piece it joins.
+    Whitespace-only counts as no reason at all.
+    """
+    text = str(reason or "").strip()
+    if not text:
+        return None
+    return Markup("<br>").join(text.splitlines())
