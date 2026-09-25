@@ -337,3 +337,19 @@ class TestTenantAuthorName(TransactionCase):
             if tenant_facing and message_type in live_types
         }
         self.assertEqual(expected, set(TENANT_FACING_MESSAGE_TYPES) & live_types)
+
+    def test_close_request_declined_names_the_contractors_resource_group(self):
+        # MIM-2036: a contractor may decline a tenant's close request, and the
+        # tenant must see which supplier answered rather than a bare "Mimer".
+        message = self._post(self.external_user, message_type="close_request_declined")
+        self.assertEqual(
+            message.onecore_tenant_author_name, "Mimers Leverantör - Städbolaget AB"
+        )
+
+    def test_close_request_from_tenant_carries_no_sender_label(self):
+        # The tenant's own words, posted on their behalf by the integration:
+        # Mina sidor labels it "Du", exactly like from_tenant.
+        message = self._post(
+            self.internal_user, message_type="close_request_from_tenant"
+        )
+        self.assertFalse(message.onecore_tenant_author_name)

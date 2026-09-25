@@ -33,6 +33,9 @@ TENANT_FACING_MESSAGE_TYPES = frozenset(
         "tenant_mail",
         "tenant_mail_and_sms",
         "tenant_my_pages",
+        # MIM-2036 — staff's answer to a tenant's close request. A contractor
+        # may give it, and the tenant must see which supplier did.
+        "close_request_declined",
     }
 )
 # Not wrapped in _(): this is stored data read by a tenant on Mimer.nu, not UI
@@ -265,6 +268,11 @@ class OneCoreMailMessage(models.Model):
                 "Sent to tenant by email and SMS, but sending email failed",
             ),
             ("tenant_my_pages", "Published to tenant on Mina sidor"),
+            # MIM-2036 — the tenant asks for the case to be closed, and staff's
+            # "no". Deliberately NOT prefixed tenant_ (same reason as
+            # receipt_to_tenant): create() would dispatch them as SMS/e-post.
+            ("close_request_from_tenant", "Begäran om avslut från hyresgäst"),
+            ("close_request_declined", "Begäran om avslut avslagen"),
         ],
         ondelete={
             "from_tenant": "set default",
@@ -278,6 +286,8 @@ class OneCoreMailMessage(models.Model):
             "tenant_mail_ok_and_sms_failed": "set default",
             "tenant_mail_failed_and_sms_ok": "set default",
             "tenant_my_pages": "set default",
+            "close_request_from_tenant": "set default",
+            "close_request_declined": "set default",
         },
     )
 
@@ -735,6 +745,10 @@ EXPECTED_CATEGORIES = {
     "tenant_mail_ok_and_sms_failed": LOG_CATEGORY_COMMUNICATION,
     "tenant_mail_failed_and_sms_ok": LOG_CATEGORY_COMMUNICATION,
     "tenant_my_pages": LOG_CATEGORY_COMMUNICATION,
+    # MIM-2036 — both are read by the tenant on Mina sidor, so they belong in
+    # the filter handläggare read as the tenant conversation.
+    "close_request_from_tenant": LOG_CATEGORY_COMMUNICATION,
+    "close_request_declined": LOG_CATEGORY_COMMUNICATION,
     # base `sms` and `snailmail` addons (auto_install=True on `mail`+`iap_mail`,
     # both already satisfied here) add these two selection values even though
     # onecore doesn't use either module directly. Neither is "comment" nor
@@ -780,6 +794,11 @@ EXPECTED_TENANT_FACING = {
     "tenant_mail": True,
     "tenant_mail_and_sms": True,
     "tenant_my_pages": True,
+    # MIM-2036. The request is the tenant's own words, posted on their behalf
+    # by the integration — Mina sidor labels it "Du", like from_tenant. The
+    # decline is ours and may come from a contractor, so it is labelled.
+    "close_request_from_tenant": False,
+    "close_request_declined": True,
     # False because a caller never asks for these: create() rewrites one of the
     # types above into them once a send fails, by which point the label is
     # already on the values. The tenant does see them.
