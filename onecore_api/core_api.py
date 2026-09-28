@@ -510,24 +510,39 @@ class CoreApi:
     # Management areas: property -> kvv area (kvartersvärdsområde) ->
     # cost center (distrikt). Owned by OneCore (onecore_* tables).
     # ------------------------------------------------------------------
-    def fetch_kvv_area_for_property(self, property_code, **kwargs):
-        """Reverse lookup of a property's management area.
+    def fetch_kvv_area_for_location(
+        self, rental_id=None, building_code=None, property_code=None, **kwargs
+    ):
+        """Management area of a location (MIM-1997: GET /kvv-areas/resolve).
+
+        Exactly one key: ``rental_id`` (lägenhet, bilplats, lokal),
+        ``building_code`` (byggnad) or ``property_code`` (fastighet). Send the
+        most specific one — a split property has buildings in different kvv
+        areas, so the property code alone is unreliable and the keys are never
+        combined.
 
         Returns the ``content`` dict
         ``{"kvvArea": {id, code, name}, "costCenter": {id, code, name},
-        "responsible": {...} | None}`` or ``None`` when the property has no
-        management-area link (OneCore answers 404).
+        "responsible": {...} | None}`` or ``None`` when nothing resolves
+        (OneCore answers 404).
         """
-        response = self.request(
-            "GET",
-            f"/properties/{urllib.parse.quote(str(property_code), safe='')}/kvv-area",
-            **kwargs,
-        )
+        keys = {
+            "rentalId": rental_id,
+            "buildingCode": building_code,
+            "propertyCode": property_code,
+        }
+        params = {name: str(value) for name, value in keys.items() if value}
+        if len(params) != 1:
+            raise ValueError(
+                "fetch_kvv_area_for_location takes exactly one of rental_id, "
+                "building_code or property_code"
+            )
+        response = self.request("GET", "/kvv-areas/resolve", params=params, **kwargs)
         if response.status_code == 404:
-            # Only the route's own 404 means "this property has no link". A 404
-            # from a core that does not know the route at all (this module
-            # deployed ahead of the OneCore release) must stay an error, or the
-            # caller stamps the request as looked-up and the backfill skips it
+            # Only the route's own 404 means "no kvv area here". A 404 from a
+            # core that does not know the route at all (this module deployed
+            # ahead of the OneCore release) must stay an error, or the caller
+            # stamps the request as looked-up and the backfill skips it
             # forever. The handler answers JSON, Koa answers text/plain for an
             # unrouted path — that is the whole difference.
             try:
@@ -547,11 +562,32 @@ class CoreApi:
         """All cost centers (distrikt): ``[{"id", "code", "name", ...}]``."""
         return self._get_json("/cost-centers", **kwargs)
 
+    def fetch_property_tree_for_cost_center(self, cost_center_id, **kwargs):
+        """Object-level property tree of one cost center (distrikt):
+        ``{code, name, groups: [{code, name, properties: [node]}]}`` where
+        ``groups`` are the kvv areas and each node is ``{type, code, name,
+        children?, share?}`` down to the rental objects (``code`` = rental
+        id). A property split between kvv areas appears once per area with
+        only that area's buildings and ``share`` = ``"default"`` (the side
+        its own kvv link points to) or ``"exception"``.
+
+        Cached per root in the property service. Used by the backfill cron: a
+        handful of calls give the full location -> kvv area map.
+        """
+        return self._get_json(
+            "/property-tree",
+            params={
+                "groupBy": "costCenter",
+                "rootId": str(cost_center_id),
+                "includeObjects": "true",
+            },
+            **kwargs,
+        )
+
     def fetch_cost_center_tree(self, cost_center_id, **kwargs):
         """Cost center tree: ``{code, name, kvvAreas: [{code, name, properties: [{code, ...}]}]}``.
 
-        Used by the backfill cron: a handful of tree calls give the full
-        property -> kvv area -> cost center map.
+        Used by the cost-center master sync for lead/deputy (distriktschef).
         """
         return self._get_json(
             f"/cost-centers/{urllib.parse.quote(str(cost_center_id), safe='')}/tree",

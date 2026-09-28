@@ -139,7 +139,7 @@ class OneCoreFlagSyncService:
 
         Raises on failure, on a ``None`` payload, and (when ``verify_reason``)
         on a missing SKADEDJUR caption. All-or-nothing, like
-        ManagementAreaService.build_property_map: a genuinely empty list is a
+        ManagementAreaService.build_location_map: a genuinely empty list is a
         valid "nothing is blocked" answer and must NOT raise, but ``None`` -
         which ``CoreApi._get_json`` returns for a 200 whose body lacks
         ``content`` - must never be silently coerced into "nothing is

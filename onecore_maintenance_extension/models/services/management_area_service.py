@@ -2,9 +2,16 @@
 
 OneCore owns the hierarchy  property -> kvv area (kvartersvärdsområde)
 -> cost center (distrikt)  (onecore_property_kvv_area / onecore_kvv_area /
-onecore_cost_center). Odoo snapshots the codes and names on the request so
-they can be shown ("Tillhör distrikt"), grouped, and used to pair a team
-("Tilldela resursgrupp").
+onecore_cost_center), with building-level exceptions for properties split
+between two kvv areas (MIM-1997, onecore_kvv_area_exception). Odoo snapshots
+the codes and names on the request so they can be shown ("Tillhör
+distrikt"), grouped, and used to pair a team ("Tilldela resursgrupp").
+
+Lookups are keyed on the most specific location we have — rental id, else
+building code, else property code — because the property code alone cannot
+tell which side of a split property an errand is on. Single requests ask
+GET /kvv-areas/resolve; the backfill cron walks the object-level district
+trees (GET /property-tree) once and resolves every request from them.
 
 Write path only: create(), the button and the backfill cron. Never on read
 (MIM-1869 removed sync HTTP from the maintenance.request read path).
@@ -23,19 +30,22 @@ LOOKUP_TIMEOUT = 5
 
 # Per-worker cache so the form preview (onchange) and the create() snapshot
 # right after it share one OneCore call, and so picking between search hits on
-# the same property is free. Worst-case staleness = TTL; a property changes kvv
-# area very rarely. Keyed on (database, property_code): onecore_base_url is a
-# per-database setting, so a worker serving several databases must not hand a
-# staging answer to a production request.
+# the same location is free. Worst-case staleness = TTL; a location changes
+# kvv area very rarely. Keyed on (database, key kind, key value):
+# onecore_base_url is a per-database setting, so a worker serving several
+# databases must not hand a staging answer to a production request.
 DISTRICT_CACHE_TTL = 300  # seconds
-_district_cache = {}  # (dbname, property_code) -> (expires_at_monotonic, values | None)
+_district_cache = {}  # (dbname, kind, value) -> (expires_at_monotonic, values | None)
 
 # A request that came back without a district is retried after this long. Two
 # things heal that way and cannot heal otherwise: a property linked in
 # Förvaltningsområden after the request was created, and anything created while
 # OneCore answered without knowing the endpoint. Costs no extra HTTP — the
-# backfill builds the whole map from the cost-center trees either way.
+# backfill builds the whole map from the district property trees either way.
 STALE_LOOKUP_DAYS = 7
+
+# Leaf node types of GET /property-tree whose code is a rental id.
+RENTAL_OBJECT_TYPES = frozenset({"residence", "parkingSpace", "facility", "other"})
 
 
 class ManagementAreaService:
@@ -78,6 +88,50 @@ class ManagementAreaService:
         )
 
     # ------------------------------------------------------------------
+    # Location key — what GET /kvv-areas/resolve is asked about
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _location_key(rental_id, building_code, property_code):
+        """``(kind, value)`` for the most specific key present, or None. The
+        kind is the keyword ``CoreApi.fetch_kvv_area_for_location`` takes."""
+        if rental_id:
+            return ("rental_id", rental_id)
+        if building_code:
+            return ("building_code", building_code)
+        if property_code:
+            return ("property_code", property_code)
+        return None
+
+    @classmethod
+    def get_location_key(cls, request):
+        """Most specific location key of a saved request.
+
+        Rental id for lägenhet/bilplats/lokal, building code for byggnad (and
+        for a lokal without rental id), else the property code chain — which
+        also covers legacy requests snapshotted before rental ids were stored.
+        The rental property's own ``building_code`` is a kvarterskod, not a
+        building code, so it is never used.
+        """
+        return cls._location_key(
+            request.rental_property_id.rental_property_id
+            or request.parking_space_id.rental_property_id
+            or request.facility_id.rental_property_id,
+            request.building_id.code or request.facility_id.building_code,
+            cls.get_property_code(request),
+        )
+
+    @classmethod
+    def get_location_key_from_options(cls, record):
+        """Same as get_location_key(), from the transient search options."""
+        return cls._location_key(
+            record.rental_property_option_id.rental_id
+            or record.parking_space_option_id.rental_id
+            or record.facility_option_id.rental_id,
+            record.building_option_id.code or record.facility_option_id.building_code,
+            cls.get_property_code_from_options(record),
+        )
+
+    # ------------------------------------------------------------------
     # OneCore lookup
     # ------------------------------------------------------------------
     def is_configured(self):
@@ -103,39 +157,39 @@ class ManagementAreaService:
             "cost_center_name": cost_center.get("name") or False,
         }
 
-    def fetch_for_property(self, property_code, api=None):
-        """Ask OneCore for the management area of ``property_code``.
+    def fetch_for_location(self, location_key, api=None):
+        """Ask OneCore for the management area of a ``(kind, value)`` key
+        from get_location_key().
 
         Returns ``(ok, values)``:
-        - ``ok=False``: OneCore could not be asked (no property code, not
-          configured, HTTP/parse error). Callers must NOT stamp
+        - ``ok=False``: OneCore could not be asked (no key, not configured,
+          HTTP/parse error). Callers must NOT stamp
           ``management_area_lookup_at`` — the backfill cron retries later.
-        - ``ok=True``: answered; ``values`` is a dict, or None when the
-          property has no management-area link.
+        - ``ok=True``: answered; ``values`` is a dict, or None when nothing
+          resolves for the location.
         """
-        if not property_code or not self.is_configured():
+        if not location_key or not self.is_configured():
             return False, None
 
-        cache_key = (self.env.cr.dbname, property_code)
+        kind, value = location_key
+        cache_key = (self.env.cr.dbname, kind, value)
         cached = _district_cache.get(cache_key)
         if cached and time.monotonic() < cached[0]:
             return True, cached[1]
 
         try:
             api = api or self.env["maintenance.request"].get_core_api()
-            payload = api.fetch_kvv_area_for_property(
-                property_code, timeout=LOOKUP_TIMEOUT
+            payload = api.fetch_kvv_area_for_location(
+                **{kind: value}, timeout=LOOKUP_TIMEOUT
             )
         except Exception as err:  # network, auth, JSON — never break the caller
             _logger.warning(
-                "Could not fetch management area for property %s: %s",
-                property_code,
-                err,
+                "Could not fetch management area for %s %s: %s", kind, value, err
             )
             return False, None
 
         values = self.normalize(payload)
-        # Cache misses too: a property without a kvv link stays without one.
+        # Cache misses too: a location without a kvv area stays without one.
         _district_cache[cache_key] = (
             time.monotonic() + DISTRICT_CACHE_TTL,
             values,
@@ -158,10 +212,10 @@ class ManagementAreaService:
         unsaved form must not keep the first property's distrikt, nor the team
         prefilled from it.
         """
-        property_code = self.get_property_code_from_options(record)
-        if not property_code:
+        location_key = self.get_location_key_from_options(record)
+        if not location_key:
             return False
-        ok, values = self.fetch_for_property(property_code)
+        ok, values = self.fetch_for_location(location_key)
         if not ok or not values:
             return False
         if values.get("cost_center_code") == record.cost_center_code and values.get(
@@ -192,7 +246,7 @@ class ManagementAreaService:
         request.ensure_one()
         if request.cost_center_code and not force:
             return False
-        ok, values = self.fetch_for_property(self.get_property_code(request), api=api)
+        ok, values = self.fetch_for_location(self.get_location_key(request), api=api)
         if not ok:
             return False
         vals = dict(values or {})
@@ -403,11 +457,15 @@ class ManagementAreaService:
         """Stamp up to ``limit`` requests that have no cost center. Returns the
         number processed.
 
-        Uses the cost-center trees (a handful of calls) instead of one call
-        per property. Unresolvable requests (no property code, property not in
-        any tree) are stamped too so they are not retried every run — but the
-        stamp expires after STALE_LOOKUP_DAYS, so a property that gets linked
-        later is picked up instead of being excluded for good.
+        Uses the object-level property trees (one cached call per district)
+        instead of one call per request. Each request is looked up by its most
+        specific location key — rental id, building code, property code — so
+        a property split between kvv areas (MIM-1997) resolves to the side its
+        object or building is on, and a property-level request to the
+        property's default side. Unresolvable requests (no property code,
+        property not in any tree) are stamped too so they are not retried
+        every run — but the stamp expires after STALE_LOOKUP_DAYS, so a
+        property linked later is picked up instead of being excluded for good.
         """
         Request = self.env["maintenance.request"].sudo()
         cutoff = fields.Datetime.now() - timedelta(days=STALE_LOOKUP_DAYS)
@@ -429,15 +487,15 @@ class ManagementAreaService:
 
         try:
             api = api or Request.get_core_api()
-            property_map = self.build_property_map(api)
+            location_map = self.build_location_map(api)
         except Exception as err:
             _logger.warning(
-                "Management-area backfill: could not build the property map: %s", err
+                "Management-area backfill: could not build the location map: %s", err
             )
             return 0
-        if not property_map:
+        if not location_map:
             _logger.warning(
-                "Management-area backfill: OneCore returned no cost-center trees; "
+                "Management-area backfill: OneCore returned no property trees; "
                 "nothing stamped"
             )
             return 0
@@ -445,8 +503,7 @@ class ManagementAreaService:
         now = fields.Datetime.now()
         groups = {}  # values (as sorted tuple) -> request ids
         for record in records:
-            property_code = self.get_property_code(record)
-            values = property_map.get(property_code) if property_code else None
+            values = location_map.get(self.get_location_key(record))
             key = tuple(sorted(values.items())) if values else ()
             groups.setdefault(key, []).append(record.id)
 
@@ -465,9 +522,18 @@ class ManagementAreaService:
         )
         return len(records)
 
-    @staticmethod
-    def build_property_map(api):
-        """property_code -> request values, from GET /cost-centers/{id}/tree.
+    @classmethod
+    def build_location_map(cls, api):
+        """``(kind, value) -> request values`` for every rental object,
+        building and whole property in the district trees, from
+        GET /property-tree?groupBy=costCenter (objects included).
+
+        A property split between kvv areas (MIM-1997) appears once per area
+        with ``share`` set: ``"default"`` on the side its own kvv link points
+        to, ``"exception"`` on the side its excepted buildings moved to. Its
+        objects and buildings map to the side they hang under; the property
+        code maps to the default side — the same answer GET /kvv-areas/resolve
+        gives for a bare property code. An unsplit property has no ``share``.
 
         Raises when a tree cannot be fetched: a partial map would make the
         caller stamp that district's requests as "looked up", excluding them
@@ -475,22 +541,38 @@ class ManagementAreaService:
         """
         mapping = {}
         for cost_center in api.fetch_cost_centers() or []:
-            tree = api.fetch_cost_center_tree(cost_center["id"])
+            tree = api.fetch_property_tree_for_cost_center(cost_center["id"])
             if not tree:
                 raise ValueError(
-                    f"Empty cost-center tree for {cost_center.get('code')}"
+                    f"Empty property tree for {cost_center.get('code')}"
                 )
             cost_center_code = tree.get("code") or cost_center.get("code") or False
             cost_center_name = tree.get("name") or cost_center.get("name") or False
-            for area in tree.get("kvvAreas") or []:
+            for area in tree.get("groups") or []:
+                values = {
+                    "kvv_area_code": area.get("code") or False,
+                    "kvv_area_name": area.get("name") or False,
+                    "cost_center_code": cost_center_code,
+                    "cost_center_name": cost_center_name,
+                }
                 for prop in area.get("properties") or []:
                     code = prop.get("code")
                     if not code:
                         continue
-                    mapping[code] = {
-                        "kvv_area_code": area.get("code") or False,
-                        "kvv_area_name": area.get("name") or False,
-                        "cost_center_code": cost_center_code,
-                        "cost_center_name": cost_center_name,
-                    }
+                    if prop.get("share") != "exception":
+                        mapping[("property_code", code)] = values
+                    cls._map_tree_children(prop, values, mapping)
         return mapping
+
+    @classmethod
+    def _map_tree_children(cls, node, values, mapping):
+        """Walk a property node: buildings map by code, rental objects by
+        rental id, wherever they hang (property, building or staircase)."""
+        for child in node.get("children") or []:
+            code = child.get("code")
+            kind = child.get("type")
+            if code and kind == "building":
+                mapping[("building_code", code)] = values
+            elif code and kind in RENTAL_OBJECT_TYPES:
+                mapping[("rental_id", code)] = values
+            cls._map_tree_children(child, values, mapping)
