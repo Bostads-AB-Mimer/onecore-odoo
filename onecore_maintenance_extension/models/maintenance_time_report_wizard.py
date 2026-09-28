@@ -73,6 +73,9 @@ class MaintenanceTimeReportWizard(models.TransientModel):
     # Set when the modal opens and the user can't report: missing in the time
     # reporting app (or it couldn't be asked). Shown as a banner, blocks steps.
     user_check_message = fields.Char(readonly=True)
+    # Set (and flushed) before the report is sent, so a second click or a
+    # retried request can't send the same hours twice.
+    submitted = fields.Boolean(readonly=True)
     app_user_missing = fields.Boolean(readonly=True)
 
     step = fields.Selection(
@@ -213,12 +216,15 @@ class MaintenanceTimeReportWizard(models.TransientModel):
             raise UserError(self.user_check_message)
         if not self.property_code:
             raise UserError("Välj en fastighet innan du rapporterar tid.")
+        self._validate_date(date)
+        self.write({"date_for_work": date, "step": "hours"})
+        return self._reopen()
+
+    def _validate_date(self, date):
         if not date:
             raise UserError("Välj ett datum.")
         if date > fields.Date.context_today(self):
             raise UserError("Du kan inte rapportera tid för ett datum framåt i tiden.")
-        self.write({"date_for_work": date, "step": "hours"})
-        return self._reopen()
 
     def action_today(self):
         return self._set_date(fields.Date.context_today(self))
@@ -232,10 +238,13 @@ class MaintenanceTimeReportWizard(models.TransientModel):
     # ==================== Step: hours ====================
 
     def action_confirm_hours(self):
-        if not 0 < self.hours_spent <= MAX_HOURS:
-            raise UserError(f"Ange antal timmar mellan 0 och {MAX_HOURS}.")
+        self._validate_hours()
         self.step = "job_type"
         return self._reopen()
+
+    def _validate_hours(self):
+        if not 0 < self.hours_spent <= MAX_HOURS:
+            raise UserError(f"Ange antal timmar mellan 0 och {MAX_HOURS}.")
 
     def action_back(self):
         self.step = PREVIOUS_STEP.get(self.step, "date")
@@ -275,6 +284,12 @@ class MaintenanceTimeReportWizard(models.TransientModel):
         }
 
     def _check_ready_to_submit(self):
+        """Re-run every step's checks: action_submit can be called over RPC
+        with values the step buttons never saw."""
+        if self.submitted:
+            raise UserError("Tiden är redan rapporterad.")
+        if self.step != "job_type":
+            raise UserError("Gå igenom alla steg innan du rapporterar tid.")
         if not self.property_code:
             raise UserError("Välj en fastighet innan du rapporterar tid.")
         if not self.cost_center_code:
@@ -287,8 +302,10 @@ class MaintenanceTimeReportWizard(models.TransientModel):
                 "Ärendet saknar distrikt (KST). Klicka på \"Tilldela resursgrupp\" "
                 "på ärendet och försök igen."
             )
-        if not self.date_for_work or not self.hours_spent or not self.job_type:
-            raise UserError("Välj datum, antal timmar och typ av jobb.")
+        self._validate_date(self.date_for_work)
+        self._validate_hours()
+        if not self.job_type:
+            raise UserError("Välj typ av jobb.")
 
     def _submit(self):
         self.ensure_one()
@@ -296,16 +313,25 @@ class MaintenanceTimeReportWizard(models.TransientModel):
         self._check_ready_to_submit()
         self._check_time_report_user()
 
-        TimeReportService(self.env).create_time_report(self._build_payload())
-
         type_of_job = JOB_TYPES[self.job_type][0]
         hours = f"{self.hours_spent:g}"
         date = fields.Date.to_string(self.date_for_work)
+
+        # All database work first, the API call last: a concurrent-update
+        # error (which makes Odoo retry the request) or a second click
+        # blocked on the wizard row then happens before anything is sent,
+        # and a failed call rolls it all back. Left: the commit itself failing
+        # after a successful call, which would need idempotency in the app.
+        self.submitted = True
         self.maintenance_request_id.message_post(
             body=f"Tid rapporterad: {hours} h {type_of_job} för {date}.",
             message_type="notification",
             subtype_xmlid="mail.mt_note",
         )
+        self.env.flush_all()
+
+        TimeReportService(self.env).create_time_report(self._build_payload())
+
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",

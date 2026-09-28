@@ -225,16 +225,59 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
         wizard = self._wizard_at_job_type()
         message_count = len(self.request.message_ids)
 
+        # The savepoint stands in for the request rollback the web client
+        # gets on a UserError; the chatter note is written before the call.
         failed = MagicMock(ok=False, status_code=500, text="boom")
-        with patch(REQUESTS_POST, return_value=failed):
-            with self.assertRaises(UserError):
+        with patch(REQUESTS_POST, return_value=failed) as mock_post:
+            with self.assertRaises(UserError), self.env.cr.savepoint():
                 self._submit(wizard, "carpentry")
-        with patch(REQUESTS_POST, side_effect=requests.exceptions.Timeout()):
-            with self.assertRaises(UserError):
+        mock_post.assert_called_once()
+        self.env.invalidate_all()
+        with patch(REQUESTS_POST, side_effect=requests.exceptions.Timeout()) as mock_post:
+            with self.assertRaises(UserError), self.env.cr.savepoint():
                 self._submit(wizard, "carpentry")
+        mock_post.assert_called_once()
+        self.env.invalidate_all()
 
-        self.request.invalidate_recordset(["message_ids"])
         self.assertEqual(len(self.request.message_ids), message_count)
+        self.assertFalse(wizard.submitted)
+
+    def test_submit_rechecks_values_written_over_rpc(self):
+        today = fields.Date.context_today(self.env["maintenance.time.report.wizard"])
+        bad_values = [
+            {"hours_spent": 500},
+            {"hours_spent": 0},
+            {"date_for_work": today + timedelta(days=3)},
+            {"step": "date"},
+        ]
+        for values in bad_values:
+            wizard = self._wizard_at_job_type()
+            wizard.write(dict(values, job_type="painting"))
+            with patch(REQUESTS_POST) as mock_post:
+                with self.assertRaises(UserError, msg=values):
+                    wizard.action_submit()
+            mock_post.assert_not_called()
+
+    def test_second_submit_is_refused(self):
+        wizard = self._wizard_at_job_type()
+        with patch(REQUESTS_POST, return_value=ok_response()) as mock_post:
+            self._submit(wizard, "painting")
+            self.assertTrue(wizard.submitted)
+            with self.assertRaises(UserError):
+                wizard.action_submit()
+        mock_post.assert_called_once()
+
+    def test_chatter_note_is_written_before_the_call(self):
+        wizard = self._wizard_at_job_type()
+        request = self.request
+
+        def assert_note_exists(*args, **kwargs):
+            request.invalidate_recordset(["message_ids"])
+            self.assertIn("Tid rapporterad", request.message_ids[0].body)
+            return ok_response()
+
+        with patch(REQUESTS_POST, side_effect=assert_note_exists):
+            self._submit(wizard, "painting")
 
     def test_submit_requires_job_type(self):
         wizard = self._wizard_at_job_type()
