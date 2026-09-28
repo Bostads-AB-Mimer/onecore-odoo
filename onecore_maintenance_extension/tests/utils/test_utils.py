@@ -1,4 +1,5 @@
 """Utility functions for tests."""
+import uuid
 from unittest.mock import patch
 
 from faker import Faker
@@ -11,6 +12,12 @@ def setup_faker():
     fake.add_provider(MaintenanceProvider)
     fake.add_provider(ComponentProvider)
     return fake
+
+
+def unique_login(fake):
+    """Faker's sv_SE emails repeat often enough to collide when a test
+    creates several users (res_users_login_key), so prefix a random token."""
+    return f"{uuid.uuid4().hex[:8]}.{fake.email()}"
 
 
 def create_test_user(env, **kwargs):
@@ -27,7 +34,7 @@ def create_test_user(env, **kwargs):
 
     defaults = {
         "name": fake.name(),
-        "login": fake.email(),
+        "login": unique_login(fake),
         "group_ids": [
             (
                 6,
@@ -56,7 +63,7 @@ def create_internal_user(env, **kwargs):
 
     defaults = {
         "name": fake.name(),
-        "login": fake.email(),
+        "login": unique_login(fake),
         "group_ids": [
             (
                 6,
@@ -86,7 +93,7 @@ def create_external_contractor_user(env, **kwargs):
 
     defaults = {
         "name": fake.name(),
-        "login": fake.email(),
+        "login": unique_login(fake),
         "group_ids": [
             (
                 6,
