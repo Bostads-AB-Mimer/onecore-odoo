@@ -1066,24 +1066,42 @@ class TestManagementAreaEndpoints:
         response.json.return_value = {"content": content}
         return response
 
-    def test_fetch_kvv_area_for_property_returns_content(self, api):
+    @pytest.mark.parametrize(
+        "kwargs, expected_params",
+        [
+            ({"rental_id": "705-022-04-0201"}, {"rentalId": "705-022-04-0201"}),
+            ({"building_code": "22 01-01"}, {"buildingCode": "22 01-01"}),
+            ({"property_code": "2201"}, {"propertyCode": "2201"}),
+        ],
+    )
+    def test_fetch_kvv_area_for_location_sends_one_key(self, api, kwargs, expected_params):
+        """MIM-1997: GET /kvv-areas/resolve takes exactly one location key and
+        honours building-level exceptions on split properties."""
         payload = {"kvvArea": {"code": "61141"}, "costCenter": {"code": "61140"}}
         with patch.object(api, "request", return_value=self._response(200, payload)) as mock_request:
-            result = api.fetch_kvv_area_for_property("22 01", timeout=5)
+            result = api.fetch_kvv_area_for_location(timeout=5, **kwargs)
 
         mock_request.assert_called_once_with(
-            "GET", "/properties/22%2001/kvv-area", timeout=5
+            "GET", "/kvv-areas/resolve", params=expected_params, timeout=5
         )
         assert result == payload
 
-    def test_fetch_kvv_area_for_property_404_is_none(self, api):
-        """Unlinked property: OneCore answers 404 -> no district, no error."""
+    def test_fetch_kvv_area_for_location_requires_exactly_one_key(self, api):
+        with patch.object(api, "request") as mock_request:
+            with pytest.raises(ValueError):
+                api.fetch_kvv_area_for_location()
+            with pytest.raises(ValueError):
+                api.fetch_kvv_area_for_location(rental_id="705-1", property_code="2201")
+        mock_request.assert_not_called()
+
+    def test_fetch_kvv_area_for_location_404_is_none(self, api):
+        """Unlinked location: OneCore answers 404 -> no district, no error."""
         response = self._response(404)
         response.raise_for_status.side_effect = AssertionError("must not be called")
         with patch.object(api, "request", return_value=response):
-            assert api.fetch_kvv_area_for_property("2201") is None
+            assert api.fetch_kvv_area_for_location(property_code="2201") is None
 
-    def test_fetch_kvv_area_for_property_404_without_json_raises(self, api):
+    def test_fetch_kvv_area_for_location_404_without_json_raises(self, api):
         """A core that does not know the route answers Koa's text/plain 404.
         Treating that as "no district" would stamp the request as looked up and
         exclude it from the backfill forever, so it has to stay an error."""
@@ -1092,19 +1110,32 @@ class TestManagementAreaEndpoints:
         response.raise_for_status.side_effect = requests.HTTPError("404")
         with patch.object(api, "request", return_value=response):
             with pytest.raises(requests.HTTPError):
-                api.fetch_kvv_area_for_property("2201")
+                api.fetch_kvv_area_for_location(rental_id="705-1")
 
-    def test_fetch_kvv_area_for_property_raises_on_other_errors(self, api):
+    def test_fetch_kvv_area_for_location_raises_on_other_errors(self, api):
         response = self._response(500)
         response.raise_for_status.side_effect = requests.HTTPError("500")
         with patch.object(api, "request", return_value=response):
             with pytest.raises(requests.HTTPError):
-                api.fetch_kvv_area_for_property("2201")
+                api.fetch_kvv_area_for_location(rental_id="705-1")
 
     def test_fetch_cost_centers(self, api):
         with patch.object(api, "_get_json", return_value=[{"id": 4}]) as mock_get_json:
             assert api.fetch_cost_centers() == [{"id": 4}]
         mock_get_json.assert_called_once_with("/cost-centers")
+
+    def test_fetch_property_tree_for_cost_center(self, api):
+        """MIM-1997: the backfill walks the object-level tree, which is cached
+        per cost center in the property service and split-property aware."""
+        with patch.object(api, "_get_json", return_value={"groups": []}) as mock_get_json:
+            assert api.fetch_property_tree_for_cost_center("a/b", timeout=30) == {
+                "groups": []
+            }
+        mock_get_json.assert_called_once_with(
+            "/property-tree",
+            params={"groupBy": "costCenter", "rootId": "a/b", "includeObjects": "true"},
+            timeout=30,
+        )
 
     def test_fetch_cost_center_tree_quotes_id(self, api):
         with patch.object(api, "_get_json", return_value={"kvvAreas": []}) as mock_get_json:

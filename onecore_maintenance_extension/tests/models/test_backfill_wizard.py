@@ -613,7 +613,7 @@ class TestBackfillWizard(TransactionCase):
         }
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
             with patch.object(
-                ManagementAreaService, "fetch_for_property", return_value=(True, area)
+                ManagementAreaService, "fetch_for_location", return_value=(True, area)
             ):
                 wiz.action_search()
                 wiz.action_confirm()
@@ -633,7 +633,7 @@ class TestBackfillWizard(TransactionCase):
         with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
             with patch.object(
                 ManagementAreaService,
-                "fetch_for_property",
+                "fetch_for_location",
                 side_effect=ConnectionError("boom"),
             ):
                 wiz.action_search()
