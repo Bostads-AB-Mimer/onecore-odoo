@@ -1,4 +1,4 @@
-"""Tests for MIM-1975/1976/1969 — the per-user search fields, the shipped
+"""Tests for the per-user search fields, the shipped
 favorites built on them and the "Mitt distrikt" menu.
 
 Each field is a search-only boolean on maintenance.request that resolves to
@@ -11,6 +11,7 @@ client does (domain, group-by, sort) for all three profiles.
 """
 import json
 
+from lxml import etree
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 from odoo.tools.safe_eval import safe_eval
@@ -375,7 +376,7 @@ class TestMyFilters(MyFiltersFixture, TransactionCase):
     # Combined, as the favorites will use them
     # ------------------------------------------------------------------
     def test_ordered_by_my_district_at_other_teams(self):
-        """MIM-1975: what my district ordered that sits with someone else."""
+        """What my district ordered that sits with someone else."""
         self.assertMatches(
             self.district_user,
             [("ordered_by_my_department", "=", True), ("at_my_teams", "=", False)],
@@ -383,7 +384,7 @@ class TestMyFilters(MyFiltersFixture, TransactionCase):
         )
 
     def test_in_my_district_ordered_by_others(self):
-        """MIM-1976: what sits in my district but was ordered elsewhere."""
+        """What sits in my district but was ordered elsewhere."""
         self.assertMatches(
             self.district_user,
             [("in_my_district", "=", True), ("ordered_by_my_department", "=", False)],
@@ -392,10 +393,17 @@ class TestMyFilters(MyFiltersFixture, TransactionCase):
 
 
 FAVORITES = (
-    "filter_ordered_by_my_district_at_others",
+    "filter_ordered_by_my_department_at_others",
     "filter_in_my_district_ordered_by_others",
     "filter_my_kvv_areas",
 )
+# "Avdelning", not "distrikt", on the first one: the favorite is shared with
+# Kundcenter and the other departments that are not a district.
+FAVORITE_NAMES = {
+    "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra",
+    "filter_in_my_district_ordered_by_others": "I mitt distrikt, beställt av andra",
+    "filter_my_kvv_areas": "Mina kvartersvärdsområden",
+}
 
 
 @tagged("onecore")
@@ -432,6 +440,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         for xml_id in FAVORITES:
             with self.subTest(favorite=xml_id):
                 favorite = self._favorite(xml_id)
+                self.assertEqual(favorite.name, FAVORITE_NAMES[xml_id])
                 self.assertTrue(favorite.active)
                 self.assertEqual(favorite.model_id, "maintenance.request")
                 self.assertEqual(favorite.action_id.id, action.id)
@@ -454,7 +463,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         favorites carry archive = False themselves."""
         self.own_elsewhere.sudo().write({"archive": True})
 
-        favorite = self._favorite("filter_ordered_by_my_district_at_others")
+        favorite = self._favorite("filter_ordered_by_my_department_at_others")
         self.assertEqual(
             self._run(favorite, self.district_user), self.env["maintenance.request"]
         )
@@ -462,8 +471,8 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
     # ------------------------------------------------------------------
     # What each one answers
     # ------------------------------------------------------------------
-    def test_ordered_by_my_district_at_others(self):
-        favorite = self._favorite("filter_ordered_by_my_district_at_others")
+    def test_ordered_by_my_department_at_others(self):
+        favorite = self._favorite("filter_ordered_by_my_department_at_others")
 
         self.assertEqual(self._run(favorite, self.district_user), self.own_elsewhere)
         # Kundcenter has no resource group, so everything it ordered is
@@ -517,3 +526,105 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         self.assertEqual(
             action.view_ids.sorted("sequence").mapped("view_mode"), ["kanban", "mobile"]
         )
+
+
+MY_FILTER_NAMES = (
+    "ordered_by_my_department",
+    "ordered_by_others",
+    "in_my_district",
+    "in_my_kvv_areas",
+    "performed",
+)
+
+
+@tagged("onecore")
+class TestMyFiltersSearchView(MyFiltersFixture, TransactionCase):
+    """The filters in hr_equipment_request_view_search_extension that the
+    favorites and the "Mitt distrikt" menu depend on by name."""
+
+    def _search_arch(self):
+        arch = self.env["maintenance.request"].get_view(view_type="search")["arch"]
+        return etree.fromstring(arch)
+
+    def _filter_domains(self):
+        """name -> domain string of every filter with one of our names."""
+        return {
+            node.get("name"): node.get("domain")
+            for node in self._search_arch().iter("filter")
+            if node.get("name") in MY_FILTER_NAMES
+        }
+
+    def test_search_view_has_the_per_user_filters(self):
+        arch = self._search_arch()
+
+        self.assertEqual(set(self._filter_domains()), set(MY_FILTER_NAMES))
+        self.assertTrue(arch.xpath("//filter[@name='estate']"))
+        # Present for the team card's search_default_ordered_by_team_id, but
+        # hidden: nobody types a team id into the search box.
+        team_field = arch.xpath("//field[@name='ordered_by_team_id']")
+        self.assertTrue(team_field)
+        self.assertEqual(team_field[0].get("invisible"), "1")
+
+    def test_per_user_filters_evaluate_for_every_profile(self):
+        domains = self._filter_domains()
+        for profile, user in (
+            ("district", self.district_user),
+            ("kundcenter", self.kundcenter_user),
+            ("blank", self.blank_user),
+        ):
+            for name, domain in domains.items():
+                with self.subTest(filter=name, profile=profile):
+                    self._search(user, safe_eval(domain, {"uid": user.id}))
+
+    def test_per_user_filters_answer_as_the_fields_do(self):
+        domains = {name: safe_eval(d) for name, d in self._filter_domains().items()}
+
+        self.assertMatches(
+            self.district_user,
+            domains["ordered_by_my_department"],
+            self.own_here | self.own_elsewhere | self.done,
+        )
+        self.assertMatches(
+            self.district_user, domains["ordered_by_others"], self.other_here | self.blank
+        )
+        self.assertMatches(
+            self.district_user,
+            domains["in_my_district"],
+            self.own_here | self.other_here | self.done,
+        )
+        self.assertMatches(
+            self.district_user,
+            domains["in_my_kvv_areas"],
+            self.own_here | self.other_here | self.done,
+        )
+        self.assertMatches(self.district_user, domains["performed"], self.done)
+
+    def test_my_district_menu_defaults_to_an_existing_filter(self):
+        """search_default_<name> is silently ignored when no filter has that
+        name; the menu would then open the whole list."""
+        action = self.env.ref("onecore_maintenance_extension.action_my_district_requests")
+        defaults = [
+            key[len("search_default_"):]
+            for key in safe_eval(action.context)
+            if key.startswith("search_default_")
+        ]
+        names = {node.get("name") for node in self._search_arch().iter("filter")}
+
+        self.assertEqual(set(defaults), {"in_my_district", "active"})
+        self.assertTrue(set(defaults) <= names, names)
+
+    def test_group_by_estate_works_for_a_plain_user(self):
+        """estate is related and not stored; grouping must still work for a
+        user who is not superuser (Odoo joins related fields with
+        compute_sudo, the default for related)."""
+        groups = (
+            self.env["maintenance.request"]
+            .with_user(self.district_user)
+            ._read_group(
+                [("id", "in", self.all_requests.ids)],
+                groupby=["kvv_area_code", "estate"],
+                aggregates=["__count"],
+            )
+        )
+
+        self.assertEqual(sum(count for *_keys, count in groups), len(self.all_requests))

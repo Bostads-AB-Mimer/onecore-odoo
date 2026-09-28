@@ -30,11 +30,24 @@
                         <field string="Distrikt" name="cost_center_name" />
                         <field string="Distriktkod" name="cost_center_code" />
                         <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
+                        <!-- Search-only; a team id resolves to what the
+                             team's members' departments ordered. Only for the
+                             resource group card's links
+                             (search_default_ordered_by_team_id), which pass the
+                             id themselves.
+                             Hidden: nobody types a team id, people looking for
+                             "beställt av Distrikt Väst" use the click filters
+                             below or the Beställande avdelning field. -->
+                        <field string="Beställt av resursgrupp" name="ordered_by_team_id"
+                            invisible="1" />
                         <filter string="Mina ärenden" name="my_maintenances"
                             domain="[('user_id', '=', uid)]" />
                         <separator />
                         <filter string="Att göra" name="todo"
                             domain="[('stage_id.done', '=', False)]" />
+                        <!-- Utförd by xml-id, never by name. -->
+                        <filter string="Utförda" name="performed"
+                            domain="[('is_performed', '=', True)]" />
                         <filter string="Avslutad" name="done"
                             domain="[('stage_id.done', '=', True)]" />
                         <separator />
@@ -110,6 +123,23 @@
                              "Utemiljö- och studentenheten". -->
                         <filter string="Beställt av Studentteam" name="ordered_by_student"
                             domain="[('ordering_department', '=', 'Utemiljö- och studentenheten')]" />
+                        <separator />
+                        <!-- Resolved per user at search time
+                             (models/mixins/search_fields_mixin.py) — my AD
+                             department, the districts of the resource groups I
+                             am a member of, the kvv areas I am the steward of.
+                             The shipped favorites (data/ir_filters.xml) and the
+                             "Mitt distrikt" menu (search_default_in_my_district)
+                             build on these names. -->
+                        <filter string="Beställt av min avdelning" name="ordered_by_my_department"
+                            domain="[('ordered_by_my_department', '=', True)]" />
+                        <filter string="Beställt av andra" name="ordered_by_others"
+                            domain="[('ordered_by_my_department', '=', False)]" />
+                        <separator />
+                        <filter string="I mitt distrikt" name="in_my_district"
+                            domain="[('in_my_district', '=', True)]" />
+                        <filter string="Mina kvartersvärdsområden" name="in_my_kvv_areas"
+                            domain="[('in_my_kvv_areas', '=', True)]" />
                         <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
@@ -125,6 +155,11 @@
                                 context="{'group_by': 'cost_center_name'}" />
                             <filter string='Kvartersvärdsområde' name='kvv_area' domain="[]"
                                 context="{'group_by': 'kvv_area_code'}" />
+                            <!-- The last step of distrikt → område →
+                                 fastighet. Related through rental_property_id;
+                                 Odoo joins it, no stored copy needed. -->
+                            <filter string='Fastighet' name='estate' domain="[]"
+                                context="{'group_by': 'estate'}" />
                             <filter string='Beställande avdelning' name='ordering_department'
                                 domain="[]"
                                 context="{'group_by': 'ordering_department'}" />

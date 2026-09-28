@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- MIM-1975/1976: "Mitt distrikt" — the request list opened on the
+    <!-- "Mitt distrikt" — the request list opened on the
          requests in the districts whose resource groups the current user is
          a member of. One menu entry for everyone; the in_my_district field
          (models/mixins/search_fields_mixin.py) resolves the district per

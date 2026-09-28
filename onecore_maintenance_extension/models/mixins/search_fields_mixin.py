@@ -14,7 +14,7 @@ class SearchFieldsMixin(models.AbstractModel):
     _description = "Search Fields Mixin"
 
     # ============================================================================
-    # PER-USER FILTERS — "mitt distrikt", "mina områden" (MIM-1975/1976/1969)
+    # PER-USER FILTERS — "mitt distrikt", "mina områden"
     # ============================================================================
     # Search-only booleans that resolve to a domain for the *current* user at
     # search time: which department they belong to (AD), which resource groups
@@ -58,7 +58,7 @@ class SearchFieldsMixin(models.AbstractModel):
         search="_search_is_performed",
         help="Ärenden i steget Utförd (klara men inte avslutade).",
     )
-    # Integer so PR B's team cards can open the list with
+    # Integer so the resource group cards can open the list with
     # search_default_ordered_by_team_id: active_id.
     ordered_by_team_id = fields.Integer(
         "Beställt av resursgrupp",
@@ -154,7 +154,7 @@ class SearchFieldsMixin(models.AbstractModel):
 
     def _search_is_performed(self, operator, value):
         # By xml-id, never by name: stage names are translated and renameable
-        # (MIM-1916). stage_5 = Utförd, owned by us under the stock xml-id.
+        # stage_5 = Utförd, owned by us under the stock xml-id.
         stage = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
         domain = Domain("stage_id", "=", stage.id) if stage else Domain(False)
         return self._boolean_search_domain(operator, value, domain)
