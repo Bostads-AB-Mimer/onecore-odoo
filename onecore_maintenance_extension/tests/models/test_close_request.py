@@ -282,9 +282,14 @@ class TestCloseRequestResolution(CloseRequestCase):
         self.assertTrue(request.close_request_pending)
 
     def test_stage_write_failing_after_the_update_leaves_the_request_pending(self):
-        # Fails after super().write() — the stage and the resolution are
-        # already in the database by then — so this proves the two roll back
-        # together, not merely that nothing had been written yet.
+        # Fails after super().write() — stage_id and close_request_resolved_at
+        # are set in the same vals dict, so they are flushed to the database
+        # together — so this proves the two roll back together, not merely
+        # that nothing had been written yet. The rollback itself comes from
+        # BaseCase.assertRaises, which wraps its block in a savepoint and
+        # rolls it back on the expected exception (odoo/tests/common.py);
+        # assertRaisesRegex does not, so plain assertRaises + assertIn on the
+        # message is used here instead.
         #
         # create_maintenance_request() leaves `creating_records=True` on the
         # returned recordset's context (see maintenance.py create()), which
@@ -297,10 +302,11 @@ class TestCloseRequestResolution(CloseRequestCase):
             "post_change_notifications",
             side_effect=UserError("Testfel"),
         ):
-            with self.assertRaisesRegex(UserError, "Testfel"):
+            with self.assertRaises(UserError) as cm:
                 self._as(self.internal_user).with_context(
                     creating_records=False
                 ).action_accept_close_request()
+            self.assertIn("Testfel", str(cm.exception))
         request = self._fresh()
         self.assertNotEqual(request.stage_id, self.stage_avslutad)
         self.assertFalse(request.close_request_resolved_at)

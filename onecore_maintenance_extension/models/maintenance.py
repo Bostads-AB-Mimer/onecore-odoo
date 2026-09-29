@@ -940,20 +940,12 @@ class OneCoreMaintenanceRequest(
         never move a case to Avslutad and is refused there, which is why the
         chatter only offers them Avslå. The resolution is not written here —
         the transition itself stamps it, in the same write.
-
-        The write is wrapped in a savepoint: write() flushes the stage and
-        the resolution to the database before it gets to posting the change
-        note, so a failure there (e.g. a chatter post rejected by an
-        automated action) would otherwise leave the case closed with the
-        request still marked pending. The savepoint makes the two roll back
-        together instead.
         """
         self.ensure_one()
         if not self.close_request_pending:
             raise UserError(_("Begäran om avslut är redan hanterad."))
         closed_stage = MaintenanceStageManager(self.env)._get_stage_by_name("Avslutad")
-        with self.env.cr.savepoint():
-            self.write({"stage_id": closed_stage.id})
+        self.write({"stage_id": closed_stage.id})
         return True
 
     def _send_creation_sms(self):
