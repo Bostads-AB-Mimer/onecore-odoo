@@ -2,7 +2,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore Authentication",
-    "version": "1.2",
+    "version": "19.0.1.2.0",
     "sequence": 50,
     "category": "Authentication",
     "description": "Keycloak authentication integration for ONECore.",

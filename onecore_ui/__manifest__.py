@@ -1,7 +1,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore UI",
-    "version": "1.0",
+    "version": "19.0.1.0.1",
     "sequence": 100,
     "category": "ONECore",
     "description": "Provides ONECore UI",
