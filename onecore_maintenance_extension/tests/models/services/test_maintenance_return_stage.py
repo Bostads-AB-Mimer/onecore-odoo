@@ -2,8 +2,9 @@
 
 Covers: the stage record itself, returned_date stamping/clearing, the hand-back
 of the request to the orderer's team (owner_user_id, fallback create_uid,
-fallback Kundcenter), the user_id clearing without a stage bounce, and the
-external contractor return flow.
+fallback Kundcenter — always by resource-group membership, never by the
+stamped "Beställande avdelning"), the user_id clearing without a stage bounce,
+and the external contractor return flow.
 """
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
@@ -128,6 +129,22 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         request.write({"stage_id": self.stage_atersand.id})
         self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
 
+    def test_team_fallback_skips_archived_kundcenter(self):
+        """An archived Kundcenter is never a hand-back target: the request
+        keeps its team rather than being sent to a queue nobody works in.
+        kundcenter_team() goes through search(), not a plain env.ref, so an
+        archived team is invisible to it."""
+        request = self._create_returnable_request(
+            owner_user_id=self.teamless_user.id
+        )
+        team_before = request.maintenance_team_id
+        self.kundcenter_team.action_archive()
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, team_before)
+        self.assertNotEqual(request.maintenance_team_id, self.kundcenter_team)
+
     def test_orderer_in_multiple_teams_takes_first(self):
         """An orderer in several teams: the first match is used"""
         second_team = self.env["maintenance.team"].create(
@@ -247,8 +264,9 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
             )
 
     def test_owner_change_in_same_write_uses_new_orderer_team(self):
-        """The team is resolved after super().write(): changing owner and
-        stage in one write hands the request to the NEW orderer's team"""
+        """Changing owner and stage in one write hands the request to the
+        NEW orderer's team: the team is resolved after super().write(), from
+        the owner as it then stands."""
         second_team = self.env["maintenance.team"].create(
             {"name": "Second Owner Team", "member_ids": [(4, self.teamless_user.id)]}
         )
@@ -261,6 +279,89 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
             }
         )
         self.assertEqual(request.maintenance_team_id, second_team)
+
+    def test_owner_change_to_a_group_less_user_goes_to_kundcenter(self):
+        """A new owner in no resource group does not work the Odoo queues at
+        all, so a hand-back "to their group" would reach nobody. Kundcenter,
+        who distribute every request in the organisation, is the target —
+        their AD department notwithstanding."""
+        self.teamless_user.write({"ad_office_location": "Fastighetsserviceenheten"})
+        request = self._create_returnable_request()
+
+        request.write(
+            {
+                "owner_user_id": self.teamless_user.id,
+                "stage_id": self.stage_atersand.id,
+            }
+        )
+
+        self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
+
+    def test_department_never_decides_the_return_target(self):
+        """The stamped "Beställande avdelning" is a follow-up facet, not a
+        queue. Even when it names a unit that happens to have a resource
+        group of the same name, the hand-back goes by membership."""
+        lookalike_team = self.env["maintenance.team"].create({"name": "Driftenheten"})
+        self.internal_user.write({"ad_office_location": "Driftenheten"})
+        request = self._create_returnable_request()
+        self.assertEqual(request.ordering_department, "Driftenheten")
+        self.assertNotIn(self.internal_user, lookalike_team.member_ids)
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.orderer_team)
+        self.assertNotEqual(request.maintenance_team_id, lookalike_team)
+
+    def test_clearing_the_owner_falls_back_to_the_creators_team(self):
+        """Without an owner the creator is the orderer, same as at create."""
+        request = create_maintenance_request(
+            self.env(user=self.internal_user),
+            maintenance_team_id=self.contractor_team.id,
+            owner_user_id=self.teamless_user.id,
+            stage_id=self.stage_paborjad.id,
+            user_id=self.external_user.id,
+        )
+
+        request.write({"owner_user_id": False, "stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.orderer_team)
+
+    def test_mimer_nu_request_returns_to_kundcenter_not_the_integration_user(self):
+        """Mina sidor-ärenden have no owner and a technical integration user
+        as create_uid. Whatever team that account happens to belong to says
+        nothing about who ordered; Kundcenter distributes the tenant inflow
+        and is the right target."""
+        integration_user = create_internal_user(self.env)
+        self.contractor_team.write({"member_ids": [(4, integration_user.id)]})
+        request = create_maintenance_request(
+            self.env(user=integration_user),
+            creation_origin="mimer-nu",
+            maintenance_team_id=self.contractor_team.id,
+            owner_user_id=False,
+            stage_id=self.stage_paborjad.id,
+            user_id=self.external_user.id,
+        )
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.kundcenter_team)
+        self.assertNotEqual(request.maintenance_team_id, self.contractor_team)
+
+    def test_mimer_nu_request_with_an_owner_returns_to_the_owners_team(self):
+        """Once somebody has taken ownership of a tenant request, they are the
+        orderer for the hand-back, same as for any other request."""
+        request = create_maintenance_request(
+            self.env,
+            creation_origin="mimer-nu",
+            maintenance_team_id=self.contractor_team.id,
+            owner_user_id=self.internal_user.id,
+            stage_id=self.stage_paborjad.id,
+            user_id=self.external_user.id,
+        )
+
+        request.write({"stage_id": self.stage_atersand.id})
+
+        self.assertEqual(request.maintenance_team_id, self.orderer_team)
 
     def test_redundant_same_stage_write_does_not_rerun_return(self):
         """Writing stage_id=Återsänd on a request already in Återsänd must not

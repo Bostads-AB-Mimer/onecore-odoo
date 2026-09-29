@@ -6,14 +6,24 @@
                 <t t-esc="record.name.raw_value"/>
             </b>
             <div class="d-flex flex-column">
-                <div t-if="record.new_mimer_notification.raw_value || record.recently_added_tenant.raw_value">
-                    <span class="mimer-badge">
-                        Ny kundinfo
+                <div t-if="record.has_unread_customer_message.raw_value">
+                    <span class="mimer-badge mimer-badge-orange">
+                        Meddelande från kund
+                    </span>
+                </div>
+                <div t-if="record.has_unread_new_customer_info.raw_value">
+                    <span class="mimer-badge mimer-badge-green">
+                        Ny kund
                     </span>
                 </div>
                 <div t-if="record.special_attention.raw_value">
                     <span class="mimer-badge bg-danger text-white">
                         Viktig kundinfo
+                    </span>
+                </div>
+                <div t-if="record.requires_pest_control.raw_value">
+                    <span class="mimer-badge bg-warning text-dark">
+                        Spärr skadedjur
                     </span>
                 </div>
                 <div t-if="record.has_unread_supplier_dialog.raw_value">

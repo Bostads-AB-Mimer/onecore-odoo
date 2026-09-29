@@ -13,10 +13,10 @@ import { _t } from "@web/core/l10n/translation";
  * value from a closure inside setup(), which a prototype patch cannot reach.
  * Going through Record.update also covers list view inline edits.
  *
- * Only direct edits of the two date fields prompt. A priority_expanded change
- * that recomputes due_date backwards arrives via the onchange result rather
- * than the change set, and is surfaced by the schedule_date_after_due_date
- * warning in the form and kanban instead.
+ * Only direct edits of the two date fields prompt. A priority change (preset
+ * or antal veckor) that recomputes due_date backwards arrives via the onchange
+ * result rather than the change set, and is surfaced by the
+ * schedule_date_after_due_date warning in the form and kanban instead.
  */
 
 const SCHEDULE_DATE = "schedule_date";

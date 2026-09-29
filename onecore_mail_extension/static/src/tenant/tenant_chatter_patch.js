@@ -19,6 +19,9 @@ patch(Chatter.prototype, {
   setup() {
     super.setup();
     this.dialogService = this.env.services.dialog;
+    // MIM-1956 — guards the pill row against a second click landing while a
+    // filter-triggered fetch is already in flight (see onClickLogFilter).
+    this.state.onecoreLogFilterBusy = false;
   },
 
   get pinnedMessages() {
@@ -35,6 +38,61 @@ patch(Chatter.prototype, {
     return thread.allMessages
       .filter((m) => m.pinned_at)
       .sort((a, b) => b.id - a.id);
+  },
+
+  // Every record opens on "Alla" (MIM-1956). The Thread record is a store
+  // singleton that outlives this component, so a stale category would
+  // otherwise survive navigation between ärenden.
+  //
+  // changeThread — not load — is the hook for that reset. Base calls load()
+  // after EVERY post and after the full composer closes as well
+  // (mail/static/src/chatter/web_portal/chatter.js: onPostCallback,
+  // onCloseFullComposerCallback), so resetting in load() threw the user's
+  // filter away mid-session: logging an intern notering under Kommunikation
+  // snapped the pills back to "Alla" while the log still held only the
+  // previous category's page. changeThread runs exactly on chatter mount and
+  // on a record switch, which is what "opens on Alla" means.
+  changeThread(threadModel, threadId) {
+    super.changeThread(threadModel, threadId);
+    const thread = this.state.thread;
+    if (thread?.onecoreLogCategory) {
+      // Drop the filtered window together with the filter. Without it the
+      // reopened log renders the previous category's page under an active
+      // "Alla" pill. No refetch here — base load() runs right after
+      // changeThread and does it.
+      this._onecoreSetLogCategory(thread, undefined);
+    }
+  },
+
+  // The one place that switches händelselogg category (MIM-1956). Setting the
+  // category alone is not enough: the loaded window belongs to the OLD
+  // category, so fetchNewMessages would ask for messages after an id from it.
+  // Three callers — onClickLogFilter, changeThread and onClickSearch — so this
+  // lives in one method rather than three copies of the same five lines.
+  // Deliberately does NOT fetch: changeThread must not, since base load()
+  // follows immediately.
+  _onecoreSetLogCategory(thread, categoryId) {
+    thread.onecoreLogCategory = categoryId;
+    thread.messages = [];
+    thread.isLoaded = false;
+    thread.loadOlder = false;
+    thread.loadNewer = false;
+  },
+
+  // Base fetchNewMessages/fetchMessages silently no-op while
+  // thread.status === "loading" (thread_model.js) — and that state isn't only
+  // set by fetches this module starts. Base's fetchThreadData fires
+  // fetchNewMessages() unawaited on every chatter mount, and onPostCallback,
+  // MAIL:RELOAD-THREAD and _acknowledgeSignals all land the thread in
+  // "loading" too. Clearing thread.messages (_onecoreSetLogCategory) while one
+  // of those is in flight, then having our own fetchNewMessages no-op against
+  // it, leaves an emptied list for the in-flight unfiltered fetch to splice
+  // its results into — an active pill over an unfiltered page (review on
+  // this PR). Wait it out instead of racing it.
+  async _onecoreAwaitThreadReady(thread) {
+    while (thread.status === "loading") {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   },
 
   async load(thread, requestList) {
@@ -55,6 +113,88 @@ patch(Chatter.prototype, {
       thread_id: thread.id,
     });
     this.store.insert(result.data);
+  },
+
+  // MIM-1956 — händelselogg filter. Single-select, reset to "Alla" on every
+  // record open: the filter is component state only, deliberately not
+  // persisted, so nobody comes back tomorrow to a log that looks truncated.
+  get onecoreLogFilters() {
+    return [
+      { id: undefined, label: _t("Alla") },
+      { id: "event", label: _t("Händelser") },
+      { id: "internal_note", label: _t("Interna noteringar") },
+      { id: "communication", label: _t("Kommunikation") },
+    ];
+  },
+
+  showLogFilter() {
+    return (
+      this.props.record?.resModel === "maintenance.request" &&
+      !!this.state.thread?.id &&
+      !this.state.isSearchOpen
+    );
+  },
+
+  isActiveLogFilter(categoryId) {
+    return (this.state.thread?.onecoreLogCategory ?? undefined) === categoryId;
+  },
+
+  async onClickLogFilter(categoryId) {
+    const thread = this.state.thread;
+    if (
+      !thread ||
+      this.isActiveLogFilter(categoryId) ||
+      this.state.onecoreLogFilterBusy
+    ) {
+      return;
+    }
+    // Busy-guard against rapid pill-switching (MIM-1956 review): base
+    // fetchNewMessages silently no-ops while thread.status === "loading", so
+    // a second click landing mid-fetch would set onecoreLogCategory to the
+    // new pill without ever sending its RPC — leaving the active pill and
+    // thread.messages out of sync. Disabling the row for the duration of the
+    // fetch (see the template's t-att-disabled) makes that click impossible
+    // rather than racing it.
+    this.state.onecoreLogFilterBusy = true;
+    try {
+      // A load started elsewhere (chatter mount, post, save, ack) may already
+      // be in flight — see _onecoreAwaitThreadReady. Let it settle before
+      // tearing down thread.messages, then re-check: it may have made this
+      // click stale (record switched, or the category already changed).
+      await this._onecoreAwaitThreadReady(thread);
+      if (!this.state.thread?.eq(thread) || this.isActiveLogFilter(categoryId)) {
+        return;
+      }
+      this._onecoreSetLogCategory(thread, categoryId);
+      await thread.fetchNewMessages();
+    } finally {
+      this.state.onecoreLogFilterBusy = false;
+    }
+  },
+
+  // Opening search clears the filter (MIM-1956). Search is NOT composed with
+  // the pills: store.searchMessagesInThread builds its RPC from
+  // thread.getFetchRoute() + thread.getFetchParams() (core/common/
+  // store_service.js), both of which our Thread patches hook, so an active
+  // category would silently scope the search to it — while showLogFilter()
+  // hides the pills, leaving the user no way to see why their term is not
+  // found. Composing the two is a deliberate follow-up, not this ticket.
+  // Consequence: closing search returns the pills to "Alla".
+  async onClickSearch() {
+    super.onClickSearch();
+    const thread = this.state.thread;
+    if (this.state.isSearchOpen && thread?.onecoreLogCategory) {
+      // Same race as onClickLogFilter (MIM-1956 review): don't clear
+      // thread.messages ahead of a load already in flight elsewhere, or our
+      // own fetchNewMessages below no-ops against it and leaves the log
+      // empty with no recovery.
+      await this._onecoreAwaitThreadReady(thread);
+      if (!this.state.thread?.eq(thread) || !thread.onecoreLogCategory) {
+        return;
+      }
+      this._onecoreSetLogCategory(thread, undefined);
+      await thread.fetchNewMessages();
+    }
   },
 
   _isUnsavedMaintenanceRequest() {
@@ -99,34 +239,97 @@ patch(Chatter.prototype, {
     return super.scheduleActivity();
   },
 
-  async onClickAcknowledgeDialog() {
+  // Unread acknowledge signals for the current viewer, in display order.
+  // supplier/internal dialog collapse into one "Meddelande" signal (only one
+  // is ever set for a given viewer). Labels/names are Swedish.
+  _unreadAckSignals() {
+    const data = this.props.record?.data ?? {};
+    const signals = [];
+    if (data.has_unread_supplier_dialog || data.has_unread_internal_dialog) {
+      signals.push({
+        name: _t("Meddelande"),
+        buttonLabel: _t("Markera meddelande som läst"),
+        method: "action_acknowledge_dialog",
+      });
+    }
+    if (data.has_unread_master_key_change) {
+      signals.push({
+        name: _t("Huvudnyckeländring"),
+        buttonLabel: _t("Markera huvudnyckeländring som läst"),
+        method: "action_acknowledge_master_key_change",
+      });
+    }
+    if (data.has_unread_new_customer_info) {
+      signals.push({
+        name: _t("Ny kund"),
+        buttonLabel: _t("Markera ny kund som läst"),
+        method: "action_acknowledge_new_customer_info",
+      });
+    }
+    if (data.has_unread_customer_message) {
+      signals.push({
+        name: _t("Meddelande från kund"),
+        buttonLabel: _t("Markera meddelande från kund som läst"),
+        method: "action_acknowledge_customer_message",
+      });
+    }
+    return signals;
+  },
+
+  showAckButton() {
+    return (
+      this.props.record?.resModel === "maintenance.request" &&
+      this._unreadAckSignals().length > 0
+    );
+  },
+
+  ackButtonLabel() {
+    const signals = this._unreadAckSignals();
+    return signals.length === 1 ? signals[0].buttonLabel : _t("Markera som läst");
+  },
+
+  async _acknowledgeSignals(signals) {
+    const record = this.props.record;
+    await Promise.all(
+      signals.map((s) =>
+        this.env.services.orm.call("maintenance.request", s.method, [
+          [record.resId],
+        ]),
+      ),
+    );
+    // Reload so has_unread_* refresh -> the button relabels/hides.
+    await record.load();
+    // Re-fetch messages so is_dialog_unread_for_side re-serializes and the
+    // orange highlight clears (acknowledging only changes computed flags on
+    // existing messages, so fetchNewMessages() would not refresh them).
+    await this.state?.thread?.fetchMessages();
+  },
+
+  async onClickAcknowledge() {
     const record = this.props.record;
     if (!record?.resId) {
       return;
     }
-    // The button is shared by two independent unread signals: the
-    // bidirectional supplier/internal dialog and the one-directional
-    // master-key change shared by all viewers. One click clears both.
-    // The dialog RPC is a no-op when no log-note dialog is unread for the
-    // caller's side, so calling both unconditionally is safe.
-    await Promise.all([
-      this.env.services.orm.call(
-        "maintenance.request",
-        "action_acknowledge_dialog",
-        [[record.resId]],
-      ),
-      this.env.services.orm.call(
-        "maintenance.request",
-        "action_acknowledge_master_key_change",
-        [[record.resId]],
-      ),
-    ]);
-    // Reload the form record so has_unread_* refreshes -> the button hides.
-    await record.load();
-    // Re-fetch the chatter messages so is_dialog_unread_for_side is
-    // re-serialized and the orange background clears. Acknowledging only
-    // changes a computed flag on existing messages, so fetchNewMessages()
-    // (which pulls messages newer than the latest) would not refresh them.
-    await this.state?.thread?.fetchMessages();
+    const signals = this._unreadAckSignals();
+    if (signals.length === 0) {
+      return;
+    }
+    if (signals.length === 1) {
+      await this._acknowledgeSignals(signals);
+      return;
+    }
+    // Two or more unread signals: confirm acknowledging all of them.
+    const names = signals.map((s) => s.name).join(", ");
+    this.dialogService.add(ConfirmationDialog, {
+      title: _t("Markera som läst"),
+      body: _t("Vill du markera följande som läst?") + " " + names,
+      confirmLabel: _t("Markera som läst"),
+      cancelLabel: _t("Avbryt"),
+      confirm: () => this._acknowledgeSignals(signals),
+      // ConfirmationDialog renders the cancel button on t-if="props.cancel",
+      // not on cancelLabel — without a callback there is no Avbryt at all and
+      // the only way out is the X / Escape.
+      cancel: () => {},
+    });
   },
 });

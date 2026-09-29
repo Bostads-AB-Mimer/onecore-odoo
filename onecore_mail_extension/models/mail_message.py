@@ -1,11 +1,21 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
+from odoo.fields import Domain
 
 import logging
 import requests
 from ...onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
+
+# ============================================================================
+# HÄNDELSELOGG CATEGORIES (MIM-1956)
+# ============================================================================
+# Categories for the chatter log filter. Derived, never stored, so the rules
+# apply retroactively to every existing message and cannot go stale.
+LOG_CATEGORY_EVENT = "event"
+LOG_CATEGORY_INTERNAL_NOTE = "internal_note"
+LOG_CATEGORY_COMMUNICATION = "communication"
 
 
 class OneCoreMailMessage(models.Model):
@@ -98,6 +108,7 @@ class OneCoreMailMessage(models.Model):
             "is_dialog_unread_for_side",
             "pinned_by_name",
             "can_pin",
+            "onecore_log_category",
         ]
 
     @api.model
@@ -137,9 +148,19 @@ class OneCoreMailMessage(models.Model):
             "pinned_by_name": self.pinned_by_name,
         }
 
+    # MIM-1956 — adding a type here has a side effect on the händelselogg
+    # filter: anything that is neither "comment" nor "notification" is
+    # classified as Kommunikation (see _onecore_log_category_for), i.e. it
+    # shows up in the filter handläggare read as the tenant conversation.
+    # Decide whether that is right, then add the type to EXPECTED_CATEGORIES at
+    # the bottom of this file — the test suite fails until you do.
     message_type = fields.Selection(
         selection_add=[
             ("from_tenant", "From tenant"),
+            # MIM-1960 — our confirmation that a Mina-sidor message was read.
+            # Deliberately NOT prefixed tenant_: create() treats every tenant_*
+            # type as an outbound SMS/email dispatch, and this must stay silent.
+            ("receipt_to_tenant", "Kvittens till hyresgäst"),
             ("tenant_sms", "Sent to tenant by SMS"),
             ("tenant_mail", "Sent to tenant by email"),
             ("tenant_mail_and_sms", "Sent to tenant by email and SMS"),
@@ -157,9 +178,11 @@ class OneCoreMailMessage(models.Model):
                 "tenant_mail_failed_and_sms_ok",
                 "Sent to tenant by email and SMS, but sending email failed",
             ),
+            ("tenant_my_pages", "Published to tenant on Mina sidor"),
         ],
         ondelete={
             "from_tenant": "set default",
+            "receipt_to_tenant": "set default",
             "tenant_sms": "set default",
             "tenant_mail": "set default",
             "tenant_mail_and_sms": "set default",
@@ -168,6 +191,7 @@ class OneCoreMailMessage(models.Model):
             "failed_tenant_mail_and_sms": "set default",
             "tenant_mail_ok_and_sms_failed": "set default",
             "tenant_mail_failed_and_sms_ok": "set default",
+            "tenant_my_pages": "set default",
         },
     )
 
@@ -182,6 +206,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "to": to_email,
@@ -190,6 +215,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -211,6 +237,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "phoneNumber": phone_number,
@@ -218,6 +245,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -232,8 +260,37 @@ class OneCoreMailMessage(models.Model):
             _logger.error(f"An error occurred: {err}")
         return None
 
+    def _log_my_pages_message(
+        self, work_order_code, contact_code, text, triggered_by_user=None
+    ):
+        """Record a Mina sidor publication in OneCore's communication log.
+
+        Best-effort by design: the tenant can already see the message (it exists
+        in Odoo with the tenant_my_pages type), so a logging failure must NOT
+        change message_type the way a failed SMS/e-post send does — that would
+        retract a delivered message. Failures are logged for monitoring only.
+        """
+        payload = {
+            "workOrderCode": work_order_code,
+            "contactCode": contact_code,
+            "text": text,
+            "triggeredByUser": triggered_by_user,
+        }
+        try:
+            response = self.get_core_api().request(
+                "POST", "/work-orders/log-my-pages-message", json=payload
+            )
+            response.raise_for_status()
+        except Exception as err:
+            _logger.error(
+                "Failed to log Mina sidor message for %s: %s",
+                work_order_code,
+                err,
+            )
+
     @api.model_create_multi
     def create(self, values_list):
+        pending_my_pages = []
         for values in values_list:
             if values["message_type"].startswith("tenant_"):
                 the_record = self.env["maintenance.request"].search(
@@ -255,6 +312,23 @@ class OneCoreMailMessage(models.Model):
                 # log entry for the outbound SMS/email.
                 contact_code = the_record.tenant_id.contact_code
                 triggered_by_user = self.env.user.name
+                work_order_code = f"od-{the_record.id}"
+
+                # Mina sidor only: nothing is sent, the message is published by
+                # existing on the record. Refuse it outright when the errand is
+                # hidden from Mimer.nu — digital tenant communication is closed
+                # there, and the composer hides the checkboxes for that case.
+                if values["message_type"] == "tenant_my_pages":
+                    if the_record.hidden_from_my_pages:
+                        raise UserError(
+                            _(
+                                "Det här ärendet är dolt från Mimer.nu. "
+                                "Meddelanden till hyresgäst kan inte skickas."
+                            )
+                        )
+                    pending_my_pages.append(
+                        (work_order_code, contact_code, body, triggered_by_user)
+                    )
 
                 # send by sms
                 if values["message_type"] == "tenant_sms":
@@ -264,6 +338,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_sms_result is None:
@@ -278,6 +353,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None:
@@ -292,6 +368,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
                     send_sms_result = self._send_sms(
                         the_record.tenant_id.phone_number,
@@ -299,6 +376,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None and send_sms_result is not None:
@@ -310,4 +388,173 @@ class OneCoreMailMessage(models.Model):
 
         messages = super(OneCoreMailMessage, self).create(values_list)
 
+        # Logged after the records exist: the log call is not transactional, so
+        # firing it inside the loop would leave OneCore asserting a publication
+        # that a later rollback erased. Safe to defer because nothing reads the
+        # result — a failed log call must never change message_type.
+        for args in pending_my_pages:
+            self._log_my_pages_message(*args)
+
         return messages
+
+    # ========================================================================
+    # HÄNDELSELOGG CATEGORY (MIM-1956)
+    # ========================================================================
+
+    onecore_log_category = fields.Selection(
+        [
+            (LOG_CATEGORY_EVENT, "Händelse"),
+            (LOG_CATEGORY_INTERNAL_NOTE, "Intern notering"),
+            (LOG_CATEGORY_COMMUNICATION, "Kommunikation"),
+        ],
+        string="Loggkategori",
+        compute="_compute_onecore_log_category",
+        store=False,
+    )
+
+    @api.model
+    def _onecore_log_category_for(self, message_type, subtype_internal):
+        """The single rule table behind the händelselogg filter.
+
+        First match wins. Both consumers — the computed field and
+        _onecore_log_category_domain — read these rules, so the server filter
+        and the value the OWL store sees cannot drift apart.
+
+        NOTE: Kommunikation is the catch-all. Any NEW message_type that is
+        neither "comment" nor "notification" therefore lands in the filter
+        handläggare read as the tenant conversation. tests/test_log_category.py
+        fails the build until such a type is classified deliberately.
+        """
+        if message_type == "notification":
+            return LOG_CATEGORY_EVENT
+        if message_type == "comment" and subtype_internal:
+            return LOG_CATEGORY_INTERNAL_NOTE
+        return LOG_CATEGORY_COMMUNICATION
+
+    @api.depends("message_type", "subtype_id.internal")
+    def _compute_onecore_log_category(self):
+        for message in self:
+            message.onecore_log_category = self._onecore_log_category_for(
+                message.message_type, message.subtype_id.internal
+            )
+
+    @api.model
+    def _onecore_log_category_domain(self, category):
+        """The search-domain twin of _onecore_log_category_for."""
+        event = Domain("message_type", "=", "notification")
+        internal_note = Domain("message_type", "=", "comment") & Domain(
+            "subtype_id.internal", "=", True
+        )
+        if category == LOG_CATEGORY_EVENT:
+            return event
+        if category == LOG_CATEGORY_INTERNAL_NOTE:
+            return internal_note
+        if category == LOG_CATEGORY_COMMUNICATION:
+            # Complement of the other two, so the three categories partition
+            # the log exactly.
+            #
+            # NULL-safety, i.e. why a message with no subtype at all stays in
+            # this bucket: DomainNot._to_sql is never reached, because
+            # DomainNot._optimize_step applies De Morgan first
+            # (odoo/orm/domains.py). ~internal_note therefore becomes
+            # message_type != "comment" OR subtype_id NOT ANY (internal = True),
+            # and Many2one.condition_to_sql wraps a negated 'any' as
+            # "(field IS NULL OR field NOT IN (...))" whenever can_be_null
+            # (odoo/orm/fields_relational.py). mail.message.subtype_id is
+            # nullable, so can_be_null holds and NULL subtypes match.
+            # Pinned by test_compute_and_domain_agree and
+            # test_categories_partition_all_messages, which both include a
+            # subtype-less "comment" — the only case where the relational
+            # branch decides the outcome on its own.
+            return ~event & ~internal_note
+        # Programmer error in server code. Values coming from the browser go
+        # through _onecore_sanitize_log_category first, so a bogus request
+        # cannot reach this.
+        raise ValueError(f"Okänd loggkategori: {category}")
+
+    @api.model
+    def _onecore_sanitize_log_category(self, category):
+        """Reduces a client-supplied category to a known value, or None.
+
+        onecore_log_category arrives from the browser as a top-level parameter
+        to /onecore/mail/thread/messages, so a stale or hand-crafted value must
+        not turn a malformed request into an Internal Server Error plus a
+        traceback in the log. Unknown values are dropped and the fetch returns
+        the unfiltered log (i.e. Alla). Nothing is exposed either way: the
+        category domain only ever narrows, and the fetch runs as the requesting
+        user with no sudo().
+        """
+        if not category:
+            return None
+        if category not in self._fields["onecore_log_category"].get_values(self.env):
+            _logger.warning(
+                "Okänd loggkategori i händelseloggens filter, ignoreras: %r", category
+            )
+            return None
+        return category
+
+    @api.model
+    def _message_fetch(self, domain, *, onecore_log_category=None, **kwargs):
+        """Adds the händelselogg category filter to the chatter fetch.
+
+        Applied as a plain search domain with no sudo(), so mail.message ACLs
+        and record rules still decide what an external contractor sees.
+        """
+        if onecore_log_category:
+            domain = Domain(
+                True if domain is None else domain
+            ) & self._onecore_log_category_domain(onecore_log_category)
+        return super()._message_fetch(domain, **kwargs)
+
+
+# ============================================================================
+# HÄNDELSELOGG CATEGORY EXPECTATIONS (MIM-1956)
+# ============================================================================
+# Every message_type the chatter can show, mapped to the category it MUST fall
+# into. `user_notification` is excluded because base _message_fetch filters it
+# out before it can reach the chatter.
+#
+# This map is deliberately exhaustive:
+# tests/test_log_category.py::test_every_message_type_is_classified fails the
+# build when a new type is added to the message_type selection without being
+# listed here. That is the only guard against a new type silently landing in
+# Kommunikation via the catch-all in _onecore_log_category_for, i.e. in the
+# filter a handläggare reads as "the tenant conversation" — so it lives next to
+# the rule table it guards, in the file a developer adding a type is already
+# editing.
+EXPECTED_CATEGORIES = {
+    # Base Odoo types (addons/mail/models/mail_message.py:119)
+    "email": LOG_CATEGORY_COMMUNICATION,
+    # `comment` is the one type whose category depends on the subtype: with an
+    # internal subtype (mail.mt_note = "Logga notering") it is an intern
+    # notering, with a public one (mail.mt_comment) it is kommunikation. The
+    # value below is its public reading; the internal one is covered by
+    # test_log_note_is_internal_note.
+    "comment": LOG_CATEGORY_COMMUNICATION,
+    "email_outgoing": LOG_CATEGORY_COMMUNICATION,
+    "notification": LOG_CATEGORY_EVENT,
+    "auto_comment": LOG_CATEGORY_COMMUNICATION,
+    "out_of_office": LOG_CATEGORY_COMMUNICATION,
+    # ONECore types (see the message_type selection_add above)
+    "from_tenant": LOG_CATEGORY_COMMUNICATION,
+    "receipt_to_tenant": LOG_CATEGORY_COMMUNICATION,
+    "tenant_sms": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_sms": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_mail": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_ok_and_sms_failed": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_failed_and_sms_ok": LOG_CATEGORY_COMMUNICATION,
+    "tenant_my_pages": LOG_CATEGORY_COMMUNICATION,
+    # base `sms` and `snailmail` addons (auto_install=True on `mail`+`iap_mail`,
+    # both already satisfied here) add these two selection values even though
+    # onecore doesn't use either module directly. Neither is "comment" nor
+    # "notification", so the rule table's catch-all already puts them in
+    # Kommunikation — correct, since both represent outbound communication to
+    # a partner. Listed here so they are classified deliberately. They arrive
+    # via auto_install rather than this repo's -i list, so the test tolerates
+    # them being absent from the live selection instead of failing.
+    "sms": LOG_CATEGORY_COMMUNICATION,
+    "snailmail": LOG_CATEGORY_COMMUNICATION,
+}

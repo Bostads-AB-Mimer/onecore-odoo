@@ -1,6 +1,11 @@
 import logging
 from odoo import _, exceptions
-from ..utils.helpers import get_tenant_name, get_main_phone_number, select_active_lease
+from ..utils.helpers import (
+    get_tenant_name,
+    get_main_phone_number,
+    normalize_lease_status,
+    select_active_lease,
+)
 from ..constants import LEASE_STATUS_LABELS
 
 _logger = logging.getLogger(__name__)
@@ -54,17 +59,8 @@ class BaseMaintenanceHandler:
             [("user_id", "=", self.env.user.id)]
         ).unlink()
 
-    _LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
-
-    _UNKNOWN_STATUS = 4
-
     def _normalize_lease_status(self, raw_status):
-        if raw_status in self._LEASE_STATUS_MAP:
-            return self._LEASE_STATUS_MAP[raw_status]
-        if raw_status in self._LEASE_STATUS_MAP.values():
-            return raw_status
-        _logger.warning("Unexpected lease status value: %s", raw_status)
-        return self._UNKNOWN_STATUS
+        return normalize_lease_status(raw_status)
 
     def _create_lease_option(
         self,
@@ -82,11 +78,12 @@ class BaseMaintenanceHandler:
         lease_data = {
             "user_id": self.env.user.id,
             "name": lease_name,
+            "lease_id": lease["leaseId"],
             "lease_number": lease["leaseNumber"],
             "lease_type": lease["type"],
             "lease_status": status,
             "lease_start_date": lease["leaseStartDate"],
-            "lease_end_date": lease["lastDebitDate"],
+            "last_debit_date": lease["lastDebitDate"],
             "contract_date": lease["contractDate"],
             "approval_date": lease["approvalDate"],
         }

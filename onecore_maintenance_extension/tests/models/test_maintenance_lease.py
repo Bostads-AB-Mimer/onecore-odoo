@@ -14,3 +14,22 @@ class TestMaintenanceLease(TransactionCase):
         self.assertFalse(
             self.env["maintenance.lease"].search([("maintenance_request_id", "=", request.id)])
         )
+
+    def test_name_includes_the_status_label(self):
+        lease = create_lease(self.env, lease_id="705-023-04-0201/01", lease_status=0)
+        self.assertEqual(lease.name, "705-023-04-0201/01 (Gällande)")
+
+    def test_name_recomputes_when_lease_status_changes(self):
+        """MIM-1954: name must never drift from lease_status_label again -
+        the reported regression where Kontrakt kept showing "(Kommande)"
+        while Kontraktsstatus already said "Gällande"."""
+        lease = create_lease(self.env, lease_id="216-034-03-0101/01", lease_status=1)
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Kommande)")
+
+        lease.lease_status = 0
+
+        self.assertEqual(lease.name, "216-034-03-0101/01 (Gällande)")
+
+    def test_name_falls_back_to_the_bare_lease_id_without_a_label(self):
+        lease = create_lease(self.env, lease_id="705-023-04-0201/01", lease_status=99)
+        self.assertEqual(lease.name, "705-023-04-0201/01")

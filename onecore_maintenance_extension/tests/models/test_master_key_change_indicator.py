@@ -141,3 +141,22 @@ class TestAcknowledgeMasterKeyChange(TransactionCase):
 
         record.action_acknowledge_master_key_change()
         self.assertFalse(record.has_unread_master_key_change)
+
+    def test_ack_posts_audit_note(self):
+        # create_maintenance_request()/create() leaves `creating_records=True`
+        # on the returned recordset's context (see maintenance.py create()),
+        # which makes write() skip FieldChangeTracker entirely. Tests that
+        # assert on posted chatter notes must override it, same as
+        # test_maintenance_workflow_service.py does.
+        record = self._refresh(self.internal_user).with_context(
+            creating_records=False
+        )
+        before = set(record.message_ids.ids)
+        record.action_acknowledge_master_key_change()
+        # message_ids is a plain relational field, not a compute — it was
+        # already fetched (and cached) by the `before` read above, so it
+        # must be explicitly invalidated to see the note just posted.
+        record.invalidate_recordset(["message_ids"])
+        new_msgs = record.message_ids.filtered(lambda m: m.id not in before)
+        self.assertTrue(new_msgs)
+        self.assertIn("Huvudnyckeländring kvitterad", " ".join(new_msgs.mapped("body")))

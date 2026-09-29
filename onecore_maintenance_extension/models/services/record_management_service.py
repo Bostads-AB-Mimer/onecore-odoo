@@ -4,7 +4,8 @@ import base64
 import datetime
 import logging
 from odoo import fields
-from ..utils.helpers import get_tenant_name, get_main_phone_number
+from ..utils.helpers import get_tenant_name, get_main_phone_number, normalize_lease_status
+from .direct_lookup_service import all_routes
 from ....onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
@@ -149,14 +150,17 @@ class RecordManagementService:
         )
         new_lease_record = self.env["maintenance.lease"].create(
             {
-                "lease_id": lease_option_record.name,
-                "name": lease_option_record.name,
+                # OneCore's leaseId - the option's name is a display name, so the
+                # identity has to come from lease_id or the flag syncs find nothing.
+                # name is computed from lease_id/lease_status_label, not set here.
+                "lease_id": lease_option_record.lease_id,
                 "lease_number": lease_option_record.lease_number,
                 "lease_type": lease_option_record.lease_type,
                 "lease_start_date": lease_option_record.lease_start_date,
-                "lease_end_date": lease_option_record.lease_end_date,
                 "contract_date": lease_option_record.contract_date,
                 "approval_date": lease_option_record.approval_date,
+                "lease_status": lease_option_record.lease_status,
+                "last_debit_date": lease_option_record.last_debit_date,
                 "maintenance_request_id": maintenance_request.id,
             }
         )
@@ -205,6 +209,9 @@ class RecordManagementService:
         new_parking_space_record = self.env["maintenance.parking.space"].create(
             {
                 "name": parking_space_option_record.name,
+                # OneCore's rentalId - the option's name is a display name, so the
+                # identity has to come from rental_id or the flag syncs find nothing.
+                "rental_property_id": parking_space_option_record.rental_id,
                 "code": parking_space_option_record.code,
                 "type_name": parking_space_option_record.type_name,
                 "type_code": parking_space_option_record.type_code,
@@ -230,6 +237,8 @@ class RecordManagementService:
         new_facility_record = self.env["maintenance.facility"].create(
             {
                 "name": facility_option_record.name,
+                # OneCore's rentalId - see _save_parking_space.
+                "rental_property_id": facility_option_record.rental_id,
                 "code": facility_option_record.code,
                 "type_name": facility_option_record.type_name,
                 "type_code": facility_option_record.type_code,
@@ -288,8 +297,84 @@ class RecordManagementService:
         else:
             record.recently_added_tenant = False
 
-        if record.rental_property_id and not record.lease_id:  # Empty tenant / lease
+        if (
+            record.rental_property_id
+            and not record.lease_id
+            # User deliberately left it vacant — and deliberately for good: the
+            # ärende was raised on a vacant object, so a tenant who moves in later
+            # must not be attached to it retroactively. Only the backfill wizard
+            # clears the flag, by attaching a contract.
+            and not record.manually_vacated
+        ):  # Empty tenant / lease
             self._create_missing_lease_and_tenant(record)
+
+    def flag_new_tenant_attached(self, record):
+        """Mark a request whose FIRST tenant was just attached (MIM-1953).
+
+        Called only on a genuine no-tenant -> tenant transition, from both
+        the passive OneCore refetch (_create_tenant, below) and the
+        "Lägg till/ändra hyresgäst" backfill wizard. A request raised with no
+        tenant (e.g. a supplier work order on a vacant apartment) must not
+        surface to whoever moves in afterwards — hidden_from_my_pages is a
+        manual, reversible checkbox, so a Mimer handler can still un-hide it
+        after reviewing the case.
+        """
+        record.recently_added_tenant = True
+        record.hidden_from_my_pages = True
+
+    def unlink_record(self, record):
+        """Best-effort delete of a permanent record being removed or replaced.
+
+        If the delete is blocked (e.g. a reference elsewhere), log a warning and
+        leave the record unreferenced rather than failing the caller.
+
+        A blocked delete is a foreign-key violation, which aborts the transaction,
+        so the savepoint is what keeps "best-effort" honest: without it the caught
+        exception would still take down whatever the caller does next — the
+        remaining unlinks and the chatter note — rolling back the change the user
+        just confirmed.
+        """
+        if not record or not record.exists():
+            return
+        try:
+            with self.env.cr.savepoint():
+                record.unlink()
+        except Exception as err:
+            _logger.warning(
+                "Could not delete %s record %s: %s", record._name, record.id, err
+            )
+
+    def remove_rental_object(self, request):
+        """Remove the rental object from ``request`` (MIM-1840).
+
+        Object-only: whichever of the rentalId-bearing object fields is set is
+        cleared and its permanent record deleted. The contract and tenant are
+        deliberately left alone — the Objektsinformation trashcan owns only its
+        own section, even though that can leave a contract with no object.
+        """
+        for route in all_routes():
+            field = route["record_field"]
+            old_record = request[field]
+            if not old_record:
+                continue
+            request.write({field: False})
+            self.unlink_record(old_record)
+
+    def remove_tenant(self, request):
+        """Vacate ``request`` — remove both tenant and contract (MIM-1840).
+
+        Tenant and contract are one unit: the Hyresgäst section header sits above
+        both fields, so its trashcan empties the whole section. The rental object
+        is left untouched.
+
+        ``manually_vacated`` is what makes the removal stick: without it the
+        empty-tenant auto-refetch in :meth:`handle_empty_tenant_logic` would
+        re-populate the tenant we just deleted.
+        """
+        old_lease, old_tenant = request.lease_id, request.tenant_id
+        request.write({"lease_id": False, "tenant_id": False, "manually_vacated": True})
+        self.unlink_record(old_lease)
+        self.unlink_record(old_tenant)
 
     def _create_missing_lease_and_tenant(self, record):
         """Create missing lease and tenant data from API."""
@@ -324,13 +409,13 @@ class RecordManagementService:
         return self.env["maintenance.lease"].create(
             {
                 "lease_id": lease["leaseId"],
-                "name": lease["leaseId"],
                 "lease_number": lease["leaseNumber"],
                 "lease_type": lease["type"],
                 "lease_start_date": lease["leaseStartDate"],
-                "lease_end_date": lease["lastDebitDate"],
+                "last_debit_date": lease["lastDebitDate"],
                 "contract_date": lease["contractDate"],
                 "approval_date": lease["approvalDate"],
+                "lease_status": normalize_lease_status(lease.get("status")),
             }
         )
 
@@ -355,5 +440,5 @@ class RecordManagementService:
             )
 
             record.tenant_id = recently_added_tenant_record.id
-            record.recently_added_tenant = True
             record.empty_tenant = False
+            self.flag_new_tenant_attached(record)

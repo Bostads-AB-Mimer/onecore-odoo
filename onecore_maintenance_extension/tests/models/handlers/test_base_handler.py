@@ -120,6 +120,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
         )
 
         self.assertEqual(lease_option.name, f"{lease_data['leaseId']} (Gällande)")
+        self.assertEqual(lease_option.lease_id, lease_data["leaseId"])
         self.assertEqual(lease_option.lease_number, lease_data["leaseNumber"])
         self.assertEqual(lease_option.lease_type, lease_data["type"])
         self.assertEqual(

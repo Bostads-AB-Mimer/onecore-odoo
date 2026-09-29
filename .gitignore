@@ -41,3 +41,12 @@ CLAUDE.md
 **/CLAUDE.md
 .claude/settings.local.json
 .claude/*
+
+# Local AI e2e testing files
+.playwright-cli
+
+# Local AI planning / dev files (save docs/superpowers however for tracking plans)
+.superpowers
+
+# Local backups
+.db_backups

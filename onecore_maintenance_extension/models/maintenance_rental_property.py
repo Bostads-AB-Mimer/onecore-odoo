@@ -10,6 +10,8 @@ class OnecoreMaintenanceRentalPropertyOption(models.Model):
         "res.users", "Användare", default=lambda self: self.env.user
     )
     name = fields.Char("Namn", required=True)
+    # OneCore's rentalId — the object's identity, and what options are reused by.
+    rental_id = fields.Char("Hyresobjekt ID")
     property_type = fields.Char("Fastighetstyp", required=True)
     address = fields.Char("Adress")
     code = fields.Char("Kod")

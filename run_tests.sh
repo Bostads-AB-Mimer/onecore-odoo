@@ -8,7 +8,7 @@ TEST_DB_NAME="test_onecore_$(date +%s)"
 
 echo "Running tests with database: $TEST_DB_NAME"
 
-ONECORE_MODULES="onecore_maintenance_extension,onecore_mail_extension,onecore_base_extension,onecore_web_extension,onecore_api,onecore_ui"
+ONECORE_MODULES="onecore_maintenance_extension,onecore_mail_extension,onecore_base_extension,onecore_web_extension,onecore_api,onecore_ui,onecore_auth"
 
 ENV=local python3 "$ODOO_PATH/odoo-bin" \
   --addons-path="$ODOO_PATH/addons,$ODOO_ONECORE_PATH" \
