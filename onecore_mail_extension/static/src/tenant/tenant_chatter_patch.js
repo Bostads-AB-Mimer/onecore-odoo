@@ -22,6 +22,9 @@ patch(Chatter.prototype, {
     // MIM-1956 — guards the pill row against a second click landing while a
     // filter-triggered fetch is already in flight (see onClickLogFilter).
     this.state.onecoreLogFilterBusy = false;
+    // MIM-2036 — same guard for the close-request buttons, so a double click
+    // cannot send the accept twice.
+    this.state.onecoreCloseRequestBusy = false;
   },
 
   get pinnedMessages() {
@@ -330,6 +333,74 @@ patch(Chatter.prototype, {
       // not on cancelLabel — without a callback there is no Avbryt at all and
       // the only way out is the X / Escape.
       cancel: () => {},
+    });
+  },
+
+  // MIM-2036 — "Hyresgäst vill avsluta". Deliberately not one of
+  // _unreadAckSignals: it asks for a decision, not an acknowledgement, so it
+  // has its own strip with two actions and is never folded into "Markera som
+  // läst".
+  showCloseRequestSignal() {
+    return (
+      this.props.record?.resModel === "maintenance.request" &&
+      !!this.props.record.data.close_request_pending
+    );
+  },
+
+  // External contractors may never move a case to Avslutad
+  // (ExternalContractorService.validate_stage_transition), so they are only
+  // offered Avslå. The server refuses them regardless; this keeps a button
+  // that could never succeed off their screen.
+  canAcceptCloseRequest() {
+    return !this.props.record?.data?.user_is_external_contractor;
+  },
+
+  async _refreshAfterCloseRequest() {
+    // Reload so the stage, the badge and close_request_pending refresh, then
+    // fetch the request's new chatter message (the decline or the stage note).
+    await this.props.record.load();
+    await this.state?.thread?.fetchNewMessages();
+  },
+
+  async _runCloseRequestAction(callback) {
+    const record = this.props.record;
+    if (!record?.resId || this.state.onecoreCloseRequestBusy) {
+      return;
+    }
+    this.state.onecoreCloseRequestBusy = true;
+    try {
+      // The reload afterwards would drop unsaved edits in the form. Save
+      // first; a form that cannot be saved stops here with its own message.
+      if ((await record.isDirty()) && !(await record.save())) {
+        return;
+      }
+      await callback(record);
+    } finally {
+      this.state.onecoreCloseRequestBusy = false;
+    }
+  },
+
+  onClickAcceptCloseRequest() {
+    return this._runCloseRequestAction(async (record) => {
+      await this.env.services.orm.call(
+        "maintenance.request",
+        "action_accept_close_request",
+        [[record.resId]],
+      );
+      await this._refreshAfterCloseRequest();
+    });
+  },
+
+  onClickDeclineCloseRequest() {
+    return this._runCloseRequestAction(async (record) => {
+      const action = await this.env.services.orm.call(
+        "maintenance.request",
+        "action_decline_close_request",
+        [[record.resId]],
+      );
+      await this.env.services.action.doAction(action, {
+        onClose: () => this._refreshAfterCloseRequest(),
+      });
     });
   },
 });

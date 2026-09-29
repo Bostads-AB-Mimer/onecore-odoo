@@ -482,3 +482,30 @@ class TestCloseRequestBadge(TransactionCase):
             "onecore_maintenance_extension/static/src/scss/mimer_styles.scss"
         )
         self.assertIn(".mimer-badge-purple", scss)
+
+
+@tagged("onecore")
+class TestCloseRequestChatterSignal(TransactionCase):
+    """The chatter calls the model by method name from JavaScript; a rename on
+    either side would fail silently in the browser. Pin the names here."""
+
+    JS = "onecore_mail_extension/static/src/tenant/tenant_chatter_patch.js"
+    XML = "onecore_mail_extension/static/src/tenant/tenant_chatter.xml"
+
+    def _source(self, path):
+        with file_open(path) as source:
+            return source.read()
+
+    def test_chatter_calls_methods_that_exist(self):
+        js = self._source(self.JS)
+        for method in ("action_accept_close_request", "action_decline_close_request"):
+            with self.subTest(method=method):
+                self.assertIn(f'"{method}"', js)
+                self.assertTrue(hasattr(self.env["maintenance.request"], method))
+
+    def test_accept_is_hidden_for_external_contractors(self):
+        js = self._source(self.JS)
+        self.assertIn("user_is_external_contractor", js)
+        template = self._source(self.XML)
+        self.assertIn('t-if="showCloseRequestSignal()"', template)
+        self.assertIn('t-if="canAcceptCloseRequest()"', template)
