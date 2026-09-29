@@ -6,6 +6,7 @@ request_close_from_tenant, and an Odoo user decides: "Avsluta ärendet"
 Moving the case to Avslutad any other way also resolves the request.
 """
 
+import re
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -340,3 +341,104 @@ class TestCloseRequestResolution(CloseRequestCase):
         self._as(self.internal_user).write({"stage_id": self.stage_vantar.id})
         self.assertIs(self._as(self.mimer_user).request_close_from_tenant(), True)
         self.assertTrue(self._fresh().close_request_pending)
+
+
+@tagged("onecore")
+class TestCloseRequestDecline(CloseRequestCase):
+    WIZARD = "maintenance.close.request.decline.wizard"
+
+    def setUp(self):
+        super().setUp()
+        self._as(self.mimer_user).request_close_from_tenant()
+
+    def _wizard(self, user, reason="Vi väntar på reservdelar."):
+        return (
+            self.env[self.WIZARD]
+            .with_user(user)
+            .create({"request_id": self.request.id, "reason": reason})
+        )
+
+    def _declines(self):
+        return self._messages(CLOSE_REQUEST_DECLINED_MESSAGE_TYPE)
+
+    def test_decline_action_opens_the_wizard_for_this_request(self):
+        action = self._as(self.internal_user).action_decline_close_request()
+        self.assertEqual(action["type"], "ir.actions.act_window")
+        self.assertEqual(action["res_model"], self.WIZARD)
+        self.assertEqual(action["target"], "new")
+        self.assertEqual(action["context"], {"default_request_id": self.request.id})
+
+    def test_decline_action_when_already_handled_is_refused(self):
+        self._wizard(self.internal_user).action_confirm()
+        with self.assertRaisesRegex(UserError, "Begäran om avslut är redan hanterad"):
+            self._as(self.internal_user).action_decline_close_request()
+
+    def test_confirm_posts_the_reason_and_resolves(self):
+        self._wizard(self.internal_user).action_confirm()
+        decline = self._declines()
+        self.assertEqual(len(decline), 1)
+        self.assertIn("Vi väntar på reservdelar.", decline.body)
+        self.assertEqual(decline.author_id, self.internal_user.partner_id)
+        # Tenant-facing (MIM-2040): work-order shows onecore_tenant_author_name
+        # for every whitelisted type except the tenant-authored ones.
+        self.assertEqual(decline.onecore_tenant_author_name, "Mimer")
+        request = self._fresh()
+        self.assertFalse(request.close_request_pending)
+        self.assertTrue(request.close_request_resolved_at)
+
+    def test_reason_is_escaped_in_the_body(self):
+        self._wizard(
+            self.internal_user, reason="<script>x()</script>\nVi återkommer"
+        ).action_confirm()
+        body = self._declines().body
+        self.assertIn("&lt;script&gt;x()&lt;/script&gt;<br>Vi återkommer", body)
+        self.assertNotIn("<script", body)
+
+    def test_whitespace_only_reason_is_refused(self):
+        # required=True on the field lets whitespace through; the wizard must not.
+        wizard = self._wizard(self.internal_user, reason="  \n\t ")
+        with self.assertRaisesRegex(UserError, "Ange en orsak"):
+            wizard.action_confirm()
+        self.assertFalse(self._declines())
+        self.assertTrue(self._fresh().close_request_pending)
+
+    def test_contractor_can_decline_and_is_named_to_the_tenant(self):
+        self._wizard(self.external_user).action_confirm()
+        self.assertFalse(self._fresh().close_request_pending)
+        # MIM-2040 labels tenant-facing messages from their author at write time.
+        self.assertEqual(
+            self._declines().onecore_tenant_author_name,
+            "Mimers Leverantör - Test Team",
+        )
+
+    def test_confirm_after_the_case_was_closed_says_already_handled(self):
+        wizard = self._wizard(self.internal_user)
+        self._as(self.internal_user).action_accept_close_request()
+        with self.assertRaisesRegex(
+            UserError, re.escape("Begäran om avslut är redan hanterad.")
+        ):
+            wizard.action_confirm()
+        self.assertFalse(self._declines())
+
+    def test_second_decline_says_already_handled(self):
+        first = self._wizard(self.internal_user)
+        second = self._wizard(self.external_user, reason="Nej")
+        first.action_confirm()
+        with self.assertRaisesRegex(
+            UserError, re.escape("Begäran om avslut är redan hanterad.")
+        ):
+            second.action_confirm()
+        self.assertEqual(len(self._declines()), 1)
+
+    def test_new_request_after_a_decline_is_pending_again(self):
+        self._wizard(self.internal_user).action_confirm()
+        self._as(self.mimer_user).request_close_from_tenant(reason="Snälla")
+        self.assertTrue(self._fresh().close_request_pending)
+
+    def test_decline_never_dispatches_a_real_sms_or_email(self):
+        mail_message_cls = type(self.env["mail.message"])
+        with patch.object(mail_message_cls, "_send_sms") as mock_send_sms:
+            with patch.object(mail_message_cls, "_send_email") as mock_send_email:
+                self._wizard(self.internal_user).action_confirm()
+        mock_send_sms.assert_not_called()
+        mock_send_email.assert_not_called()

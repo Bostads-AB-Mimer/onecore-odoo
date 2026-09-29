@@ -18,6 +18,7 @@
         "views/mobile_view.xml",
         "views/maintenance_component_wizard_view.xml",
         "views/backfill_wizard_view.xml",
+        "views/close_request_decline_wizard_view.xml",
         "views/res_users_view.xml",
         # Load initial Data
         "data/maintenance.team.csv",

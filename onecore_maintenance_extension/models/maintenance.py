@@ -948,6 +948,21 @@ class OneCoreMaintenanceRequest(
         self.write({"stage_id": closed_stage.id})
         return True
 
+    def action_decline_close_request(self):
+        """Open the Avslå dialog. Contractors may decline as well as Mimer."""
+        self.ensure_one()
+        if not self.close_request_pending:
+            raise UserError(_("Begäran om avslut är redan hanterad."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Avslå begäran om avslut"),
+            "res_model": "maintenance.close.request.decline.wizard",
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": {"default_request_id": self.id},
+        }
+
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
         if not self.phone_number or self.hidden_from_my_pages:
