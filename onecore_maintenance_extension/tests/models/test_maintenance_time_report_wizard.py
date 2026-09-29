@@ -437,11 +437,32 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
         params = self.env["ir.config_parameter"].sudo()
         params.set_param("time_report_base_url", False)
         action = wizard.action_open_time_report_app()
-        self.assertEqual(action["url"], "https://apps.mimer.nu/tidsrapportering")
-        self.assertEqual(action["target"], "new")
+        self.assertEqual(
+            action["url"],
+            f"https://apps.mimer.nu/tidsrapportering?od={self.request.id}&p=15103",
+        )
+        self.assertEqual(action["target"], "self")
 
-        params.set_param("time_report_base_url", "https://apps.mimer.nu/version-test/tidsrapportering/")
-        self.assertIn("version-test", wizard.action_open_time_report_app()["url"])
+        params.set_param(
+            "time_report_base_url", "https://apps.mimer.nu/version-test/tidsrapportering/"
+        )
+        self.assertEqual(
+            wizard.action_open_time_report_app()["url"],
+            "https://apps.mimer.nu/version-test/tidsrapportering/"
+            f"?od={self.request.id}&p=15103",
+        )
+
+        params.set_param("time_report_base_url", "https://apps.mimer.nu/tr?x=1")
+        self.assertEqual(
+            wizard.action_open_time_report_app()["url"],
+            f"https://apps.mimer.nu/tr?x=1&od={self.request.id}&p=15103",
+        )
+
+    def test_open_time_report_app_without_property_omits_p(self):
+        wizard = self._wizard_without_property()
+        url = wizard.action_open_time_report_app()["url"]
+        self.assertIn(f"od={wizard.maintenance_request_id.id}", url)
+        self.assertNotIn("p=", url)
 
     def test_known_app_user_is_not_blocked(self):
         wizard = self._open_wizard()

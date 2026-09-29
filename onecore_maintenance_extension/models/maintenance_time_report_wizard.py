@@ -2,6 +2,7 @@
 """Wizard for reporting time on a maintenance request to the time reporting app."""
 
 import logging
+import urllib.parse
 from datetime import datetime, timedelta
 
 import pytz
@@ -181,11 +182,19 @@ class MaintenanceTimeReportWizard(models.TransientModel):
             raise UserError(APP_USER_MISSING_MESSAGE)
 
     def action_open_time_report_app(self):
-        url = (
+        base_url = (
             self.env["ir.config_parameter"].sudo().get_param(APP_URL_PARAM)
             or DEFAULT_APP_URL
         )
-        return {"type": "ir.actions.act_url", "url": url, "target": "new"}
+        # Same parameters as the old "Öppna tidrapport" link, so the app can
+        # send the user back to this request.
+        params = {"od": self.maintenance_request_id.id}
+        if self.property_code:
+            params["p"] = self.property_code
+        separator = "&" if "?" in base_url else "?"
+        url = f"{base_url}{separator}{urllib.parse.urlencode(params)}"
+        # Same window: a new one is a blocked popup when Odoo runs as a PWA.
+        return {"type": "ir.actions.act_url", "url": url, "target": "self"}
 
     def action_recheck_user(self):
         self._refresh_user_check()
