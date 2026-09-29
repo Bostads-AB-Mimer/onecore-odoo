@@ -57,7 +57,8 @@ class TestAdOfficeLocationSync(TransactionCase):
         login = self._signin({"office_location": "Kundcenterenheten"})
 
         self.assertEqual(login, "ad.test@example.com")
-        # Raw, not normalised: the reader normalises, so import and SSO agree
+        # As AD spells it: the value is copied onto requests verbatim, so
+        # import and SSO must agree
         self.assertEqual(self.user.ad_office_location, "Kundcenterenheten")
 
     def test_claim_replaces_a_stale_value(self):
@@ -118,8 +119,9 @@ class TestAdOfficeLocationSync(TransactionCase):
         """"Multivalued" is a checkbox on the hand-made Keycloak mapper; with
         it on, the claim arrives as a list. str() would
         store the literal "['Kundcenterenheten']" — no exception, so the
-        except branch never fires, and normalize_ad_unit would then match no
-        mapping row with nothing in the log to explain why."""
+        except branch never fires, and every request the user orders would
+        carry that literal as its department with nothing in the log to
+        explain why."""
         self.user.write({"ad_office_location": "Kundcenter"})
 
         with self.assertLogs(
