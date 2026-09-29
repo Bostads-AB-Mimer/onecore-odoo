@@ -32,6 +32,7 @@
       <mobile default_group_by="stage_id">
         <!-- These are the fields we want for each record from the db for this view_mode -->
         <field name="stage_id" />
+        <field name="maintenance_team_id" />
         <field name="color" />
         <field name="priority_label" />
         <field name="equipment_id" />
