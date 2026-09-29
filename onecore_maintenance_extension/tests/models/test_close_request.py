@@ -14,7 +14,7 @@ from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
-from odoo.tools import SQL
+from odoo.tools import SQL, file_open
 
 from ..utils.test_utils import (
     create_external_contractor_user,
@@ -442,3 +442,43 @@ class TestCloseRequestDecline(CloseRequestCase):
                 self._wizard(self.internal_user).action_confirm()
         mock_send_sms.assert_not_called()
         mock_send_email.assert_not_called()
+
+
+@tagged("onecore")
+class TestCloseRequestBadge(TransactionCase):
+    """The card and form can only read fields their view arch loads; a badge
+    whose field is missing from the arch renders nothing and raises nothing."""
+
+    def _arch(self, view_type):
+        return self.env["maintenance.request"].get_view(view_type=view_type)["arch"]
+
+    def _source(self, path):
+        with file_open(path) as source:
+            return source.read()
+
+    def test_kanban_loads_the_pending_flag(self):
+        self.assertIn('name="close_request_pending"', self._arch("kanban"))
+
+    def test_form_loads_the_pending_flag(self):
+        self.assertIn('name="close_request_pending"', self._arch("form"))
+
+    def test_mobile_view_loads_the_pending_flag(self):
+        arch = self.env.ref(
+            "onecore_maintenance_extension.hr_equipment_request_view_mobile"
+        ).arch
+        self.assertIn('name="close_request_pending"', arch)
+
+    def test_card_template_renders_the_purple_badge(self):
+        template = self._source(
+            "onecore_maintenance_extension/static/src/views/maintenance_request_item.xml"
+        )
+        self.assertIn("record.close_request_pending.raw_value", template)
+        self.assertIn("mimer-badge-purple", template)
+        self.assertIn("fa-flag-checkered", template)
+        self.assertIn("Hyresgäst vill avsluta", template)
+
+    def test_purple_badge_style_exists(self):
+        scss = self._source(
+            "onecore_maintenance_extension/static/src/scss/mimer_styles.scss"
+        )
+        self.assertIn(".mimer-badge-purple", scss)

@@ -153,6 +153,7 @@
                     <field name="has_unread_master_key_change" invisible="1" />
                     <field name="has_unread_new_customer_info" invisible="1" />
                     <field name="has_unread_customer_message" invisible="1" />
+                    <field name="close_request_pending" invisible="1" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->
@@ -192,6 +193,12 @@
                     <field name="creation_origin" invisible="1" readonly="1"></field>
 
                     <div>
+                        <div
+                            class="mimer-badge mimer-badge-purple mb-3 fs-6 lh-base px-3 py-2 rounded-pill"
+                            invisible="not close_request_pending">
+                            <i class="fa fa-flag-checkered me-1" role="img" aria-hidden="true" />
+                            <span>Hyresgäst vill avsluta</span>
+                        </div>
                         <div class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill"
                             invisible="not create_date">
                             <span invisible="creation_origin != 'internal'">Skapad internt</span>
@@ -1008,6 +1015,7 @@
                     <field name="hidden_from_my_pages" />
                     <field name="has_unread_new_customer_info" />
                     <field name="has_unread_customer_message" />
+                    <field name="close_request_pending" />
                     <field name="special_attention" />
                     <field name="requires_pest_control" />
                     <field name="has_unread_supplier_dialog" />
