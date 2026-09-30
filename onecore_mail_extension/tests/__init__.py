@@ -5,3 +5,4 @@ from . import test_tenant_author_name
 from . import test_tenant_author_name_backfill
 from . import test_from_tenant_sender
 from . import test_from_tenant_composer_gate
+from . import test_from_tenant_chatter
