@@ -164,6 +164,132 @@ class TestFilterMaintenanceUnitsByLocationType:
         result = list(api.filter_maintenance_units_by_location_type(units, "Lekplats"))
         assert result == []
 
+    def test_returns_list_and_tolerates_none(self, api):
+        """Should return a real list (callers merge/iterate twice) and treat None as empty."""
+        result = api.filter_maintenance_units_by_location_type(None, "Tvättstuga")
+        assert result == []
+        assert isinstance(
+            api.filter_maintenance_units_by_location_type(
+                [{"type": "Tvättstuga", "id": 1}], "Tvättstuga"
+            ),
+            list,
+        )
+
+
+class TestFetchMaintenanceUnitsForRentalId:
+    """Tests for fetch_maintenance_units_for_rental_id (MIM-1921)."""
+
+    @patch.object(CoreApi, '_get_json')
+    def test_calls_by_rental_id_endpoint_url_encoded(self, mock_get_json, api):
+        """Should call /maintenance-units/by-rental-id/{id} with the id URL-encoded."""
+        mock_get_json.return_value = []
+
+        api.fetch_maintenance_units_for_rental_id("705-010-04/0101", "Tvättstuga")
+
+        mock_get_json.assert_called_once_with(
+            "/maintenance-units/by-rental-id/705-010-04%2F0101"
+        )
+
+    @patch.object(CoreApi, '_get_json')
+    def test_filters_on_location_type(self, mock_get_json, api):
+        """Should keep only units of the requested type."""
+        mock_get_json.return_value = [
+            {"id": 1, "type": "Tvättstuga"},
+            {"id": 2, "type": "Miljöbod"},
+        ]
+
+        result = api.fetch_maintenance_units_for_rental_id("R1", "Tvättstuga")
+
+        assert result == [{"id": 1, "type": "Tvättstuga"}]
+
+    @patch.object(CoreApi, '_get_json')
+    def test_empty_when_object_has_no_relation(self, mock_get_json, api):
+        """OneCore answers content: [] for an object without baxyk rows."""
+        mock_get_json.return_value = []
+
+        assert api.fetch_maintenance_units_for_rental_id("R1", "Tvättstuga") == []
+
+
+class TestFetchMaintenanceUnitsForObject:
+    """Tests for fetch_maintenance_units_for_object (MIM-1921)."""
+
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_rental_id')
+    def test_serving_units_first_flagged_then_rest_of_property(
+        self, mock_for_rental, mock_for_property, api
+    ):
+        """Serving unit first with serves_rental_object=True, property's others after, deduped."""
+        mock_for_rental.return_value = [{"id": 3, "code": "705T03", "type": "Tvättstuga"}]
+        mock_for_property.return_value = [
+            {"id": 1, "code": "705T01", "type": "Tvättstuga"},
+            {"id": 3, "code": "705T03", "type": "Tvättstuga"},
+            {"id": 8, "code": "705T08", "type": "Tvättstuga"},
+        ]
+
+        result = api.fetch_maintenance_units_for_object("R1", "P1", "Tvättstuga")
+
+        mock_for_rental.assert_called_once_with("R1", "Tvättstuga")
+        mock_for_property.assert_called_once_with("P1", "Tvättstuga")
+        assert [u["id"] for u in result] == [3, 1, 8]
+        assert [u["serves_rental_object"] for u in result] == [True, False, False]
+        # Input dicts are not mutated
+        assert "serves_rental_object" not in mock_for_property.return_value[0]
+
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_rental_id')
+    def test_no_serving_unit_returns_property_units_unflagged(
+        self, mock_for_rental, mock_for_property, api
+    ):
+        """Without a baxyk relation every unit is offered, none flagged."""
+        mock_for_rental.return_value = []
+        mock_for_property.return_value = [
+            {"id": 1, "type": "Tvättstuga"},
+            {"id": 2, "type": "Tvättstuga"},
+        ]
+
+        result = api.fetch_maintenance_units_for_object("R1", "P1", "Tvättstuga")
+
+        assert [u["id"] for u in result] == [1, 2]
+        assert not any(u["serves_rental_object"] for u in result)
+
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_rental_id')
+    def test_serving_lookup_failure_degrades_to_property_units(
+        self, mock_for_rental, mock_for_property, api
+    ):
+        """A failing by-rental-id call must not break the search: property units, nothing flagged."""
+        mock_for_rental.side_effect = requests.HTTPError("500 Server Error")
+        mock_for_property.return_value = [{"id": 1, "type": "Tvättstuga"}]
+
+        result = api.fetch_maintenance_units_for_object("R1", "P1", "Tvättstuga")
+
+        assert result == [{"id": 1, "type": "Tvättstuga", "serves_rental_object": False}]
+
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_rental_id')
+    def test_programming_errors_in_serving_lookup_are_not_swallowed(
+        self, mock_for_rental, mock_for_property, api
+    ):
+        """Only transport errors degrade; a bug (e.g. payload without 'type') must surface."""
+        mock_for_rental.side_effect = KeyError("type")
+        mock_for_property.return_value = []
+
+        with pytest.raises(KeyError):
+            api.fetch_maintenance_units_for_object("R1", "P1", "Tvättstuga")
+
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_rental_id')
+    def test_serving_unit_on_neighbouring_property_is_still_offered(
+        self, mock_for_rental, mock_for_property, api
+    ):
+        """Håkantorpsgatan case: the serving unit is not on the property at all."""
+        mock_for_rental.return_value = [{"id": 9, "type": "Tvättstuga"}]
+        mock_for_property.return_value = []
+
+        result = api.fetch_maintenance_units_for_object("R1", "P1", "Tvättstuga")
+
+        assert result == [{"id": 9, "type": "Tvättstuga", "serves_rental_object": True}]
+
 
 class TestTokenManagement:
     """Tests for token management methods."""
@@ -505,7 +631,9 @@ class TestFetchBuilding:
         """Should not fetch staircases for other location types."""
         mock_get_json.return_value = {"code": "B123"}
 
-        with patch.object(api, 'fetch_staircases_for_building') as mock_fetch:
+        with patch.object(api, 'fetch_staircases_for_building') as mock_fetch, patch.object(
+            api, 'fetch_maintenance_units_for_building', return_value=[]
+        ):
             result = api.fetch_building("B123", "Tvättstuga")
 
         mock_fetch.assert_not_called()
@@ -669,11 +797,11 @@ class TestFetchFormData:
 
     @patch.object(CoreApi, 'fetch_leases')
     @patch.object(CoreApi, 'fetch_residence')
-    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
     def test_fetches_maintenance_units_for_bostadskontrakt_with_tvättstuga(
         self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
     ):
-        """Should fetch maintenance units for Bostadskontrakt with Tvättstuga."""
+        """Should fetch maintenance units per rental object (not per property) for Bostadskontrakt."""
         mock_fetch_leases.return_value = [{
             "type": "Bostadskontrakt",
             "rentalPropertyId": "R123"
@@ -681,20 +809,22 @@ class TestFetchFormData:
         mock_fetch_residence.return_value = {
             "property": {"code": "P1"}
         }
-        mock_fetch_units.return_value = [{"type": "Tvättstuga"}]
+        mock_fetch_units.return_value = [{"type": "Tvättstuga", "serves_rental_object": True}]
 
         result = api.fetch_form_data("leaseId", "123", "Tvättstuga")
 
-        mock_fetch_units.assert_called_once_with("P1", "Tvättstuga")
-        assert result[0]["maintenance_units"] == [{"type": "Tvättstuga"}]
+        mock_fetch_units.assert_called_once_with("R123", "P1", "Tvättstuga")
+        assert result[0]["maintenance_units"] == [
+            {"type": "Tvättstuga", "serves_rental_object": True}
+        ]
 
     @patch.object(CoreApi, 'fetch_leases')
     @patch.object(CoreApi, 'fetch_residence')
-    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
     def test_fetches_maintenance_units_for_kooperativ_hyresrätt_with_tvättstuga(
         self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
     ):
-        """Should fetch maintenance units for Kooperativ hyresrätt with Tvättstuga."""
+        """Should fetch maintenance units per rental object for Kooperativ hyresrätt."""
         mock_fetch_leases.return_value = [{
             "type": "Kooperativ hyresrätt",
             "rentalPropertyId": "R123"
@@ -706,7 +836,82 @@ class TestFetchFormData:
 
         result = api.fetch_form_data("leaseId", "123", "Tvättstuga")
 
-        mock_fetch_units.assert_called_once_with("P1", "Tvättstuga")
+        mock_fetch_units.assert_called_once_with("R123", "P1", "Tvättstuga")
+        assert result[0]["maintenance_units"] == [{"type": "Tvättstuga"}]
+
+    @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_residence')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
+    def test_renewed_contract_fetches_units_once_per_object(
+        self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
+    ):
+        """Two leases on one apartment: one unit lookup, both items carry it."""
+        mock_fetch_leases.return_value = [
+            {"type": "Bostadskontrakt", "rentalPropertyId": "R123", "leaseId": "OLD"},
+            {"type": "Bostadskontrakt", "rentalPropertyId": "R123", "leaseId": "NEW"},
+        ]
+        mock_fetch_residence.return_value = {"property": {"code": "P1"}}
+        mock_fetch_units.return_value = [{"type": "Tvättstuga"}]
+
+        result = api.fetch_form_data("contactCode", "P060004", "Tvättstuga")
+
+        mock_fetch_units.assert_called_once_with("R123", "P1", "Tvättstuga")
+        assert len(result) == 2
+        assert all(item["maintenance_units"] == [{"type": "Tvättstuga"}] for item in result)
+
+    @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_residence')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
+    def test_no_maintenance_units_for_lägenhet(
+        self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
+    ):
+        """Should not fetch maintenance units when the space is the apartment itself."""
+        mock_fetch_leases.return_value = [{
+            "type": "Bostadskontrakt",
+            "rentalPropertyId": "R123"
+        }]
+        mock_fetch_residence.return_value = {"property": {"code": "P1"}}
+
+        result = api.fetch_form_data("leaseId", "123", "Lägenhet")
+
+        mock_fetch_units.assert_not_called()
+        assert result[0]["maintenance_units"] == []
+
+    @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_residence')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
+    def test_rental_object_search_without_lease_uses_search_value_as_rental_id(
+        self, mock_fetch_units, mock_fetch_residence, mock_fetch_leases, api
+    ):
+        """Hyresobjekt search on a vacant apartment: the search value IS the rental id."""
+        mock_fetch_leases.return_value = []
+        mock_fetch_residence.return_value = {"property": {"code": "P1"}}
+        mock_fetch_units.return_value = [{"type": "Tvättstuga"}]
+
+        result = api.fetch_form_data("rentalObjectId", "705-010-04-0101", "Tvättstuga")
+
+        mock_fetch_units.assert_called_once_with("705-010-04-0101", "P1", "Tvättstuga")
+        assert result[0]["maintenance_units"] == [{"type": "Tvättstuga"}]
+
+    @patch.object(CoreApi, 'fetch_leases')
+    @patch.object(CoreApi, 'fetch_facility')
+    @patch.object(CoreApi, 'fetch_maintenance_units')
+    @patch.object(CoreApi, 'fetch_maintenance_units_for_object')
+    def test_lokalkontrakt_gets_property_units_without_serving_lookup(
+        self, mock_for_object, mock_for_property, mock_fetch_facility, mock_fetch_leases, api
+    ):
+        """baxyk only links apartments: a facility lease keeps the property-wide fetch."""
+        mock_fetch_leases.return_value = [{
+            "type": "Lokalkontrakt",
+            "rentalPropertyId": "L123"
+        }]
+        mock_fetch_facility.return_value = {"property": {"code": "P1"}}
+        mock_for_property.return_value = [{"type": "Tvättstuga"}]
+
+        result = api.fetch_form_data("leaseId", "123", "Tvättstuga")
+
+        mock_for_object.assert_not_called()
+        mock_for_property.assert_called_once_with("P1", "Tvättstuga")
         assert result[0]["maintenance_units"] == [{"type": "Tvättstuga"}]
 
     @patch.object(CoreApi, 'fetch_leases')
@@ -721,7 +926,7 @@ class TestFetchFormData:
         }]
         mock_fetch_parking.return_value = {"parkingId": "P123"}
 
-        with patch.object(api, 'fetch_maintenance_units') as mock_fetch_units:
+        with patch.object(api, 'fetch_maintenance_units_for_object') as mock_fetch_units:
             result = api.fetch_form_data("leaseId", "123", "Bilplats")
 
         mock_fetch_units.assert_not_called()
@@ -861,24 +1066,42 @@ class TestManagementAreaEndpoints:
         response.json.return_value = {"content": content}
         return response
 
-    def test_fetch_kvv_area_for_property_returns_content(self, api):
+    @pytest.mark.parametrize(
+        "kwargs, expected_params",
+        [
+            ({"rental_id": "705-022-04-0201"}, {"rentalId": "705-022-04-0201"}),
+            ({"building_code": "22 01-01"}, {"buildingCode": "22 01-01"}),
+            ({"property_code": "2201"}, {"propertyCode": "2201"}),
+        ],
+    )
+    def test_fetch_kvv_area_for_location_sends_one_key(self, api, kwargs, expected_params):
+        """MIM-1997: GET /kvv-areas/resolve takes exactly one location key and
+        honours building-level exceptions on split properties."""
         payload = {"kvvArea": {"code": "61141"}, "costCenter": {"code": "61140"}}
         with patch.object(api, "request", return_value=self._response(200, payload)) as mock_request:
-            result = api.fetch_kvv_area_for_property("22 01", timeout=5)
+            result = api.fetch_kvv_area_for_location(timeout=5, **kwargs)
 
         mock_request.assert_called_once_with(
-            "GET", "/properties/22%2001/kvv-area", timeout=5
+            "GET", "/kvv-areas/resolve", params=expected_params, timeout=5
         )
         assert result == payload
 
-    def test_fetch_kvv_area_for_property_404_is_none(self, api):
-        """Unlinked property: OneCore answers 404 -> no district, no error."""
+    def test_fetch_kvv_area_for_location_requires_exactly_one_key(self, api):
+        with patch.object(api, "request") as mock_request:
+            with pytest.raises(ValueError):
+                api.fetch_kvv_area_for_location()
+            with pytest.raises(ValueError):
+                api.fetch_kvv_area_for_location(rental_id="705-1", property_code="2201")
+        mock_request.assert_not_called()
+
+    def test_fetch_kvv_area_for_location_404_is_none(self, api):
+        """Unlinked location: OneCore answers 404 -> no district, no error."""
         response = self._response(404)
         response.raise_for_status.side_effect = AssertionError("must not be called")
         with patch.object(api, "request", return_value=response):
-            assert api.fetch_kvv_area_for_property("2201") is None
+            assert api.fetch_kvv_area_for_location(property_code="2201") is None
 
-    def test_fetch_kvv_area_for_property_404_without_json_raises(self, api):
+    def test_fetch_kvv_area_for_location_404_without_json_raises(self, api):
         """A core that does not know the route answers Koa's text/plain 404.
         Treating that as "no district" would stamp the request as looked up and
         exclude it from the backfill forever, so it has to stay an error."""
@@ -887,19 +1110,32 @@ class TestManagementAreaEndpoints:
         response.raise_for_status.side_effect = requests.HTTPError("404")
         with patch.object(api, "request", return_value=response):
             with pytest.raises(requests.HTTPError):
-                api.fetch_kvv_area_for_property("2201")
+                api.fetch_kvv_area_for_location(rental_id="705-1")
 
-    def test_fetch_kvv_area_for_property_raises_on_other_errors(self, api):
+    def test_fetch_kvv_area_for_location_raises_on_other_errors(self, api):
         response = self._response(500)
         response.raise_for_status.side_effect = requests.HTTPError("500")
         with patch.object(api, "request", return_value=response):
             with pytest.raises(requests.HTTPError):
-                api.fetch_kvv_area_for_property("2201")
+                api.fetch_kvv_area_for_location(rental_id="705-1")
 
     def test_fetch_cost_centers(self, api):
         with patch.object(api, "_get_json", return_value=[{"id": 4}]) as mock_get_json:
             assert api.fetch_cost_centers() == [{"id": 4}]
         mock_get_json.assert_called_once_with("/cost-centers")
+
+    def test_fetch_property_tree_for_cost_center(self, api):
+        """MIM-1997: the backfill walks the object-level tree, which is cached
+        per cost center in the property service and split-property aware."""
+        with patch.object(api, "_get_json", return_value={"groups": []}) as mock_get_json:
+            assert api.fetch_property_tree_for_cost_center("a/b", timeout=30) == {
+                "groups": []
+            }
+        mock_get_json.assert_called_once_with(
+            "/property-tree",
+            params={"groupBy": "costCenter", "rootId": "a/b", "includeObjects": "true"},
+            timeout=30,
+        )
 
     def test_fetch_cost_center_tree_quotes_id(self, api):
         with patch.object(api, "_get_json", return_value={"kvvAreas": []}) as mock_get_json:

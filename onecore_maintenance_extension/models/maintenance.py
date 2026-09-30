@@ -5,11 +5,12 @@ import json
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
-from odoo.exceptions import AccessError, UserError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .utils.priority import priority_days_from, priority_label_for
 from .services import (
     FieldChangeTracker,
     RecordManagementService,
@@ -23,7 +24,9 @@ from .services import (
 from .constants import (
     SORTED_SPACES,
     SEARCH_TYPES,
-    PRIORITY_OPTIONS,
+    PRIORITY_PRESETS,
+    PRIORITY_CUSTOM,
+    PRIORITY_MAX_WEEKS,
     CREATION_ORIGINS,
     FORM_STATES,
     CUSTOMER_MESSAGE_TYPE,
@@ -113,9 +116,31 @@ class OneCoreMaintenanceRequest(
     master_key = fields.Boolean("Huvudnyckel", store=True)
 
     priority_expanded = fields.Selection(
-        PRIORITY_OPTIONS,
+        PRIORITY_PRESETS,
         string="Prioritet",
         store=True,
+    )
+    priority_weeks = fields.Integer(
+        "Antal veckor",
+        store=True,
+        help="Antal veckor till förfallodatum. Används endast när prioritet är"
+        " 'Antal veckor'.",
+    )
+    # The day count is the arithmetic priority_expanded used to carry itself.
+    # It is 0 both for Akut and for an ärende with no priority at all, because
+    # fields.Integer cannot hold NULL (odoo/orm/fields_numeric.py:32). Ask
+    # priority_expanded, never this, whether a priority is set.
+    priority_days = fields.Integer(
+        "Prioritet (dagar)",
+        compute="_compute_priority_days",
+        store=True,
+        readonly=True,
+    )
+    priority_label = fields.Char(
+        "Prioritet",
+        compute="_compute_priority_label",
+        store=True,
+        readonly=True,
     )
     due_date = fields.Date(
         "Förfallodatum",
@@ -641,19 +666,22 @@ class OneCoreMaintenanceRequest(
             )
 
     @api.depends("recently_added_tenant")
-    @api.depends_context("uid")
     def _compute_has_unread_new_customer_info(self):
         # "Ny kund" (badge label; field/method names keep the older "new
         # customer info" wording, MIM-1953) means exactly what it says: the
         # tenant was back-filled from the OneCore API onto a request that had
-        # none — a Mimer data-quality flag, not tenant communication, so it
-        # never reaches external contractors. Tenant messages moved to
-        # has_unread_customer_message (MIM-1960).
-        is_external = ExternalContractorService(self.env).is_external_contractor()
+        # none. Tenant messages moved to has_unread_customer_message
+        # (MIM-1960).
+        #
+        # Shown to both audiences. It started as a Mimer-only data-quality
+        # flag, but a newly attached tenant is equally actionable for an
+        # external contractor — it is who they can now contact about the
+        # ärende, and they already read the tenant's details on the same form.
+        # No depends_context("uid"): the value is one shared fact, so keying
+        # the compute cache per user would only fragment it (same reasoning as
+        # customer_message_unread).
         for record in self:
-            record.has_unread_new_customer_info = (
-                False if is_external else record.recently_added_tenant
-            )
+            record.has_unread_new_customer_info = record.recently_added_tenant
 
     @api.depends("last_customer_message_at", "customer_message_ack_at")
     def _compute_customer_message_unread(self):
@@ -764,15 +792,23 @@ class OneCoreMaintenanceRequest(
         return True
 
     def action_acknowledge_new_customer_info(self):
-        """Clear the "Ny kund" flag for every Mimer user on the request.
+        """Clear the "Ny kund" flag for everyone on the request.
 
         There is no timestamp: the signal *is* recently_added_tenant, so
-        clearing the flag is the acknowledgement. Internal only — the flag also
-        drives _order for everyone, and contractors never see the badge.
+        clearing the flag is the acknowledgement. Shared and first-click-wins
+        across both audiences, the same rule as
+        action_acknowledge_customer_message — the first person to click, Mimer
+        handler or external contractor, silences it for everyone, and the
+        `if` below makes the second clicker a no-op.
+
+        Note the side effect a contractor's click now has: recently_added_tenant
+        also drives _order (see _order at the top of this model), so clearing it
+        drops the ärende back down Mimer's kanban as well. That is accepted —
+        one shared signal means one shared dismissal. Unlike the
+        customer-message ack, nothing is posted to the tenant here, so a second
+        click cannot produce a duplicate receipt.
         """
         self.ensure_one()
-        if ExternalContractorService(self.env).is_external_contractor():
-            return True
         if self.recently_added_tenant:
             self.recently_added_tenant = False
         self.invalidate_recordset(["has_unread_new_customer_info"])
@@ -836,15 +872,56 @@ class OneCoreMaintenanceRequest(
         for record in self:
             record.user_is_external_contractor = is_external
 
-    @api.depends("request_date", "start_date", "priority_expanded")
+    @api.depends("priority_expanded", "priority_weeks")
+    def _compute_priority_days(self):
+        for record in self:
+            record.priority_days = priority_days_from(
+                record.priority_expanded, record.priority_weeks
+            )
+
+    @api.depends("priority_expanded", "priority_days")
+    def _compute_priority_label(self):
+        for record in self:
+            # Char IS nullable, so this is the one derived field that can say
+            # "no priority" — hence the guard, which asks priority_expanded.
+            record.priority_label = (
+                priority_label_for(record.priority_days)
+                if record._has_priority_days()
+                else False
+            )
+
+    @api.constrains("priority_expanded", "priority_weeks")
+    def _check_priority_weeks(self):
+        for record in self:
+            if record.priority_expanded != PRIORITY_CUSTOM:
+                continue
+            if not 1 <= record.priority_weeks <= PRIORITY_MAX_WEEKS:
+                raise ValidationError(
+                    _("Antal veckor måste vara mellan 1 och %s.") % PRIORITY_MAX_WEEKS
+                )
+
+    @api.depends("request_date", "start_date", "priority_expanded", "priority_days")
     def _compute_due_date(self):
         for record in self:
             base_date = record.start_date if record.start_date else record.request_date
 
-            if base_date and record.priority_expanded:
-                record.due_date = fields.Date.add(
-                    base_date, days=int(record.priority_expanded)
-                )
+            # The guard asks priority_expanded, as before: it is the nullable
+            # field, and it is truthy for Akut because "0" is a non-empty
+            # string. priority_days only supplies the number.
+            if base_date and record._has_priority_days():
+                record.due_date = fields.Date.add(base_date, days=record.priority_days)
+
+    def _has_priority_days(self):
+        """Whether priority_days is a real day count (Akut's 0 included).
+
+        False with no priority, and also while 'Antal veckor' is picked but the
+        number not typed yet — the constraint blocks saving that, but onchange
+        still recomputes, and a 0 there must not read as Akut.
+        """
+        self.ensure_one()
+        if self.priority_expanded == PRIORITY_CUSTOM:
+            return bool(self.priority_weeks)
+        return bool(self.priority_expanded)
 
     def _inverse_due_date(self):
         # Presence of this inverse lets the stored computed field retain

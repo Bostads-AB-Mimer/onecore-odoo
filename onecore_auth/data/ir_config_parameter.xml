@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+    MIM-2010: e-mail domains whose Keycloak accounts are created or re-linked
+    automatically at first login. Comma-separated.
+
+    Data, not the post_init_hook: onecore_auth is already installed in prod,
+    and the hook only ever runs on install. noupdate="1" creates the record on
+    the upgrade where it is missing and never overwrites a value somebody has
+    changed under Inställningar → Teknik → Systemparametrar.
+    -->
+    <data noupdate="1">
+        <record id="param_auto_create_email_domains" model="ir.config_parameter">
+            <field name="key">onecore_auth.auto_create_email_domains</field>
+            <field name="value">mimer.nu</field>
+        </record>
+    </data>
+</odoo>

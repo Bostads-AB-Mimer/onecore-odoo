@@ -119,40 +119,38 @@ Vill du i stället att en specifik grupp ska ta över? Byt Resursgrupp direkt i 
       return super.selectItem(item);
     }
 
-    // Component question popup disabled: internal users moving an apartment
-    // ärende to Utförd no longer get the "Har du bytt ut eller ändrat..."
-    // prompt. The component wizard is still reachable via the
-    // "Uppdatera/lägg till Komponent" button on the ärende. To re-enable the
-    // popup, uncomment the two blocks below.
-    // // Internal users on apartment ärenden: ask the component question
-    // const isApartment =
-    //   record.data.space_caption === "Lägenhet" && !!record.resId;
-    // let answer = null;
-    //
-    // if (isApartment) {
-    //   answer = await askComponentQuestion(this.dialogService);
-    //   if (answer === "abort") {
-    //     return;
-    //   }
-    // }
+    // Internal users on apartment ärenden: ask the component question.
+    // NOTE: this asks on every apartment ärende, which was too noisy in
+    // prod — narrow the condition (e.g. to inspection ärenden) before this
+    // ships.
+    const isApartment =
+      record.data.space_caption === "Lägenhet" && !!record.resId;
+    let answer = null;
+
+    if (isApartment) {
+      answer = await askComponentQuestion(this.dialogService);
+      if (answer === "abort") {
+        return;
+      }
+    }
 
     // Odoo 19's selectItem awaits record.update() + record.save(); awaiting
     // here guarantees the stage write committed before the wizard opens.
     await super.selectItem(item);
 
-    // if (
-    //   answer === "yes" &&
-    //   record.resId &&
-    //   !record.dirty &&
-    //   record.data.stage_id?.id === item.value
-    // ) {
-    //   await openComponentWizardDialog(
-    //     this.orm,
-    //     this.actionService,
-    //     this.notificationService,
-    //     record.resId,
-    //     this.uiService
-    //   );
-    // }
+    if (
+      answer === "yes" &&
+      record.resId &&
+      !record.dirty &&
+      record.data.stage_id?.id === item.value
+    ) {
+      await openComponentWizardDialog(
+        this.orm,
+        this.actionService,
+        this.notificationService,
+        record.resId,
+        this.uiService
+      );
+    }
   },
 });

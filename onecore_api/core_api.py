@@ -433,18 +433,68 @@ class CoreApi:
         )
 
     def fetch_maintenance_units(self, id, location_type):
+        """Every maintenance unit of type ``location_type`` on property ``id``."""
         content = self._get_json(
             f"/maintenance-units/by-property-code/{urllib.parse.quote(str(id), safe='')}"
+        )
+        return self.filter_maintenance_units_by_location_type(content, location_type)
+
+    def fetch_maintenance_units_for_rental_id(self, rental_id, location_type):
+        """The maintenance units that SERVE rental object ``rental_id``.
+
+        Backed by Xpand's residence -> unit relation (baxyk), so for a laundry
+        room this is the one the tenant is actually assigned to, not every
+        laundry room on the property. Empty when the object has no relation.
+        """
+        content = self._get_json(
+            f"/maintenance-units/by-rental-id/{urllib.parse.quote(str(rental_id), safe='')}"
         )
         return self.filter_maintenance_units_by_location_type(content, location_type)
 
     def filter_maintenance_units_by_location_type(
         self, maintenance_units, location_type
     ):
-        return filter(
-            lambda maintenance_unit: maintenance_unit["type"] == location_type,
-            maintenance_units,
-        )
+        # A list, not a lazy filter: callers merge and deduplicate the result.
+        return [
+            maintenance_unit
+            for maintenance_unit in maintenance_units or []
+            if maintenance_unit["type"] == location_type
+        ]
+
+    def fetch_maintenance_units_for_object(
+        self, rental_id, property_code, location_type
+    ):
+        """Units to offer for a rental object: the serving ones first, flagged
+        ``serves_rental_object``, then the rest of the property's units so the
+        handler can still let the user pick another one. Deduplicated on id.
+        """
+        # The serving lookup is an enhancement: if OneCore cannot answer, the
+        # user still gets the property's units to pick from, nothing
+        # preselected. Only transport/HTTP errors — a bug must still surface.
+        try:
+            serving = self.fetch_maintenance_units_for_rental_id(
+                rental_id, location_type
+            )
+        except requests.RequestException as err:
+            _logger.warning(
+                "Could not fetch serving maintenance units for %s: %s", rental_id, err
+            )
+            serving = []
+        on_property = self.fetch_maintenance_units(property_code, location_type)
+
+        units = []
+        seen = set()
+        for unit in serving:
+            if unit["id"] in seen:
+                continue
+            seen.add(unit["id"])
+            units.append({**unit, "serves_rental_object": True})
+        for unit in on_property:
+            if unit["id"] in seen:
+                continue
+            seen.add(unit["id"])
+            units.append({**unit, "serves_rental_object": False})
+        return units
 
     def fetch_parking_space(self, id):
         return self._get_json(
@@ -460,24 +510,39 @@ class CoreApi:
     # Management areas: property -> kvv area (kvartersvärdsområde) ->
     # cost center (distrikt). Owned by OneCore (onecore_* tables).
     # ------------------------------------------------------------------
-    def fetch_kvv_area_for_property(self, property_code, **kwargs):
-        """Reverse lookup of a property's management area.
+    def fetch_kvv_area_for_location(
+        self, rental_id=None, building_code=None, property_code=None, **kwargs
+    ):
+        """Management area of a location (MIM-1997: GET /kvv-areas/resolve).
+
+        Exactly one key: ``rental_id`` (lägenhet, bilplats, lokal),
+        ``building_code`` (byggnad) or ``property_code`` (fastighet). Send the
+        most specific one — a split property has buildings in different kvv
+        areas, so the property code alone is unreliable and the keys are never
+        combined.
 
         Returns the ``content`` dict
         ``{"kvvArea": {id, code, name}, "costCenter": {id, code, name},
-        "responsible": {...} | None}`` or ``None`` when the property has no
-        management-area link (OneCore answers 404).
+        "responsible": {...} | None}`` or ``None`` when nothing resolves
+        (OneCore answers 404).
         """
-        response = self.request(
-            "GET",
-            f"/properties/{urllib.parse.quote(str(property_code), safe='')}/kvv-area",
-            **kwargs,
-        )
+        keys = {
+            "rentalId": rental_id,
+            "buildingCode": building_code,
+            "propertyCode": property_code,
+        }
+        params = {name: str(value) for name, value in keys.items() if value}
+        if len(params) != 1:
+            raise ValueError(
+                "fetch_kvv_area_for_location takes exactly one of rental_id, "
+                "building_code or property_code"
+            )
+        response = self.request("GET", "/kvv-areas/resolve", params=params, **kwargs)
         if response.status_code == 404:
-            # Only the route's own 404 means "this property has no link". A 404
-            # from a core that does not know the route at all (this module
-            # deployed ahead of the OneCore release) must stay an error, or the
-            # caller stamps the request as looked-up and the backfill skips it
+            # Only the route's own 404 means "no kvv area here". A 404 from a
+            # core that does not know the route at all (this module deployed
+            # ahead of the OneCore release) must stay an error, or the caller
+            # stamps the request as looked-up and the backfill skips it
             # forever. The handler answers JSON, Koa answers text/plain for an
             # unrouted path — that is the whole difference.
             try:
@@ -497,11 +562,32 @@ class CoreApi:
         """All cost centers (distrikt): ``[{"id", "code", "name", ...}]``."""
         return self._get_json("/cost-centers", **kwargs)
 
+    def fetch_property_tree_for_cost_center(self, cost_center_id, **kwargs):
+        """Object-level property tree of one cost center (distrikt):
+        ``{code, name, groups: [{code, name, properties: [node]}]}`` where
+        ``groups`` are the kvv areas and each node is ``{type, code, name,
+        children?, share?}`` down to the rental objects (``code`` = rental
+        id). A property split between kvv areas appears once per area with
+        only that area's buildings and ``share`` = ``"default"`` (the side
+        its own kvv link points to) or ``"exception"``.
+
+        Cached per root in the property service. Used by the backfill cron: a
+        handful of calls give the full location -> kvv area map.
+        """
+        return self._get_json(
+            "/property-tree",
+            params={
+                "groupBy": "costCenter",
+                "rootId": str(cost_center_id),
+                "includeObjects": "true",
+            },
+            **kwargs,
+        )
+
     def fetch_cost_center_tree(self, cost_center_id, **kwargs):
         """Cost center tree: ``{code, name, kvvAreas: [{code, name, properties: [{code, ...}]}]}``.
 
-        Used by the backfill cron: a handful of tree calls give the full
-        property -> kvv area -> cost center map.
+        Used by the cost-center master sync for lead/deputy (distriktschef).
         """
         return self._get_json(
             f"/cost-centers/{urllib.parse.quote(str(cost_center_id), safe='')}/tree",
@@ -664,6 +750,9 @@ class CoreApi:
 
             if leases and len(leases) > 0:
                 data = []
+                # A renewed contract is two leases on one object; fetch that
+                # object's units once, not once per lease.
+                units_by_object = {}
 
                 for lease in leases:
                     # Skip if lease is None or missing required fields.
@@ -686,14 +775,26 @@ class CoreApi:
                             )
                             continue
 
-                        maintenance_units = (
-                            self.fetch_maintenance_units(
-                                fetched_data["property"]["code"], location_type
-                            )
-                            if kind in KINDS_WITH_MAINTENANCE_UNITS
+                        maintenance_units = []
+                        if (
+                            kind in KINDS_WITH_MAINTENANCE_UNITS
                             and location_type in MAINTENANCE_UNIT_TYPES
-                            else []
-                        )
+                        ):
+                            property_code = fetched_data["property"]["code"]
+                            rental_id = lease["rentalPropertyId"]
+                            if rental_id not in units_by_object:
+                                # Xpand's residence -> unit relation only covers
+                                # apartments; a facility gets the property's units.
+                                units_by_object[rental_id] = (
+                                    self.fetch_maintenance_units_for_object(
+                                        rental_id, property_code, location_type
+                                    )
+                                    if kind == "residence"
+                                    else self.fetch_maintenance_units(
+                                        property_code, location_type
+                                    )
+                                )
+                            maintenance_units = units_by_object[rental_id]
 
                         data.append(
                             build_form_item(
@@ -746,8 +847,10 @@ class CoreApi:
                         rental_property = self.fetch_residence(value)
                         if rental_property:
                             maintenance_units = (
-                                self.fetch_maintenance_units(
-                                    rental_property["property"]["code"], location_type
+                                self.fetch_maintenance_units_for_object(
+                                    value,
+                                    rental_property["property"]["code"],
+                                    location_type,
                                 )
                                 if location_type in MAINTENANCE_UNIT_TYPES
                                 else []

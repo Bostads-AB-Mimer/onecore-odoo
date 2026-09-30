@@ -294,6 +294,8 @@ def create_maintenance_unit_option(env, **kwargs):
         "name": fake.maintenance_unit_caption(),
         "code": fake.maintenance_unit_code(),
         "caption": fake.maintenance_unit_caption(),
+        "type": "Tvättstuga",
+        "serves_rental_object": False,
     }
     defaults.update(kwargs)
     return env["maintenance.maintenance.unit.option"].create(defaults)

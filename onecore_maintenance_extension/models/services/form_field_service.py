@@ -47,6 +47,8 @@ class FormFieldService:
 
     def update_rental_property_fields(self, record):
         """Update rental property-related fields."""
+        # Before the early return: clearing the object must clear its unit too.
+        self.sync_maintenance_unit_with_rental_property(record)
         if not record.rental_property_option_id:
             return
 
@@ -72,15 +74,54 @@ class FormFieldService:
             if lease_records:
                 record.lease_option_id = select_active_lease(lease_records).id
 
-    def update_maintenance_unit_fields(self, record):
-        """Update maintenance unit-related fields."""
-        if not record.maintenance_unit_option_id:
-            return
+    def sync_maintenance_unit_with_rental_property(self, record):
+        """Keep the unit on the selected object.
 
-        record.maintenance_unit_id = record.maintenance_unit_option_id.name
-        record.maintenance_unit_type = record.maintenance_unit_option_id.type
-        record.maintenance_unit_code = record.maintenance_unit_option_id.code
-        record.maintenance_unit_caption = record.maintenance_unit_option_id.caption
+        A tenant with two contracts who switches object in the form must not
+        keep the first object's laundry room. A manual pick on the SAME object
+        is kept.
+        """
+        current_unit = record.maintenance_unit_option_id.exists()
+        if (
+            not current_unit
+            or current_unit.rental_property_option_id != record.rental_property_option_id
+        ):
+            self.select_serving_maintenance_unit(record)
+
+    def select_serving_maintenance_unit(self, record):
+        """Preselect the unit that serves ``record.rental_property_option_id``.
+
+        Xpand links each apartment to the laundry room it is assigned to
+        (``serves_rental_object`` on the option). When there is no such link
+        nothing is preselected: the user picks from the property's units
+        rather than getting the property's first one (MIM-1921).
+        """
+        serving = self.env["maintenance.maintenance.unit.option"].search(
+            [
+                ("user_id", "=", self.env.user.id),
+                ("rental_property_option_id", "=", record.rental_property_option_id.id),
+                ("serves_rental_object", "=", True),
+            ],
+            order="id",
+            limit=1,
+        )
+        record.maintenance_unit_option_id = serving.id if serving else False
+        self.update_maintenance_unit_fields(record)
+
+    def update_maintenance_unit_fields(self, record):
+        """Update maintenance unit-related fields.
+
+        Clears them when no option is selected, so a search that preselects
+        nothing does not leave the previous search's unit on the form.
+        """
+        option = record.maintenance_unit_option_id
+        # The maintenance.maintenance.unit snapshot is only created on save
+        # (_save_maintenance_unit); until then the copied fields carry the
+        # values shown on the form.
+        record.maintenance_unit_id = False
+        record.maintenance_unit_type = option.type if option else False
+        record.maintenance_unit_code = option.code if option else False
+        record.maintenance_unit_caption = option.caption if option else False
 
     def _copy_lease_fields(self, record):
         """Copy lease data fields from lease_option_id to the record."""
@@ -127,6 +168,9 @@ class FormFieldService:
             record.parking_space_option_id = lease.parking_space_option_id.id
         if lease.rental_property_option_id and lease.rental_property_option_id != record.rental_property_option_id:
             record.rental_property_option_id = lease.rental_property_option_id.id
+            # The object's onchange has already run in this cascade, so the
+            # unit must follow the object from here.
+            self.sync_maintenance_unit_with_rental_property(record)
         if lease.facility_option_id and lease.facility_option_id != record.facility_option_id:
             record.facility_option_id = lease.facility_option_id.id
 

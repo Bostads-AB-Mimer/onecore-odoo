@@ -48,15 +48,17 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         )
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             request = create_maintenance_request(
                 self.env,
                 space_caption="Lägenhet",
                 rental_property_id=rental_property.id,
             )
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
 
-        fetch.assert_called_once_with("2201", timeout=5)
+        # MIM-1997: the rental id is sent, not the property code — a split
+        # property has buildings in different kvv areas.
+        fetch.assert_called_once_with(rental_id="705-022-04-0201", timeout=5)
         self.assertEqual(request.cost_center_name, "Distrikt Väst")
         self.assertEqual(request.cost_center_code, "61140")
         self.assertEqual(request.kvv_area_code, "61141")
@@ -78,7 +80,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
                 cost_center_code="61140",
                 cost_center_name="Distrikt Väst",
             )
-            MockApi.return_value.fetch_kvv_area_for_property.assert_not_called()
+            MockApi.return_value.fetch_kvv_area_for_location.assert_not_called()
         self.assertEqual(request.cost_center_name, "Distrikt Väst")
 
     def test_create_without_onecore_leaves_fields_empty(self):
@@ -95,7 +97,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         self._configure_onecore()
         option = create_rental_property_option(self.env, estate_code="2201")
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             form = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
             form.rental_property_option_id = option
             form._onchange_management_area_preview()
@@ -104,12 +106,15 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
 
     def test_preview_and_create_share_one_api_call(self):
         self._configure_onecore()
-        option = create_rental_property_option(self.env, estate_code="2201")
+        # Same rental id on the option and the snapshot -> same cache key
+        option = create_rental_property_option(
+            self.env, rental_id="705-022-04-0201", estate_code="2201"
+        )
         rental_property = create_rental_property(
             self.env, rental_property_id="705-022-04-0201", estate_code="2201"
         )
         with patch(CORE_API_PATH) as MockApi:
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
             fetch.return_value = kvv_payload()
             form = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
             form.rental_property_option_id = option
@@ -255,7 +260,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 cc_code="61199", cc_name="Distrikt Okänt"
             )
             action = self._click_assign(request)
