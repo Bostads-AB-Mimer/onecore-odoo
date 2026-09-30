@@ -10,6 +10,10 @@
          configuration. For Kundcenter and users without a department or a
          resource group they return empty lists, which is harmless.
 
+         No action_id: a favorite bound to an action only lists under that
+         action. Unbound, they list under every request action — the stock
+         list, "Mitt distrikt" and the resource-group cards.
+
          noupdate: users may rename or tweak them; a release must not undo
          that. archive = False on all three: clicking a favorite drops the
          "Aktiva ärenden" facet, and archived requests must not surface. -->
@@ -22,7 +26,6 @@
             <field name="name">Beställt av min avdelning hos andra</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
-            <field name="action_id" ref="maintenance.hr_equipment_request_action" />
             <field name="is_default" eval="False" />
             <field name="domain">[('ordered_by_my_department', '=', True), ('at_my_teams', '=', False), ('archive', '=', False)]</field>
             <field name="context">{'group_by': ['stage_id']}</field>
@@ -37,7 +40,6 @@
             <field name="name">I mitt distrikt, beställt av andra</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
-            <field name="action_id" ref="maintenance.hr_equipment_request_action" />
             <field name="is_default" eval="False" />
             <field name="domain">[('in_my_district', '=', True), ('ordered_by_my_department', '=', False), ('stage_id.done', '=', False), ('archive', '=', False)]</field>
             <field name="context">{'group_by': ['kvv_area_code', 'estate']}</field>
@@ -51,7 +53,6 @@
             <field name="name">Mina kvartersvärdsområden</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
-            <field name="action_id" ref="maintenance.hr_equipment_request_action" />
             <field name="is_default" eval="False" />
             <field name="domain">[('in_my_kvv_areas', '=', True), ('archive', '=', False)]</field>
             <field name="context">{'group_by': ['stage_id']}</field>

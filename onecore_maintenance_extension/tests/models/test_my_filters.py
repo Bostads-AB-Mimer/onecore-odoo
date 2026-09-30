@@ -435,18 +435,36 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
     # ------------------------------------------------------------------
     # The records
     # ------------------------------------------------------------------
-    def test_favorites_are_shared_and_point_at_the_request_action(self):
-        action = self.env.ref("maintenance.hr_equipment_request_action")
+    def test_favorites_are_shared_and_bound_to_no_action(self):
         for xml_id in FAVORITES:
             with self.subTest(favorite=xml_id):
                 favorite = self._favorite(xml_id)
                 self.assertEqual(favorite.name, FAVORITE_NAMES[xml_id])
                 self.assertTrue(favorite.active)
                 self.assertEqual(favorite.model_id, "maintenance.request")
-                self.assertEqual(favorite.action_id.id, action.id)
+                self.assertFalse(favorite.action_id)
                 # Empty = shared with everyone
                 self.assertFalse(favorite.user_ids)
                 self.assertFalse(favorite.is_default)
+
+    def test_favorites_list_under_every_request_action(self):
+        """The favorites dropdown only lists filters bound to the current
+        action or to none. The stock list and "Mitt distrikt" must both show
+        all three."""
+        for action_xml_id in (
+            "maintenance.hr_equipment_request_action",
+            "onecore_maintenance_extension.action_my_district_requests",
+        ):
+            with self.subTest(action=action_xml_id):
+                action = self.env.ref(action_xml_id)
+                listed = (
+                    self.env["ir.filters"]
+                    .with_user(self.district_user)
+                    .get_filters("maintenance.request", action_id=action.id)
+                )
+                self.assertLessEqual(
+                    set(FAVORITE_NAMES.values()), {f["name"] for f in listed}
+                )
 
     def test_favorites_evaluate_for_every_profile(self):
         """Domain, group-by and sort must all be valid for the ORM, for a
