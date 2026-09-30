@@ -444,3 +444,45 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         )
         self.assertFalse(request.performed_date)
         self.assertTrue(request.returned_date)
+
+    def test_preview_names_the_team_write_hands_back_to(self):
+        """MIM-2058: the confirm dialog (statusbar and kanban drag alike) names
+        the team from preview_atersand_team, so it must agree with write()."""
+        request = self._create_returnable_request()
+
+        preview = request.preview_atersand_team(self.stage_atersand.id)
+        self.assertEqual(request.maintenance_team_id, self.contractor_team)
+
+        request.write({"stage_id": self.stage_atersand.id})
+        self.assertEqual(preview, self.orderer_team.name)
+        self.assertEqual(preview, request.maintenance_team_id.name)
+
+    def test_preview_names_kundcenter_for_a_group_less_orderer(self):
+        request = self._create_returnable_request(
+            owner_user_id=self.teamless_user.id
+        )
+
+        self.assertEqual(
+            request.preview_atersand_team(self.stage_atersand.id),
+            self.kundcenter_team.name,
+        )
+
+    def test_preview_is_false_for_other_stages(self):
+        """The dialog then falls back to the generic text."""
+        request = self._create_returnable_request()
+
+        self.assertFalse(request.preview_atersand_team(self.stage_utford.id))
+
+    def test_preview_ignores_a_stage_only_named_atersand(self):
+        """Återsänd is resolved by xml-id, never by name. A hand-made column
+        called "Återsänd" is not the return stage: moving there neither
+        routes the request nor gets a team named in the dialog."""
+        hand_made = self.env["maintenance.stage"].create(
+            {"name": "Återsänd", "sequence": 99}
+        )
+        request = self._create_returnable_request(user_id=self.internal_user.id)
+
+        self.assertFalse(request.preview_atersand_team(hand_made.id))
+
+        request.with_user(self.internal_user).write({"stage_id": hand_made.id})
+        self.assertEqual(request.maintenance_team_id, self.contractor_team)

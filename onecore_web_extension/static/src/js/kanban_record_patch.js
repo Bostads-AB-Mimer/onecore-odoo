@@ -7,6 +7,7 @@ import { KanbanRecord } from "@web/views/kanban/kanban_record";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
 import ConfirmDialog from "./confirm_dialog";
+import { confirmAtersand } from "./atersand_confirm";
 import { askComponentQuestion } from "./component_question_dialog";
 import { openComponentWizardDialog } from "./open_component_wizard_dialog";
 
@@ -94,13 +95,15 @@ patch(KanbanRecord.prototype, {
         return false;
       }
 
-      // MIM-486: all users confirm before returning a request — the move
-      // hands the request back to the orderer's team.
+      // MIM-486: all users confirm before returning a request, and are told
+      // which team it goes back to — the same dialog as the form statusbar
+      // (MIM-2058: dragging the card used to show only the generic text).
       if (targetStageName === "Återsänd") {
-        return await ConfirmDialog(
+        return await confirmAtersand(
+          this.orm,
           this.dialogService,
-          "Bekräfta återsändning",
-          "Är du säker på att du vill återsända ärendet?"
+          record.resId,
+          changes.stage_id
         );
       }
 

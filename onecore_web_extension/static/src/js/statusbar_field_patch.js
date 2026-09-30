@@ -4,6 +4,7 @@ import { patch } from "@web/core/utils/patch";
 import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
 import { useService } from "@web/core/utils/hooks";
 import ConfirmDialog from "./confirm_dialog";
+import { confirmAtersand } from "./atersand_confirm";
 import { askComponentQuestion } from "./component_question_dialog";
 import { openComponentWizardDialog } from "./open_component_wizard_dialog";
 
@@ -73,27 +74,14 @@ patch(StatusBarField.prototype, {
     const goingToAtersand =
       isMaintenanceRequest && item.label === "Återsänd" && !item.isSelected;
 
-    // MIM-486: all users confirm before returning a request — the move
-    // hands the request back to the team that originally created it, not
-    // the team the request most recently passed through, which is easy to
-    // assume and not what actually happens. Naming the real destination
-    // here (from preview_atersand_team, a read-only mirror of the routing
-    // write() does) lets people catch that mismatch before it commits.
+    // MIM-486: all users confirm before returning a request, and are told
+    // which team it goes back to (see confirmAtersand).
     if (goingToAtersand) {
-      const teamName = await this.orm.call(
-        "maintenance.request",
-        "preview_atersand_team",
-        [[record.resId], item.value]
-      );
-      const body = teamName
-        ? `Ärendet skickas till ${teamName} — det är gruppen som ursprungligen skapade ärendet, inte den grupp du senast jobbat med det i.
-
-Vill du i stället att en specifik grupp ska ta över? Byt Resursgrupp direkt i stället för att återsända.`
-        : "Är du säker på att du vill återsända ärendet?";
-      const confirmed = await ConfirmDialog(
+      const confirmed = await confirmAtersand(
+        this.orm,
         this.dialogService,
-        "Bekräfta återsändning",
-        body
+        record.resId,
+        item.value
       );
       if (!confirmed) {
         return;
