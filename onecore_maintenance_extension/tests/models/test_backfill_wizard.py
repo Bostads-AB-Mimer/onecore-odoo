@@ -698,3 +698,46 @@ class TestBackfillWizard(TransactionCase):
             with self.assertRaises(UserError) as caught:
                 wiz.action_search()
         self.assertIn("misslyckades", str(caught.exception))
+
+    def test_empty_request_on_non_rental_space_attaches_and_switches_space(self):
+        # MIM-2056: an ärende with neither object nor tenant, raised on a space
+        # that carries no rentalId, can be filled in from the wizard — the attach
+        # realigns Utrymme to the object's type.
+        for space in ("Övrigt", "Tvättstuga"):
+            with self.subTest(space=space):
+                request = create_maintenance_request(self.env, space_caption=space)
+                self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+                wiz = self._wizard(request, "rental_object")
+                wiz.lookup_value = "216-034-03-0101"
+                with patch.object(
+                    type(wiz), "_get_core_api", return_value=self.fake_api
+                ):
+                    wiz.action_search()
+                    wiz.action_confirm()
+                    wiz.action_confirm_no_hide()
+
+                reloaded = self.env["maintenance.request"].browse(request.id)
+                reloaded.invalidate_recordset()
+                self.assertEqual(reloaded.space_caption, "Lägenhet")
+                self.assertTrue(reloaded.rental_property_id)
+                self.assertEqual(reloaded.contact_code, "P005468")
+
+    def test_backfill_buttons_are_not_gated_on_space_type(self):
+        # MIM-2056: the pens used to be hidden unless Utrymme was Lägenhet,
+        # Bilplats or Lokal, so an ärende on any other space could not be filled
+        # in at all. The wizard realigns Utrymme itself, so it must be reachable
+        # from every space.
+        from lxml import etree
+
+        # The view's own arch, not get_view(): the rendered one drops nodes by
+        # the user's groups, and the pens are group-gated.
+        view = self.env.ref(
+            "onecore_maintenance_extension.hr_equipment_request_view_form_extension"
+        )
+        tree = etree.fromstring(view.arch_db.encode())
+        for name in ("open_backfill_rental_object_wizard", "open_backfill_tenant_wizard"):
+            with self.subTest(button=name):
+                buttons = tree.xpath(f"//button[@name='{name}']")
+                self.assertTrue(buttons)
+                for button in buttons:
+                    self.assertNotIn("space_caption", button.get("invisible", ""))
