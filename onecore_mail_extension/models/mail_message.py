@@ -48,6 +48,17 @@ TENANT_AUTHOR_CONTRACTOR = "Mimers Leverantör"
 # go through tenant_author_lang() instead.
 TENANT_AUTHOR_LANG = "sv_SE"
 
+# ============================================================================
+# SENDER SHOWN TO ODOO USERS ON MINA SIDOR MESSAGES (MIM-2040, extra)
+# ============================================================================
+# work-order posts what a tenant writes on Mina sidor through its XML-RPC
+# login, so author_id on these messages is an integration account — which one
+# is configuration (ODOO__USERNAME) and differs between setups. They are
+# therefore recognised by their type, never by who posted them: only the
+# work-order service writes this type. Any future integration that relays
+# tenant messages must post them with it too.
+FROM_TENANT_MESSAGE_TYPE = "from_tenant"
+
 
 def tenant_author_lang(env):
     """The one language the resource-group name is read in, write and backfill.
@@ -112,6 +123,18 @@ class OneCoreMailMessage(models.Model):
         "'Mimers Leverantör - <resursgrupp>' när en extern entreprenör "
         "svarar. Sätts när meddelandet skapas och ändras aldrig.",
     )
+    # MIM-2040 (extra) — who wrote a Mina sidor message, for Odoo users. Only
+    # set on from_tenant, where author_id is the integration account rather
+    # than the tenant. A snapshot of the request's tenant at write time, so
+    # replacing or removing the tenant later cannot rewrite who wrote it. It
+    # names the request's tenant, not necessarily the person logged in on
+    # Mina sidor — nothing upstream says who that was.
+    onecore_from_tenant_name = fields.Char(
+        string="Skrivet av hyresgäst",
+        copy=False,
+        help="Hyresgästen på ärendet när meddelandet skrevs på Mina sidor. "
+        "Visas som avsändare i chattern i stället för integrationsanvändaren.",
+    )
 
     @api.depends(
         "author_id",
@@ -171,6 +194,7 @@ class OneCoreMailMessage(models.Model):
             "pinned_by_name",
             "can_pin",
             "onecore_log_category",
+            "onecore_from_tenant_name",
         ]
 
     @api.model
@@ -446,6 +470,17 @@ class OneCoreMailMessage(models.Model):
             if message_type in TENANT_FACING_MESSAGE_TYPES:
                 values["onecore_tenant_author_name"] = self._tenant_facing_author_name(
                     self._tenant_facing_author(values), the_record
+                )
+
+            # MIM-2040 (extra). Keyed on the type, not on author_id: the
+            # integration account that posts these differs between setups.
+            # setdefault so a caller that knows the writer can pass it.
+            # sudo(): the name must not depend on what the integration account
+            # may read.
+            if message_type == FROM_TENANT_MESSAGE_TYPE and the_record:
+                values.setdefault(
+                    "onecore_from_tenant_name",
+                    the_record.sudo().tenant_id.name or False,
                 )
 
             if message_type and message_type.startswith("tenant_"):
