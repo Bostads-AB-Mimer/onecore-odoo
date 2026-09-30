@@ -218,3 +218,16 @@ class TestTenantAuthorNameBackfill(TransactionCase):
             message.onecore_tenant_author_name,
             "Mimers Leverantör - Utgången Leverantör AB",
         )
+
+    def test_archived_contractor_user_is_still_a_contractor(self):
+        # A supplier's staff are archived when they leave, and res.users has an
+        # `active` field. all_user_ids is computed with active_test=False, but
+        # reading it back filters by the *reader's* context, so without the
+        # override every archived supplier user's history would freeze as
+        # "Mimer" — and a re-run only fills NULLs, so it could not repair it.
+        message = self._legacy_message(self.external_user, "tenant_sms")
+        self.external_user.active = False
+        self._run()
+        self.assertEqual(
+            message.onecore_tenant_author_name, "Mimers Leverantör - Städbolaget AB"
+        )

@@ -51,13 +51,23 @@ def contractor_partner_ids(env):
     base.user_root is excluded: security/maintenance.xml puts it in
     group_external_contractor, but anything OdooBot posted is Mimer's own
     automation, not a supplier. The write path makes the same exception.
+
+    active_test=False because res.users has an `active` field and a
+    supplier's staff are archived when they leave. all_user_ids is computed
+    with active_test=False, but the read filters by the caller's context
+    (fields_relational.py convert_to_record), so without it every archived
+    contractor's history would freeze as "Mimer".
     """
     from odoo import SUPERUSER_ID
 
     group = env.ref(GROUP_XMLID, raise_if_not_found=False)
     if not group:
         return []
-    contractors = group.sudo().all_user_ids.filtered(lambda u: u.id != SUPERUSER_ID)
+    contractors = (
+        group.sudo()
+        .with_context(active_test=False)
+        .all_user_ids.filtered(lambda u: u.id != SUPERUSER_ID)
+    )
     return contractors.partner_id.ids
 
 
