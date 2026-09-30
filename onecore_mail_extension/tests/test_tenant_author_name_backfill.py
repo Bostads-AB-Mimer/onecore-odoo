@@ -13,7 +13,7 @@ from odoo.tests import TransactionCase, tagged
 
 
 def _load_backfill_migration():
-    """Load migrations/19.0.1.0.1/post-migration.py by path.
+    """Load migrations/19.0.1.0.2/post-migration.py by path.
 
     The migration lives outside the importable package tree (the directory name
     is not a valid Python identifier), so it has to be loaded from its file
@@ -21,7 +21,7 @@ def _load_backfill_migration():
     tests/models/test_customer_message_indicator.py.
     """
     module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(module_root, "migrations", "19.0.1.0.1", "post-migration.py")
+    path = os.path.join(module_root, "migrations", "19.0.1.0.2", "post-migration.py")
     spec = importlib.util.spec_from_file_location("mim_2040_post_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

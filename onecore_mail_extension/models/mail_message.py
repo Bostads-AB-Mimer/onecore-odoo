@@ -42,7 +42,7 @@ TENANT_AUTHOR_CONTRACTOR = "Mimers Leverantör"
 # The resource-group half of the label has the same requirement, but
 # maintenance.team.name is translate=True — a jsonb column resolved in whatever
 # language the reader happens to have. Left unpinned, the write path resolves
-# it in the posting user's language while the 19.0.1.0.1 backfill, whose env
+# it in the posting user's language while the 19.0.1.0.2 backfill, whose env
 # carries no lang at all, resolves it as en_US — so one tenant's history would
 # carry both spellings of a resource group that was ever renamed. Both sides
 # go through tenant_author_lang() instead.
@@ -378,7 +378,7 @@ class OneCoreMailMessage(models.Model):
         """The user whose organisation answered, for one set of create values.
 
         Read from the message's own author_id where it has one, so this agrees
-        with the 19.0.1.0.1 backfill — which has nothing but author_id to go on
+        with the 19.0.1.0.2 backfill — which has nothing but author_id to go on
         — by construction, rather than by the coincidence that every
         tenant-facing type happens to be posted by the acting user today. A
         message_post(author_id=...) on someone else's behalf would otherwise be
