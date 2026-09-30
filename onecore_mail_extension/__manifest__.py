@@ -3,7 +3,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore Mail Extension",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "sequence": 100,
     "category": "Productivity/Discuss",
     "description": "Extends the mail module with ONECore features.",

@@ -36,6 +36,20 @@ patch(Message.prototype, {
   get canPin() {
     return this.message.can_pin;
   },
+  // The avatar and the user card belong to the integration account, not to
+  // the tenant who wrote a from_tenant message (MIM-2040).
+  get authorAvatarUrl() {
+    if (this.message.isFromTenant) {
+      return this.store.DEFAULT_AVATAR;
+    }
+    return super.authorAvatarUrl;
+  },
+  hasAuthorClickable() {
+    if (this.message.isFromTenant) {
+      return false;
+    }
+    return super.hasAuthorClickable();
+  },
   async togglePin() {
     const result = await this.env.services.orm.call(
       "mail.message",
@@ -68,6 +82,7 @@ patch(Message.prototype, {
       case "tenant_mail_and_sms":
         return " (via sms och mejl)";
       case "tenant_my_pages":
+      case "from_tenant":
         return " (via Mina sidor)";
       case "failed_tenant_sms":
         return " (sms misslyckades)";
