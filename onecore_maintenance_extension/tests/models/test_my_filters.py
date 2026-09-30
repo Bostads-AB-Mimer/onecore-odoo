@@ -396,6 +396,7 @@ FAVORITES = (
     "filter_ordered_by_my_department_at_others",
     "filter_in_my_district_ordered_by_others",
     "filter_my_kvv_areas",
+    "filter_my_active_orders_by_category",
 )
 # "Avdelning", not "distrikt", on the first one: the favorite is shared with
 # Kundcenter and the other departments that are not a district.
@@ -403,12 +404,13 @@ FAVORITE_NAMES = {
     "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra",
     "filter_in_my_district_ordered_by_others": "I mitt distrikt, beställt av andra",
     "filter_my_kvv_areas": "Mina kvartersvärdsområden",
+    "filter_my_active_orders_by_category": "Beställt av min avdelning hos andra, per kategori",
 }
 
 
 @tagged("onecore")
 class TestShippedFavorites(MyFiltersFixture, TransactionCase):
-    """The three ir.filters records in data/ir_filters.xml and the
+    """The ir.filters records in data/ir_filters.xml and the
     "Mitt distrikt" action + menu in views/my_district_views.xml."""
 
     def _favorite(self, xml_id):
@@ -450,7 +452,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
     def test_favorites_list_under_every_request_action(self):
         """The favorites dropdown only lists filters bound to the current
         action or to none. The stock list and "Mitt distrikt" must both show
-        all three."""
+        all of them."""
         for action_xml_id in (
             "maintenance.hr_equipment_request_action",
             "onecore_maintenance_extension.action_my_district_requests",
@@ -524,6 +526,56 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         )
         for user in (self.kundcenter_user, self.blank_user):
             self.assertEqual(self._run(favorite, user), self.env["maintenance.request"])
+
+    def test_my_active_orders_by_category(self):
+        """What my department ordered from others and is still open:
+        own_here sits with my own group, done is Utförd."""
+        favorite = self._favorite("filter_my_active_orders_by_category")
+
+        self.assertEqual(self._run(favorite, self.district_user), self.own_elsewhere)
+        self.assertEqual(self._run(favorite, self.kundcenter_user), self.other_here)
+        self.assertEqual(
+            self._run(favorite, self.blank_user), self.env["maintenance.request"]
+        )
+
+    def test_my_active_orders_by_category_excludes_closed(self):
+        favorite = self._favorite("filter_my_active_orders_by_category")
+        Request = self.env["maintenance.request"]
+        closed = Request.browse(self.own_elsewhere.id).with_user(self.district_user)
+        closed.write({"stage_id": self.env.ref("maintenance.stage_6").id})
+
+        self.assertEqual(self._run(favorite, self.district_user), Request)
+
+    def test_my_active_orders_by_category_groups_by_request_category(self):
+        """The favorite's group-by is our ärendekategori, not the stock
+        equipment category: two orders of different kinds land in two
+        groups."""
+        favorite = self._favorite("filter_my_active_orders_by_category")
+        second = create_maintenance_request(
+            self.env(user=self.district_user),
+            maintenance_team_id=self.ost_team.id,
+            cost_center_code="61120",
+            kvv_area_code="61121",
+            maintenance_request_category_id=self.env.ref(
+                "onecore_maintenance_extension.category_2"
+            ).id,
+        )
+        requests = self.own_elsewhere | second
+
+        groups = (
+            self.env["maintenance.request"]
+            .with_user(self.district_user)
+            ._read_group(
+                safe_eval(favorite.domain) + [("id", "in", requests.ids)],
+                groupby=safe_eval(favorite.context)["group_by"],
+                aggregates=["__count"],
+            )
+        )
+
+        self.assertEqual(
+            {(category.name, count) for category, _stage, count in groups},
+            {("Vitvara", 1), ("Tvättstuga", 1)},
+        )
 
     # ------------------------------------------------------------------
     # "Mitt distrikt" menu
