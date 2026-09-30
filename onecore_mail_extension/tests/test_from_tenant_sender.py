@@ -115,13 +115,16 @@ class TestFromTenantSender(TransactionCase):
 
     def test_other_model_does_not_borrow_a_request_tenant(self):
         # Same res_id as the request, different model: must not pick up
-        # Anna Andersson from an unrelated maintenance.request.
+        # Anna Andersson from an unrelated maintenance.request. reply_to is
+        # given so base mail does not browse a res.partner with that id, which
+        # need not exist.
         message = self.env["mail.message"].create(
             {
                 "model": "res.partner",
                 "res_id": self.request.id,
                 "body": "Hej",
                 "message_type": "from_tenant",
+                "reply_to": "noreply@example.com",
             }
         )
         self.assertFalse(message.onecore_from_tenant_name)
