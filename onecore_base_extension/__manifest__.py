@@ -5,11 +5,12 @@
     "category": "ONECore",
     "summary": "Extends the Odoo base module with ONECore specific customizations.",
     "sequence": 100,
-    "version": "19.0.1.0.2",
+    "version": "19.0.1.0.3",
     "depends": ["base", "mail_bot", "mail"],
     "data": [
         "data/res_lang_data.xml",
         "views/res_users_view.xml",
+        "views/ir_module_views.xml",
     ],
     "assets": {
         "web.assets_backend": [
