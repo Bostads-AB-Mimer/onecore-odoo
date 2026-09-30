@@ -473,7 +473,7 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
 
         self.assertFalse(request.preview_atersand_team(self.stage_utford.id))
 
-    def test_preview_ignores_a_stage_only_named_atersand(self):
+    def test_preview_ignores_a_stage_only_named_like_the_return_stage(self):
         """Återsänd is resolved by xml-id, never by name. A hand-made column
         called "Återsänd" is not the return stage: moving there neither
         routes the request nor gets a team named in the dialog."""

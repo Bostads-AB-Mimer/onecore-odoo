@@ -19,7 +19,12 @@ import ConfirmDialog from "./confirm_dialog";
  * @param {number} stageId - The target stage id
  * @returns {Promise<boolean>} - true if the user confirms
  */
-export const confirmAtersand = async (orm, dialogService, resId, stageId) => {
+export const confirmReturnToTeam = async (
+  orm,
+  dialogService,
+  resId,
+  stageId
+) => {
   const teamName = await orm.call(
     "maintenance.request",
     "preview_atersand_team",

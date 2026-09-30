@@ -7,7 +7,7 @@ import { KanbanRecord } from "@web/views/kanban/kanban_record";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
 import ConfirmDialog from "./confirm_dialog";
-import { confirmAtersand } from "./atersand_confirm";
+import { confirmReturnToTeam } from "./confirm_return_dialog";
 import { askComponentQuestion } from "./component_question_dialog";
 import { openComponentWizardDialog } from "./open_component_wizard_dialog";
 
@@ -99,7 +99,7 @@ patch(KanbanRecord.prototype, {
       // which team it goes back to — the same dialog as the form statusbar
       // (MIM-2058: dragging the card used to show only the generic text).
       if (targetStageName === "Återsänd") {
-        return await confirmAtersand(
+        return await confirmReturnToTeam(
           this.orm,
           this.dialogService,
           record.resId,
