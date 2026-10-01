@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Shipped favorites for the request list.
+
+         One record each, shared with everyone (user_ids empty), never the
+         default. They resolve per user through the search-only fields in
+         models/mixins/search_fields_mixin.py — "my department", "my teams",
+         "my kvv areas" — so a kvartersvärd in Väst and one in Öst click the
+         same favorite and get their own list, with no per-district
+         configuration. For Kundcenter and users without a department or a
+         resource group they return empty lists, which is harmless.
+
+         No action_id: a favorite bound to an action only lists under that
+         action. Unbound, they list under every request action — the stock
+         list, "Mitt distrikt" and the resource-group cards.
+
+         noupdate: users may rename or tweak them; a release must not undo
+         that. archive = False on all three: clicking a favorite drops the
+         "Aktiva ärenden" facet, and archived requests must not surface. -->
+    <data noupdate="1">
+        <!-- What my department ordered that sits with someone else,
+             per stage, so the orderer can follow up. "Avdelning", not
+             "distrikt": the favorite is shared with Kundcenter, Vitvaror and
+             the rest, who are departments but no district. -->
+        <record id="filter_ordered_by_my_department_at_others" model="ir.filters">
+            <field name="name">Beställt av min avdelning hos andra</field>
+            <field name="model_id">maintenance.request</field>
+            <field name="user_ids" eval="False" />
+            <field name="is_default" eval="False" />
+            <field name="domain">[('ordered_by_my_department', '=', True), ('at_my_teams', '=', False), ('archive', '=', False)]</field>
+            <field name="context">{'group_by': ['stage_id']}</field>
+            <field name="sort">["address", "due_date"]</field>
+        </record>
+
+        <!-- What sits in my district but was ordered elsewhere
+             (Kundcenter, another district), open only, drilled down
+             distrikt → kvartersvärdsområde → fastighet. Grouped on the kvv
+             code, not the name: names are not unique in OneCore. -->
+        <record id="filter_in_my_district_ordered_by_others" model="ir.filters">
+            <field name="name">I mitt distrikt, beställt av andra</field>
+            <field name="model_id">maintenance.request</field>
+            <field name="user_ids" eval="False" />
+            <field name="is_default" eval="False" />
+            <field name="domain">[('in_my_district', '=', True), ('ordered_by_my_department', '=', False), ('stage_id.done', '=', False), ('archive', '=', False)]</field>
+            <field name="context">{'group_by': ['kvv_area_code', 'estate']}</field>
+            <field name="sort">[]</field>
+        </record>
+
+        <!-- The areas I am the steward of, per stage. "Show a
+             colleague's area too" is the user typing a kvv-area code facet
+             on top; no code for that. -->
+        <record id="filter_my_kvv_areas" model="ir.filters">
+            <field name="name">Mina kvartersvärdsområden</field>
+            <field name="model_id">maintenance.request</field>
+            <field name="user_ids" eval="False" />
+            <field name="is_default" eval="False" />
+            <field name="domain">[('in_my_kvv_areas', '=', True), ('archive', '=', False)]</field>
+            <field name="context">{'group_by': ['stage_id']}</field>
+            <field name="sort">[]</field>
+        </record>
+    </data>
+</odoo>
