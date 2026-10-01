@@ -58,8 +58,9 @@ class SearchFieldsMixin(models.AbstractModel):
         search="_search_is_performed",
         help="Ärenden i steget Utförd (klara men inte avslutade).",
     )
-    # Integer so the resource group cards can open the list with
-    # search_default_ordered_by_team_id: active_id.
+    # The domain behind the resource group card's "Bevakning" numbers
+    # (maintenance.team._ordered_domain). Not in the search view: nobody
+    # types a team id.
     ordered_by_team_id = fields.Integer(
         "Beställt av resursgrupp",
         store=False,
@@ -160,12 +161,8 @@ class SearchFieldsMixin(models.AbstractModel):
         return self._boolean_search_domain(operator, value, domain)
 
     def _search_ordered_by_team_id(self, operator, value):
-        """Requests ordered by any department a member of the team belongs to.
-
-        A resource group is a work queue and orders nothing itself; what the
-        team card asks is "what did *my people* order", and the people's
-        departments are the stamped orderer on the requests.
-        """
+        """Requests ordered by any department a member of the team belongs to
+        (see maintenance.team._member_departments)."""
         if operator in ("=", "in"):
             negate = False
         elif operator in ("!=", "not in"):
@@ -177,12 +174,8 @@ class SearchFieldsMixin(models.AbstractModel):
         else:
             team_ids = [int(value)] if value else []
         # browse, not search: archived teams still have members with
-        # departments. Active members only — an ex-member's old department
-        # did not order on this team's behalf.
-        teams = self.env["maintenance.team"].sudo().browse(team_ids)
-        departments = {
-            clean_department(member.ad_office_location) for member in teams.member_ids
-        } - {False}
+        # departments.
+        departments = self.env["maintenance.team"].browse(team_ids)._member_departments()
         domain = (
             Domain("ordering_department", "in", sorted(departments))
             if departments

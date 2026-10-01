@@ -54,6 +54,20 @@ $mimer-green-text: #1B5E20;
     color: $mimer-green-text;
 }
 
+// Resource group card: every number opens its own list, so hovering must
+// single out that row rather than read as "the card is one link". A shadow
+// instead of font-weight: bold text is wider and would shift the row.
+.o_team_card_link {
+    margin-left: -0.25rem;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+
+    &:hover {
+        background: rgba(var(--bs-emphasis-color-rgb), 0.06);
+        text-shadow: 0 0 0.6px currentColor;
+    }
+}
+
 // Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
 $mimer-address-blue: #1D4ED8;
 
