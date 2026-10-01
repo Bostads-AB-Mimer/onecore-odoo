@@ -62,6 +62,16 @@ $mimer-address-blue: #1D4ED8;
     font-weight: 600;
 }
 
+// MIM-2037: maintenance team on the kanban card, sharing the assignee's row.
+// Muted so the assigned person keeps the weight when both are shown - the
+// team is something you scan for, not something you read. nowrap keeps the
+// dot glued to the team when a long name wraps; an &#160; in the template
+// does not, because OWL collapses it like any other whitespace.
+.mimer-team {
+    color: #6C757D;
+    white-space: nowrap;
+}
+
 /* Component wizard - component list table styling */
 .o_maintenance_component_wizard_form {
     .o_field_one2many {

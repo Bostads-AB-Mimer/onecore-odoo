@@ -110,17 +110,25 @@
         <t t-else="">
             Ej angett
         </t>
-        <t t-if="record.user_id.value">
-            <br/>
-            <div class="d-flex align-items-center my-2">
-                <img
-                    class="o_avatar o_user_avatar rounded"
-                    t-att-src="'/web/image/res.users/' + record.user_id.raw_value + '/avatar_128'"
-                />
-                <div class="mx-2">
-                    <t t-esc="record.user_id.value" />
-                </div>
+        <!-- MIM-2037: the team shares the assignee's row rather than taking one
+             of its own - the card already shows 8 lines. maintenance_team_id
+             is required, so the row is always drawn: with an assignee the team
+             is appended after the name, without one the team is the whole row
+             and the avatar is dropped. An unassigned request can only sit in
+             "Väntar på handläggning", "Avslutad" or "Återsänd" (see
+             _validate_unassigned_resource), so the short form only appears
+             there. -->
+        <br/>
+        <div class="d-flex align-items-center my-2">
+            <img
+                t-if="record.user_id.value"
+                class="o_avatar o_user_avatar rounded"
+                t-att-src="'/web/image/res.users/' + record.user_id.raw_value + '/avatar_128'"
+            />
+            <div t-att-class="record.user_id.value ? 'mx-2' : ''">
+                <t t-if="record.user_id.value"><t t-esc="record.user_id.value"/> </t>
+                <span class="mimer-team"><t t-if="record.user_id.value">&#183; </t><t t-esc="record.maintenance_team_id.value"/></span>
             </div>
-        </t>
+        </div>
     </t>
 </templates>

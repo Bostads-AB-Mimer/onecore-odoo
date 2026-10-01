@@ -983,6 +983,7 @@
                 </xpath>
                 <xpath expr="//field[@name='archive']" position="after">
                     <field name="stage_id" />
+                    <field name="maintenance_team_id" />
                     <field name="color" />
                     <field name="priority_label" />
                     <field name="priority_days" />
