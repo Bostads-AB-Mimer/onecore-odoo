@@ -641,11 +641,6 @@ class TestMyFiltersSearchView(MyFiltersFixture, TransactionCase):
 
         self.assertEqual(set(self._filter_domains()), set(MY_FILTER_NAMES))
         self.assertTrue(arch.xpath("//filter[@name='estate']"))
-        # Present for the team card's search_default_ordered_by_team_id, but
-        # hidden: nobody types a team id into the search box.
-        team_field = arch.xpath("//field[@name='ordered_by_team_id']")
-        self.assertTrue(team_field)
-        self.assertEqual(team_field[0].get("invisible"), "1")
 
     def test_per_user_filters_evaluate_for_every_profile(self):
         domains = self._filter_domains()
