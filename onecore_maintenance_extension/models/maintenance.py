@@ -1009,14 +1009,17 @@ class OneCoreMaintenanceRequest(
 
     def _web_read_group_format(self, groupby, aggregates, groups):
         result = super()._web_read_group_format(groupby, aggregates, groups)
-        # Kanban columns: every stage is unfolded by default except Återsänd,
-        # regardless of maintenance.stage.fold — that field is shared by all
-        # users. Each browser's own choices arrive in the
-        # onecore_kanban_fold context ({"<stage_id>": bool}), sent by the
-        # onecore_maintenance_request_kanban view from localStorage.
         # web_read_group folds groups based on the __fold flag stamped here.
-        if groupby and groupby[0] == "stage_id":
-            atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
+        if not (groupby and groupby[0] == "stage_id"):
+            return result
+        atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
+
+        if "onecore_kanban_fold" in self.env.context:
+            # Desktop kanban (onecore_maintenance_request_kanban, which always
+            # sends the key): every stage is unfolded by default except
+            # Återsänd, regardless of maintenance.stage.fold — that field is
+            # shared by all users. Each browser's own choices arrive as
+            # {"<stage_id>": bool} from localStorage.
             overrides = self._kanban_fold_overrides()
             for dict_group in result:
                 # The m2o groupby value is (id, display_name) or False
@@ -1026,6 +1029,22 @@ class OneCoreMaintenanceRequest(
                     dict_group["__fold"] = overrides.get(
                         stage_id, bool(atersand) and stage_id == atersand.id
                     )
+            return result
+
+        # Everything else grouped by stage (notably the onecore_ui mobile
+        # view, which never loads a folded group's records on tap): MIM-486,
+        # the Återsänd group is folded only while it is empty.
+        if atersand:
+            for dict_group in result:
+                value = dict_group.get("stage_id")
+                if (
+                    value
+                    and value[0] == atersand.id
+                    and "__fold" in dict_group
+                    and "__count" in dict_group
+                ):
+                    dict_group["__fold"] = not dict_group["__count"]
+                    break
         return result
 
     def _kanban_fold_overrides(self):
