@@ -1009,23 +1009,43 @@ class OneCoreMaintenanceRequest(
 
     def _web_read_group_format(self, groupby, aggregates, groups):
         result = super()._web_read_group_format(groupby, aggregates, groups)
-        # MIM-486: the Återsänd kanban column is folded only while it is empty.
+        # Kanban columns: every stage is unfolded by default except Återsänd,
+        # regardless of maintenance.stage.fold — that field is shared by all
+        # users. Each browser's own choices arrive in the
+        # onecore_kanban_fold context ({"<stage_id>": bool}), sent by the
+        # onecore_maintenance_request_kanban view from localStorage.
         # web_read_group folds groups based on the __fold flag stamped here.
         if groupby and groupby[0] == "stage_id":
             atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
-            if atersand:
-                for dict_group in result:
-                    # The m2o groupby value is (id, display_name) or False
-                    value = dict_group.get("stage_id")
-                    if (
-                        value
-                        and value[0] == atersand.id
-                        and "__fold" in dict_group
-                        and "__count" in dict_group
-                    ):
-                        dict_group["__fold"] = not dict_group["__count"]
-                        break
+            overrides = self._kanban_fold_overrides()
+            for dict_group in result:
+                # The m2o groupby value is (id, display_name) or False
+                value = dict_group.get("stage_id")
+                if value and "__fold" in dict_group:
+                    stage_id = value[0]
+                    dict_group["__fold"] = overrides.get(
+                        stage_id, bool(atersand) and stage_id == atersand.id
+                    )
         return result
+
+    def _kanban_fold_overrides(self):
+        """Per-browser fold choices from context, as {stage_id: bool}.
+
+        The value comes straight from the client's localStorage, so anything
+        malformed is ignored rather than raised on.
+        """
+        raw = self.env.context.get("onecore_kanban_fold")
+        if not isinstance(raw, dict):
+            return {}
+        overrides = {}
+        for key, folded in raw.items():
+            if not isinstance(folded, bool):
+                continue
+            try:
+                overrides[int(key)] = folded
+            except (TypeError, ValueError):
+                continue
+        return overrides
 
     @api.model_create_multi
     def create(self, vals_list):

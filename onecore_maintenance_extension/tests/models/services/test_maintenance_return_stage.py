@@ -301,34 +301,90 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
             )
         self.assertEqual(request.stage_id, self.stage_atersand)
 
-    def test_atersand_column_folds_only_when_empty(self):
-        """The Återsänd kanban column is folded when empty, open when populated"""
+    def _kanban_stage_group(self, stage, domain, **context):
+        """The web_read_group group for stage, as the kanban view loads it.
 
-        def group_stage_id(value):
-            if not value:
-                return None
+        read_group_expand is sent by the webclient for kanban views; it enables
+        both empty-column expansion and __fold stamping. A folded group comes
+        back without __records.
+        """
+        res = self.env["maintenance.request"].with_context(
+            read_group_expand=True, **context
+        ).web_read_group(domain, ["stage_id"], auto_unfold=True)
+        for group in res["groups"]:
+            value = group["stage_id"]
             if isinstance(value, (tuple, list)):
-                return value[0]
-            return value.id
+                value = value[0]
+            elif value:
+                value = value.id
+            if value == stage.id:
+                return group
+        self.fail(f"No kanban group for stage {stage.name}")
 
-        def atersand_group(domain):
-            # read_group_expand is sent by the webclient for kanban views; it
-            # enables both empty-column expansion and __fold stamping
-            res = self.env["maintenance.request"].with_context(
-                read_group_expand=True
-            ).web_read_group(domain, ["stage_id"], auto_unfold=True)
-            return next(
-                g
-                for g in res["groups"]
-                if group_stage_id(g["stage_id"]) == self.stage_atersand.id
-            )
-
-        # Folded while empty: web_read_group sends no __records for the group
-        self.assertNotIn("__records", atersand_group([("id", "=", 0)]))
+    def test_atersand_column_folded_by_default(self):
+        """The Återsänd kanban column is folded, even when it has requests"""
+        self.assertNotIn(
+            "__records",
+            self._kanban_stage_group(self.stage_atersand, [("id", "=", 0)]),
+        )
 
         request = self._create_returnable_request()
         request.write({"stage_id": self.stage_atersand.id})
-        self.assertIn("__records", atersand_group([("id", "=", request.id)]))
+        self.assertNotIn(
+            "__records",
+            self._kanban_stage_group(self.stage_atersand, [("id", "=", request.id)]),
+        )
+
+    def test_other_columns_unfolded_regardless_of_stage_fold(self):
+        """stage.fold is shared by all users, so kanban ignores it"""
+        self.stage_paborjad.fold = True
+        request = self._create_returnable_request()
+        self.assertIn(
+            "__records",
+            self._kanban_stage_group(self.stage_paborjad, [("id", "=", request.id)]),
+        )
+
+    def test_kanban_fold_context_overrides_default(self):
+        """The browser's stored fold choices override the default per stage"""
+        returned = self._create_returnable_request()
+        returned.write({"stage_id": self.stage_atersand.id})
+        started = self._create_returnable_request()
+        domain = [("id", "in", [returned.id, started.id])]
+        fold = {
+            str(self.stage_atersand.id): False,
+            str(self.stage_paborjad.id): True,
+        }
+
+        self.assertIn(
+            "__records",
+            self._kanban_stage_group(
+                self.stage_atersand, domain, onecore_kanban_fold=fold
+            ),
+        )
+        self.assertNotIn(
+            "__records",
+            self._kanban_stage_group(
+                self.stage_paborjad, domain, onecore_kanban_fold=fold
+            ),
+        )
+
+    def test_malformed_kanban_fold_context_is_ignored(self):
+        """Garbage from localStorage falls back to the default, never raises"""
+        request = self._create_returnable_request()
+        domain = [("id", "=", request.id)]
+        for fold in (
+            "garbage",
+            ["x"],
+            {"not-an-id": True},
+            {str(self.stage_paborjad.id): "yes"},
+        ):
+            with self.subTest(fold=fold):
+                self.assertIn(
+                    "__records",
+                    self._kanban_stage_group(
+                        self.stage_paborjad, domain, onecore_kanban_fold=fold
+                    ),
+                )
 
     def test_performed_date_cleared_when_returning_from_utford(self):
         """An internal user moving Utförd -> Återsänd clears performed_date"""

@@ -856,8 +856,12 @@
 
                 <!-- Column add is hidden for everyone. Column edit/delete are also
                      stripped globally by onecore_web_extension/static/src/js/kanban_header_patch.js;
-                     group_delete here is defense in depth should that patch ever be removed. -->
+                     group_delete here is defense in depth should that patch ever be removed.
+                     Columns (stages) cannot be reordered by drag and drop. js_class keeps
+                     each browser's folded/unfolded columns in localStorage. -->
                 <xpath expr="//kanban" position="attributes">
+                    <attribute name="js_class">onecore_maintenance_request_kanban</attribute>
+                    <attribute name="groups_draggable">false</attribute>
                     <attribute name="limit">30</attribute>
                     <attribute name="group_create">false</attribute>
                     <attribute name="group_delete">false</attribute>

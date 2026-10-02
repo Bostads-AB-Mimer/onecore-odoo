@@ -59,7 +59,9 @@ STAGE_DATA = {
         "sequence": 6,
     },
     # MIM-486: stage for requests returned/rejected by external
-    # contractors. Folded in kanban for all users.
+    # contractors. Kanban folding ignores this flag — see
+    # MaintenanceRequest._web_read_group_format (folded by default, unfoldable
+    # per browser).
     "onecore_maintenance_extension.stage_atersand": {
         "name": "Återsänd",
         "fold": True,
