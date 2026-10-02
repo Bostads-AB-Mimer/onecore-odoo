@@ -16,6 +16,7 @@
         "views/maintenance_views.xml",
         "views/maintenance_team_view.xml",
         "views/mobile_view.xml",
+        "views/my_district_views.xml",
         "views/maintenance_component_wizard_view.xml",
         "views/backfill_wizard_view.xml",
         "views/close_request_decline_wizard_view.xml",
@@ -25,6 +26,7 @@
         "data/maintenance.request.category.csv",
         "data/mail_message_subtype.xml",
         "data/ir_cron.xml",
+        "data/ir_filters.xml",
     ],
     "assets": {
         "web.assets_backend": [

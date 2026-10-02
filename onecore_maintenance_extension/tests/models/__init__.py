@@ -32,3 +32,4 @@ from . import test_backfill_wizard
 from . import test_remove
 from . import test_priority
 from . import test_close_request
+from . import test_my_filters

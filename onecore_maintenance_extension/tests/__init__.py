@@ -51,3 +51,4 @@ from .models import test_remove
 from .models import test_priority
 from .migrations import test_priority_migration
 from .models import test_close_request
+from .models import test_my_filters
