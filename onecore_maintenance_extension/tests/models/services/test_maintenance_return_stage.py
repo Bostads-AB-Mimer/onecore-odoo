@@ -325,14 +325,20 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         """The Återsänd kanban column is folded, even when it has requests"""
         self.assertNotIn(
             "__records",
-            self._kanban_stage_group(self.stage_atersand, [("id", "=", 0)]),
+            self._kanban_stage_group(
+                self.stage_atersand, [("id", "=", 0)], onecore_kanban_fold={}
+            ),
         )
 
         request = self._create_returnable_request()
         request.write({"stage_id": self.stage_atersand.id})
         self.assertNotIn(
             "__records",
-            self._kanban_stage_group(self.stage_atersand, [("id", "=", request.id)]),
+            self._kanban_stage_group(
+                self.stage_atersand,
+                [("id", "=", request.id)],
+                onecore_kanban_fold={},
+            ),
         )
 
     def test_other_columns_unfolded_regardless_of_stage_fold(self):
@@ -341,7 +347,26 @@ class TestMaintenanceReturnStage(StageTestMixin, TransactionCase):
         request = self._create_returnable_request()
         self.assertIn(
             "__records",
-            self._kanban_stage_group(self.stage_paborjad, [("id", "=", request.id)]),
+            self._kanban_stage_group(
+                self.stage_paborjad,
+                [("id", "=", request.id)],
+                onecore_kanban_fold={},
+            ),
+        )
+
+    def test_atersand_folds_only_when_empty_outside_kanban(self):
+        """Without the kanban context (e.g. the onecore_ui mobile view, which
+        cannot unfold a group) Återsänd is folded only while it is empty"""
+        self.assertNotIn(
+            "__records",
+            self._kanban_stage_group(self.stage_atersand, [("id", "=", 0)]),
+        )
+
+        request = self._create_returnable_request()
+        request.write({"stage_id": self.stage_atersand.id})
+        self.assertIn(
+            "__records",
+            self._kanban_stage_group(self.stage_atersand, [("id", "=", request.id)]),
         )
 
     def test_kanban_fold_context_overrides_default(self):
