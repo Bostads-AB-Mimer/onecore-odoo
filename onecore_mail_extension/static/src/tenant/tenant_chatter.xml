@@ -27,6 +27,33 @@
         </button>
     </xpath>
 
+    <!-- MIM-2036 — "Hyresgäst vill avsluta". A decision rather than an
+         acknowledgement, so it gets its own strip instead of joining the
+         acknowledge button. Avsluta ärendet is hidden for external
+         contractors, who may never move a case to Avslutad. -->
+    <xpath expr="//div[hasclass('o-mail-Chatter-content')]" position="before">
+        <div class="o-mimer-CloseRequest d-flex flex-wrap align-items-center gap-2 flex-shrink-0"
+             t-if="showCloseRequestSignal()"
+             role="status">
+            <span class="fw-semibold">
+                <i class="fa fa-flag-checkered me-1" aria-hidden="true"/>Hyresgäst vill avsluta ärendet
+            </span>
+            <div class="ms-auto d-flex gap-2">
+                <button class="btn btn-sm o-mimer-CloseRequest-accept text-nowrap"
+                        t-if="canAcceptCloseRequest()"
+                        t-att-disabled="state.onecoreCloseRequestBusy"
+                        t-on-click="onClickAcceptCloseRequest">
+                    Avsluta ärendet
+                </button>
+                <button class="btn btn-sm btn-outline-secondary text-nowrap"
+                        t-att-disabled="state.onecoreCloseRequestBusy"
+                        t-on-click="onClickDeclineCloseRequest">
+                    Avslå
+                </button>
+            </div>
+        </div>
+    </xpath>
+
     <!-- Händelselogg filter (MIM-1956). Between the topbar and the log, so it
          reads as belonging to the list it filters. Hidden while search is open,
          since search replaces the message list with SearchMessageResult and

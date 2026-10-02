@@ -109,6 +109,17 @@ class TestOneCoreLogCategory(TransactionCase):
         message = self._message("receipt_to_tenant", self.note_subtype)
         self.assertEqual(message.onecore_log_category, LOG_CATEGORY_COMMUNICATION)
 
+    def test_close_request_types_are_communication(self):
+        """MIM-2036: both halves of the close-request exchange carry the
+        internal mail.mt_note subtype, like the receipt, and are read by the
+        tenant on Mina sidor — so they belong in Kommunikation."""
+        for message_type in ("close_request_from_tenant", "close_request_declined"):
+            with self.subTest(message_type=message_type):
+                message = self._message(message_type, self.note_subtype)
+                self.assertEqual(
+                    message.onecore_log_category, LOG_CATEGORY_COMMUNICATION
+                )
+
     def test_message_without_subtype_is_communication(self):
         """Pins NULL handling. A message with no subtype at all must still land
         in exactly one bucket rather than falling through."""
