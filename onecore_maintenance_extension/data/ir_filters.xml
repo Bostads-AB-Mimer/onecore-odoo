@@ -15,7 +15,7 @@
          list, "Mitt distrikt" and the resource-group cards.
 
          noupdate: users may rename or tweak them; a release must not undo
-         that. archive = False on all three: clicking a favorite drops the
+         that. archive = False on all of them: clicking a favorite drops the
          "Aktiva ärenden" facet, and archived requests must not surface. -->
     <data noupdate="1">
         <!-- What my department ordered that sits with someone else,
@@ -23,7 +23,7 @@
              "distrikt": the favorite is shared with Kundcenter, Vitvaror and
              the rest, who are departments but no district. -->
         <record id="filter_ordered_by_my_department_at_others" model="ir.filters">
-            <field name="name">Beställt av min avdelning hos andra</field>
+            <field name="name">Beställt av min avdelning hos andra – alla</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
             <field name="is_default" eval="False" />
@@ -56,6 +56,23 @@
             <field name="is_default" eval="False" />
             <field name="domain">[('in_my_kvv_areas', '=', True), ('archive', '=', False)]</field>
             <field name="context">{'group_by': ['stage_id']}</field>
+            <field name="sort">[]</field>
+        </record>
+
+        <!-- What my department ordered from other resource groups and is
+             still being worked on, per ärendekategori (golv, måleri, …)
+             and then per stage, so an orderer such as
+             Förvaltningsadministration follows up by kind of order, not by
+             contractor. "Aktiv" = neither Utförd nor Avslutad; a request
+             still in my own group's queue is not a placed order and is
+             left out: the same "hos andra" cut as the favorite above. -->
+        <record id="filter_my_active_orders_by_category" model="ir.filters">
+            <field name="name">Beställt av min avdelning hos andra – aktiva per kategori</field>
+            <field name="model_id">maintenance.request</field>
+            <field name="user_ids" eval="False" />
+            <field name="is_default" eval="False" />
+            <field name="domain">[('ordered_by_my_department', '=', True), ('at_my_teams', '=', False), ('stage_id.done', '=', False), ('is_performed', '=', False), ('archive', '=', False)]</field>
+            <field name="context">{'group_by': ['maintenance_request_category_id', 'stage_id']}</field>
             <field name="sort">[]</field>
         </record>
     </data>
