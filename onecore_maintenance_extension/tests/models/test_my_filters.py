@@ -401,10 +401,10 @@ FAVORITES = (
 # "Avdelning", not "distrikt", on the first one: the favorite is shared with
 # Kundcenter and the other departments that are not a district.
 FAVORITE_NAMES = {
-    "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra",
+    "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra – alla",
     "filter_in_my_district_ordered_by_others": "I mitt distrikt, beställt av andra",
     "filter_my_kvv_areas": "Mina kvartersvärdsområden",
-    "filter_my_active_orders_by_category": "Beställt av min avdelning hos andra, per kategori",
+    "filter_my_active_orders_by_category": "Beställt av min avdelning hos andra – aktiva per kategori",
 }
 
 
