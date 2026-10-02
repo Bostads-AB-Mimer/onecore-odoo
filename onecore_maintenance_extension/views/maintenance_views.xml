@@ -924,6 +924,7 @@
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
                         <field name="create_date" string="Skapad Datum" options="{'show_time': false}" optional="hide" />
+                        <field name="owner_user_id" string="Skapad av" optional="hide" />
                         <field name="lease_start_date" string="Kontrakt startdatum" optional="hide" />
                         <field name="lease_end_date" string="Kontrakt slutdatum" optional="hide" />
                         <field name="start_date" optional="hide" />
