@@ -529,7 +529,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
 
     def test_my_active_orders_by_category(self):
         """What my department ordered from others and is still open:
-        own_here sits with my own group, done is Utförd."""
+        own_here and done sit with my own group, so only own_elsewhere."""
         favorite = self._favorite("filter_my_active_orders_by_category")
 
         self.assertEqual(self._run(favorite, self.district_user), self.own_elsewhere)
@@ -543,6 +543,18 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         Request = self.env["maintenance.request"]
         closed = Request.browse(self.own_elsewhere.id).with_user(self.district_user)
         closed.write({"stage_id": self.env.ref("maintenance.stage_6").id})
+
+        self.assertEqual(self._run(favorite, self.district_user), Request)
+
+    def test_my_active_orders_by_category_excludes_performed(self):
+        """Utförd at another group is still a placed order, but no longer
+        an active one: only is_performed leaves it out."""
+        favorite = self._favorite("filter_my_active_orders_by_category")
+        Request = self.env["maintenance.request"]
+        performed = Request.browse(self.own_elsewhere.id).with_user(self.district_user)
+        performed.write({"user_id": self.district_user.id})
+        performed.write({"stage_id": self.env.ref("maintenance.stage_5").id})
+        self.assertEqual(performed.maintenance_team_id, self.ost_team)
 
         self.assertEqual(self._run(favorite, self.district_user), Request)
 

@@ -65,8 +65,7 @@
              Förvaltningsadministration follows up by kind of order, not by
              contractor. "Aktiv" = neither Utförd nor Avslutad; a request
              still in my own group's queue is not a placed order and is
-             left out, the same cut as the "hos andra" favorite above, so
-             the two agree. -->
+             left out: the same "hos andra" cut as the favorite above. -->
         <record id="filter_my_active_orders_by_category" model="ir.filters">
             <field name="name">Beställt av min avdelning hos andra, per kategori</field>
             <field name="model_id">maintenance.request</field>
