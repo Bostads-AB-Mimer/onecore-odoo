@@ -25,6 +25,28 @@ $mimer-dialog-unread-border: #FFB74D;
     border-color: $mimer-dialog-unread-border;
 }
 
+// MIM-2036 — "Hyresgäst vill avsluta" strip. Mirrors .mimer-badge-purple in
+// onecore_maintenance_extension (Material purple 50 / 300 / 900), which this
+// module does not depend on.
+$mimer-close-request-bg: #F3E5F5;
+$mimer-close-request-border: #BA68C8;
+$mimer-close-request-text: #4A148C;
+
+.o-mimer-CloseRequest {
+    margin: 0 16px 8px;
+    padding: 8px 12px;
+    background-color: $mimer-close-request-bg;
+    border: 0.5px solid $mimer-close-request-border;
+    border-radius: 4px;
+    color: $mimer-close-request-text;
+
+    .o-mimer-CloseRequest-accept {
+        background-color: $mimer-close-request-text;
+        border-color: $mimer-close-request-text;
+        color: #FFF;
+    }
+}
+
 // Mimer "pinned" highlight — reuse the dialog-unread tint for a consistent
 // "needs attention" look, with a distinct left accent.
 .o-mail-Message.mimer-pinned {

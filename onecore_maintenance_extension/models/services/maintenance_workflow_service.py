@@ -45,6 +45,13 @@ class MaintenanceStageManager:
 
         if new_stage.name == "Avslutad":
             updates["closed_date"] = fields.Datetime.now()
+            # MIM-2036: a tenant's close request cannot outlive the case being
+            # closed, whether through "Avsluta ärendet" or a drag to Avslutad.
+            # Same write as the stage, so a transition that fails validation
+            # leaves the request pending. Applied to the whole recordset: on a
+            # record without a pending request the extra stamp is inert.
+            if any(r.close_request_pending for r in record):
+                updates["close_request_resolved_at"] = updates["closed_date"]
         else:
             updates["closed_date"] = False
 
@@ -217,6 +224,12 @@ class FieldChangeTracker:
         # own message is already in the chatter; a field-change note on top of
         # it is noise.
         "last_customer_message_at",
+        # MIM-2036 close-request stamps. The request and the decline are
+        # already in the chatter as messages of their own, and an accept as
+        # the stage change.
+        "close_requested_at",
+        "close_request_resolved_at",
+        "close_request_pending",
         "recently_added_tenant",  # technical flag, English label — never log
         # OneCore management-area snapshot (ManagementAreaService) — written
         # lazily from the button/backfill; not a user change worth a note

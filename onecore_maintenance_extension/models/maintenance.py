@@ -2,14 +2,17 @@ import urllib.parse
 import uuid
 import logging
 import json
+from datetime import timedelta
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError, ValidationError
+from odoo.tools import SQL
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .utils.helpers import close_request_reason_html
 from .utils.priority import priority_days_from, priority_label_for
 from .services import (
     FieldChangeTracker,
@@ -31,6 +34,8 @@ from .constants import (
     FORM_STATES,
     CUSTOMER_MESSAGE_TYPE,
     RECEIPT_TO_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_CONFLICT_PREFIX,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -62,10 +67,12 @@ class OneCoreMaintenanceRequest(
     models.Model,
 ):
     _inherit = "maintenance.request"
-    # Customer messages first — "ska sorteras högst upp i kanban vyn". _order
-    # takes stored columns only, hence the stored customer_message_unread
-    # boolean rather than the non-stored has_unread_customer_message.
-    _order = "customer_message_unread desc, recently_added_tenant desc, request_date desc"
+    # A tenant's close request first — the only signal that asks for a
+    # decision rather than an acknowledgement (MIM-2036) — then customer
+    # messages, "ska sorteras högst upp i kanban vyn". _order takes stored
+    # columns only, hence the stored booleans rather than their non-stored
+    # has_unread_* mirrors.
+    _order = "close_request_pending desc, customer_message_unread desc, recently_added_tenant desc, request_date desc"
     _unaccent = True
 
     # ============================================================================
@@ -239,6 +246,30 @@ class OneCoreMaintenanceRequest(
         string="Okvitterat meddelande från kund",
         compute="_compute_has_unread_customer_message",
         store=False,
+    )
+    # MIM-2036 — "Hyresgäst vill avsluta". Two timestamps rather than a flag,
+    # the same shape as last_customer_message_at / customer_message_ack_at: a
+    # new request after a decline re-raises the signal simply by being newer
+    # than the last resolution, with nothing to reset.
+    close_requested_at = fields.Datetime(
+        string="Avslut begärt av hyresgäst",
+        readonly=True,
+        copy=False,
+        help="Sätts när hyresgästen ber om att få ärendet avslutat via Mina sidor.",
+    )
+    close_request_resolved_at = fields.Datetime(
+        string="Begäran om avslut hanterad",
+        readonly=True,
+        copy=False,
+        help="Sätts när begäran avslås, när ärendet avslutas på begäran eller när "
+        "ärendet flyttas till Avslutad på annat sätt.",
+    )
+    # Stored, so _order can promote it and the kanban/mobile cards can read it
+    # without a compute per card.
+    close_request_pending = fields.Boolean(
+        string="Hyresgäst vill avsluta",
+        compute="_compute_close_request_pending",
+        store=True,
     )
     # Stored snapshot written only by OneCoreFlagSyncService (create path +
     # cron). Computing it per record would fire one OneCore call per kanban
@@ -701,6 +732,18 @@ class OneCoreMaintenanceRequest(
         for record in self:
             record.has_unread_customer_message = record.customer_message_unread
 
+    @api.depends("close_requested_at", "close_request_resolved_at")
+    def _compute_close_request_pending(self):
+        # One shared fact, like customer_message_unread — no depends_context.
+        # request_close_from_tenant keeps a new request strictly after the last
+        # resolution, so equal timestamps here always mean "resolved".
+        for record in self:
+            requested = record.close_requested_at
+            resolved = record.close_request_resolved_at
+            record.close_request_pending = bool(requested) and (
+                not resolved or requested > resolved
+            )
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -813,6 +856,112 @@ class OneCoreMaintenanceRequest(
             self.recently_added_tenant = False
         self.invalidate_recordset(["has_unread_new_customer_info"])
         return True
+
+    # ============================================================================
+    # CLOSE REQUEST FROM TENANT (MIM-2036)
+    # ============================================================================
+    # The tenant only asks; an Odoo user decides — action_accept_close_request
+    # or the decline wizard — and any move to Avslutad also resolves the
+    # request (MaintenanceStageManager.handle_stage_change).
+
+    def _lock_for_close_request(self):
+        """Row-lock the request, then drop its cached values.
+
+        A blocking FOR UPDATE, deliberately not lock_for_update(): that uses
+        SKIP LOCKED and raises LockError, a UserError without
+        CLOSE_REQUEST_CONFLICT_PREFIX, which the work-order service would turn
+        into a 500. Here the second of two concurrent callers waits; under
+        REPEATABLE READ it then fails with a serialization error once the first
+        commits, Odoo's RPC layer retries it (odoo/service/model.py retrying),
+        and the retry reads the committed request and is refused as
+        already_pending.
+        """
+        self.ensure_one()
+        self.env.cr.execute(
+            SQL(
+                "SELECT id FROM %s WHERE id = %s FOR UPDATE",
+                SQL.identifier(self._table),
+                self.id,
+            )
+        )
+        self.invalidate_recordset()
+
+    def _raise_close_request_conflict(self, code):
+        # A code, not Swedish: the work-order service parses it into a 409 and
+        # no Odoo user ever reads it.
+        raise UserError(f"{CLOSE_REQUEST_CONFLICT_PREFIX}{code}")
+
+    def request_close_from_tenant(self, reason=None):
+        """The tenant asks for the case to be closed.
+
+        Called over XML-RPC by onecore's work-order service, as its
+        integration account, on the tenant's behalf. Refused — see
+        _raise_close_request_conflict — when the case is already Avslutad,
+        hidden from Mimer.nu, or already has a pending request.
+        """
+        self.ensure_one()
+        self._lock_for_close_request()
+        if self.stage_id.name == "Avslutad":
+            self._raise_close_request_conflict("closed")
+        if self.hidden_from_my_pages:
+            self._raise_close_request_conflict("hidden")
+        if self.close_request_pending:
+            self._raise_close_request_conflict("already_pending")
+
+        # Neutral wording, so the same body reads right in the chatter and on
+        # Mina sidor.
+        body = Markup("Begäran om att avsluta ärendet")
+        reason_html = close_request_reason_html(reason)
+        if reason_html:
+            body += Markup("<br/>Orsak: ") + reason_html
+        self.message_post(
+            body=body,
+            message_type=CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+            subtype_xmlid="mail.mt_note",
+        )
+
+        requested_at = fields.Datetime.now()
+        resolved_at = self.close_request_resolved_at
+        if resolved_at and requested_at <= resolved_at:
+            # Datetime has second resolution and pending needs the request
+            # strictly after the last resolution; asking again within the
+            # second of a decline would otherwise read as already resolved.
+            requested_at = resolved_at + timedelta(seconds=1)
+        # sudo(): same as message_post's last_customer_message_at write — the
+        # integration account need not hold write access on every field.
+        self.sudo().write({"close_requested_at": requested_at})
+        return True
+
+    def action_accept_close_request(self):
+        """Close the case on the tenant's request ("Avsluta ärendet").
+
+        Writes the stage as the acting user, so the workflow and the
+        contractor rules in write() run unchanged: an external contractor may
+        never move a case to Avslutad and is refused there, which is why the
+        chatter only offers them Avslå. The resolution is not written here —
+        the transition itself stamps it, in the same write.
+        """
+        self.ensure_one()
+        if not self.close_request_pending:
+            raise UserError(_("Begäran om avslut är redan hanterad."))
+        closed_stage = MaintenanceStageManager(self.env)._get_stage_by_name("Avslutad")
+        self.write({"stage_id": closed_stage.id})
+        return True
+
+    def action_decline_close_request(self):
+        """Open the Avslå dialog. Contractors may decline as well as Mimer."""
+        self.ensure_one()
+        if not self.close_request_pending:
+            raise UserError(_("Begäran om avslut är redan hanterad."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Avslå begäran om avslut"),
+            "res_model": "maintenance.close.request.decline.wizard",
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": {"default_request_id": self.id},
+        }
 
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""

@@ -4,19 +4,20 @@ from odoo.http import request
 from odoo.addons.mail.tools.discuss import Store
 from odoo.addons.mail.controllers.thread import ThreadController
 
-from ..models.mail_message import FROM_TENANT_MESSAGE_TYPE
+from ..models.mail_message import TENANT_AUTHORED_MESSAGE_TYPES
 
 
 class OneCoreThreadController(ThreadController):
     @http.route()
     def mail_message_post(self, thread_model, thread_id, post_data, context=None, **kwargs):
-        # MIM-2040 (extra): from_tenant is what work-order writes on a tenant's
-        # behalf, and the chatter shows the request's tenant as its sender. The
+        # MIM-2040 (extra): from_tenant (and MIM-2036's close request) is what
+        # work-order writes on a tenant's behalf, and the chatter shows the
+        # request's tenant as its sender. The
         # composer may pass message_type through (that is how tenant_* types
         # are posted), so refuse this one here. /web/dataset/call_kw can still
         # call message_post directly; closing that would mean identifying the
         # integration user, which is deliberately avoided.
-        if post_data.get("message_type") == FROM_TENANT_MESSAGE_TYPE:
+        if post_data.get("message_type") in TENANT_AUTHORED_MESSAGE_TYPES:
             raise AccessError("Meddelanden från hyresgäst kan bara komma från Mina sidor.")
         return super().mail_message_post(
             thread_model, thread_id, post_data, context=context, **kwargs

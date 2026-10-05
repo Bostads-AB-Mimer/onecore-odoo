@@ -104,3 +104,13 @@ FORM_STATES = [
 # cannot import this module. Keep the two strings in sync.
 CUSTOMER_MESSAGE_TYPE = "from_tenant"
 RECEIPT_TO_TENANT_MESSAGE_TYPE = "receipt_to_tenant"
+
+# MIM-2036 — the tenant asks for the case to be closed; an Odoo user declines.
+# Same rule as above: the selection values live on mail.message in
+# onecore_mail_extension, which cannot import this module. Keep in sync.
+CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE = "close_request_from_tenant"
+CLOSE_REQUEST_DECLINED_MESSAGE_TYPE = "close_request_declined"
+# Every refusal from request_close_from_tenant starts with this, followed by
+# already_pending, closed or hidden. onecore's work-order service matches on it
+# to answer 409, so it is part of the cross-repo contract — never reword it.
+CLOSE_REQUEST_CONFLICT_PREFIX = "close_request_conflict:"

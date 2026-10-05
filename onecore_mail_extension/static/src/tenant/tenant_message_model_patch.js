@@ -9,8 +9,11 @@ import { patch } from "@web/core/utils/patch";
 // between setups. Patched on the model so every place that prints authorName
 // (chatter, previews, notifications) agrees.
 patch(Message.prototype, {
+    // Mirrors TENANT_AUTHORED_MESSAGE_TYPES in mail_message.py.
     get isFromTenant() {
-        return this.message_type === "from_tenant";
+        return ["from_tenant", "close_request_from_tenant"].includes(
+            this.message_type
+        );
     },
     // The badge is shown only when a real name is printed; without one the
     // author already reads "Hyresgäst".

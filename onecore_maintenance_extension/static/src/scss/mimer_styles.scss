@@ -54,6 +54,21 @@ $mimer-green-text: #1B5E20;
     color: $mimer-green-text;
 }
 
+// Mimer decision purple (Material purple 50 / 300 / 900). "Hyresgäst vill
+// avsluta" is the only badge that asks for a decision rather than an
+// acknowledgement, so it gets a colour of its own next to the four orange
+// ones, plus the fa-flag-checkered icon so colour is not the only signal
+// (MIM-2036).
+$mimer-purple-bg: #F3E5F5;
+$mimer-purple-border: #BA68C8;
+$mimer-purple-text: #4A148C;
+
+.mimer-badge-purple {
+    background: $mimer-purple-bg;
+    border-color: $mimer-purple-border;
+    color: $mimer-purple-text;
+}
+
 // Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
 $mimer-address-blue: #1D4ED8;
 

@@ -6,6 +6,12 @@
                 <t t-esc="record.name.raw_value"/>
             </b>
             <div class="d-flex flex-column">
+                <div t-if="record.close_request_pending.raw_value">
+                    <span class="mimer-badge mimer-badge-purple">
+                        <i class="fa fa-flag-checkered me-1" role="img" aria-hidden="true"/>
+                        Hyresgäst vill avsluta
+                    </span>
+                </div>
                 <div t-if="record.has_unread_customer_message.raw_value">
                     <span class="mimer-badge mimer-badge-orange">
                         Meddelande från kund
