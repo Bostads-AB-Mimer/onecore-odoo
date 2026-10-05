@@ -61,6 +61,12 @@ TENANT_AUTHOR_LANG = "sv_SE"
 # work-order service writes this type. Any future integration that relays
 # tenant messages must post them with it too.
 FROM_TENANT_MESSAGE_TYPE = "from_tenant"
+# Every type posted on the tenant's behalf, shown in the chatter with the
+# tenant as sender. MIM-2036's close request is the tenant's own words too, so
+# a handläggare must read it as the tenant's, not the integration account's.
+TENANT_AUTHORED_MESSAGE_TYPES = frozenset(
+    {FROM_TENANT_MESSAGE_TYPE, "close_request_from_tenant"}
+)
 
 
 def tenant_author_lang(env):
@@ -127,8 +133,8 @@ class OneCoreMailMessage(models.Model):
         "svarar. Sätts när meddelandet skapas och ändras aldrig.",
     )
     # MIM-2040 (extra) — who wrote a Mina sidor message, for Odoo users. Only
-    # set on from_tenant, where author_id is the integration account rather
-    # than the tenant. A snapshot of the request's tenant at write time, so
+    # set on TENANT_AUTHORED_MESSAGE_TYPES, where author_id is the integration
+    # account rather than the tenant. A snapshot of the request's tenant at write time, so
     # replacing or removing the tenant later cannot rewrite who wrote it. It
     # names the request's tenant, not necessarily the person logged in on
     # Mina sidor — nothing upstream says who that was.
@@ -487,7 +493,7 @@ class OneCoreMailMessage(models.Model):
             # setdefault so a caller that knows the writer can pass it.
             # sudo(): the name must not depend on what the integration account
             # may read.
-            if message_type == FROM_TENANT_MESSAGE_TYPE and the_record:
+            if message_type in TENANT_AUTHORED_MESSAGE_TYPES and the_record:
                 values.setdefault(
                     "onecore_from_tenant_name",
                     the_record.sudo().tenant_id.name or False,

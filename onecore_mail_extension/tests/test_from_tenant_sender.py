@@ -105,6 +105,27 @@ class TestFromTenantSender(TransactionCase):
         message = self._post_as_mina_sidor(self.integration_user, vacant)
         self.assertFalse(message.onecore_from_tenant_name)
 
+    def test_close_request_names_the_request_tenant(self):
+        # MIM-2036: the close request is posted on the tenant's behalf exactly
+        # like from_tenant, so the handläggare must see the tenant as sender.
+        message = self.request.with_user(self.integration_user).message_post(
+            body="Begäran om att avsluta ärendet",
+            message_type="close_request_from_tenant",
+            subtype_xmlid="mail.mt_note",
+        )
+        self.assertEqual(message.onecore_from_tenant_name, "Anna Andersson")
+        # work-order reads the sender of tenant-written types from author_id.
+        self.assertEqual(message.author_id, self.integration_user.partner_id)
+
+    def test_close_request_decline_gets_no_tenant_name(self):
+        # The decline is ours, not the tenant's.
+        message = self.request.with_user(self.integration_user).message_post(
+            body="Arbetet är inte klart",
+            message_type="close_request_declined",
+            subtype_xmlid="mail.mt_note",
+        )
+        self.assertFalse(message.onecore_from_tenant_name)
+
     def test_only_from_tenant_messages_get_a_name(self):
         note = self.request.with_user(self.integration_user).message_post(
             body="Intern notering",

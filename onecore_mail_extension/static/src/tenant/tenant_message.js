@@ -83,6 +83,10 @@ patch(Message.prototype, {
         return " (via sms och mejl)";
       case "tenant_my_pages":
       case "from_tenant":
+      case "close_request_from_tenant":
+      // MIM-2036: the decline reason goes to the tenant, so it must not read
+      // as an internal note in the history.
+      case "close_request_declined":
         return " (via Mina sidor)";
       case "failed_tenant_sms":
         return " (sms misslyckades)";
