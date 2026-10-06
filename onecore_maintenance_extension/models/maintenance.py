@@ -302,6 +302,11 @@ class OneCoreMaintenanceRequest(
     cost_center_display = fields.Char(
         "Tillhör distrikt", compute="_compute_cost_center_display"
     )
+    # Shows "Tilldela resursgrupp" in the form; see ASSIGN_DISTRICT_TEAM_PARAM.
+    assign_district_team_enabled = fields.Boolean(
+        "Tilldela resursgrupp påslagen",
+        compute="_compute_assign_district_team_enabled",
+    )
     district_manager = fields.Char(
         "Distriktschef",
         compute="_compute_district_manager",
@@ -409,6 +414,11 @@ class OneCoreMaintenanceRequest(
                 record.cost_center_display = (
                     record.cost_center_code or record.cost_center_name or False
                 )
+
+    def _compute_assign_district_team_enabled(self):
+        enabled = ManagementAreaService(self.env).assign_team_enabled()
+        for record in self:
+            record.assign_district_team_enabled = enabled
 
     @api.depends("cost_center_code")
     def _compute_district_manager(self):

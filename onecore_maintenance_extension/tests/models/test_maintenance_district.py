@@ -2,14 +2,17 @@
 and the "Tilldela resursgrupp" button.
 
 Covers the create() snapshot, the button action (notifications, contractor
-guard), the team seed, the cron record and the open_time_report refactor.
+guard), the system parameter that shows the button, the team seed, the cron
+record and the open_time_report refactor.
 """
 from unittest.mock import patch
 
+from lxml import etree
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
+from ...models.services.management_area_service import ASSIGN_DISTRICT_TEAM_PARAM
 from ..utils.test_utils import (
     create_building,
     create_external_contractor_user,
@@ -284,6 +287,35 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         with self.assertRaises(UserError):
             request.with_user(contractor).action_assign_district_team()
         self.assertEqual(request.maintenance_team_id, contractor_team)
+
+    # ------------------------------------------------------------------
+    # Rollout switch
+    # ------------------------------------------------------------------
+    def test_button_is_off_until_the_parameter_is_set(self):
+        """Off when the parameter is missing, so prod keeps the button hidden
+        until the district groups are activated. Read as a plain internal
+        user: system parameters are admin-only."""
+        request = self._apartment_request().with_user(self.internal_user)
+        Param = self.env["ir.config_parameter"].sudo()
+        for value, expected in ((False, False), ("0", False), ("1", True), ("True", True)):
+            with self.subTest(value=value):
+                # set_param(key, False) removes the parameter.
+                Param.set_param(ASSIGN_DISTRICT_TEAM_PARAM, value)
+                request.invalidate_recordset(["assign_district_team_enabled"])
+                self.assertEqual(request.assign_district_team_enabled, expected)
+
+    def test_form_button_is_hidden_by_the_switch(self):
+        """The button must be in the form, not commented out again, and
+        hidden by the switch, or prod shows it before the districts start."""
+        arch = etree.fromstring(
+            self.env["maintenance.request"]
+            .with_user(self.internal_user)
+            .get_view(view_type="form")["arch"]
+        )
+
+        buttons = arch.xpath("//button[@name='action_assign_district_team']")
+        self.assertEqual(len(buttons), 1)
+        self.assertIn("not assign_district_team_enabled", buttons[0].get("invisible"))
 
     # ------------------------------------------------------------------
     # Seed data / cron / refactor

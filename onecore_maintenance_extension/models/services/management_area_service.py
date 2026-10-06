@@ -47,6 +47,13 @@ STALE_LOOKUP_DAYS = 7
 # Leaf node types of GET /property-tree whose code is a rental id.
 RENTAL_OBJECT_TYPES = frozenset({"residence", "parkingSpace", "facility", "other"})
 
+# ir.config_parameter key that shows "Tilldela resursgrupp" in the request
+# form, off when missing. A parameter, not a release: the button goes live per
+# environment — in the test environment for testing, in prod the day the
+# district groups are activated. A rollout switch, not a permission: the
+# action itself does not check it.
+ASSIGN_DISTRICT_TEAM_PARAM = "onecore_maintenance_extension.assign_district_team_enabled"
+
 
 class ManagementAreaService:
     """Lookup, snapshot and team pairing of distrikt / kvartersvärdsområde."""
@@ -259,6 +266,14 @@ class ManagementAreaService:
     # ------------------------------------------------------------------
     # Team pairing — "Tilldela resursgrupp"
     # ------------------------------------------------------------------
+    def assign_team_enabled(self):
+        """Whether the form shows "Tilldela resursgrupp" (ASSIGN_DISTRICT_TEAM_PARAM)."""
+        # sudo: only administrators may read system parameters.
+        value = (
+            self.env["ir.config_parameter"].sudo().get_param(ASSIGN_DISTRICT_TEAM_PARAM)
+        )
+        return str(value or "").strip().lower() in ("1", "true")
+
     def find_team_for_cost_center(self, cost_center_code):
         """Active team whose cost_center_code matches (never by name)."""
         if not cost_center_code:

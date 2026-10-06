@@ -852,15 +852,15 @@
                                             name="maintenance_request_category_id"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
-                                        <!-- MIM-1967: "Tilldela resursgrupp" är avstängd tills
-                                             kvartersvärdarna börjar arbeta i Odoo. Knappen parar
-                                             ärendets distrikt (kostnadsställe) med resursgruppen
-                                             som bär samma cost_center_code och hämtar distriktet
-                                             från OneCore om det saknas. Metoden
-                                             action_assign_district_team finns kvar och är testad
-                                             — ta bort kommentaren nedan och lägg tillbaka
-                                             nolabel="1" på fältet för att släppa på funktionen.
-
+                                        <!-- "Tilldela resursgrupp" pairs the request's district
+                                             (kostnadsställe) with the resource group carrying the
+                                             same cost_center_code, fetching the district from
+                                             OneCore when missing. Shown only where the system
+                                             parameter assign_district_team_enabled is 1 (see
+                                             ASSIGN_DISTRICT_TEAM_PARAM): the district groups are
+                                             archived in prod until the kvartersvärdar start
+                                             working in Odoo, and the button can only pair with
+                                             an active group. -->
                                         <div class="d-flex align-items-center">
                                             <label for="maintenance_team_id" string="Resursgrupp" />
                                             <button name="action_assign_district_team" type="object"
@@ -869,11 +869,10 @@
                                                 icon="fa-magic"
                                                 title="Sätt resursgrupp utifrån ärendets distrikt"
                                                 help="Sätter resursgruppen som är kopplad till ärendets distrikt (kostnadsställe). Distriktet hämtas från OneCore om det saknas."
-                                                invisible="user_is_external_contractor or not id" />
+                                                invisible="user_is_external_contractor or not id or not assign_district_team_enabled" />
                                         </div>
-                                        -->
                                         <field
-                                            name="maintenance_team_id"
+                                            name="maintenance_team_id" nolabel="1"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
                                         <!-- MIM-1970: "Beställande avdelning" is
@@ -942,6 +941,8 @@
                                             name="restricted_external" invisible="1" />
                                         <field
                                             name="user_is_external_contractor" invisible="1" />
+                                        <field
+                                            name="assign_district_team_enabled" invisible="1" />
                                     </group>
                                     <button name="open_time_report"
                                         type="object"
