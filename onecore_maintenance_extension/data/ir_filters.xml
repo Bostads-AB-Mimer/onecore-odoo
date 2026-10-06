@@ -16,7 +16,7 @@
 
          noupdate: users may rename or tweak them; a release must not undo
          that. archive = False on all of them: clicking a favorite drops the
-         "Aktiva ärenden" facet, and archived requests must not surface. -->
+         "Alla ärenden" facet, and archived requests must not surface. -->
     <data noupdate="1">
         <!-- What my department ordered that sits with someone else,
              per stage, so the orderer can follow up. "Avdelning", not

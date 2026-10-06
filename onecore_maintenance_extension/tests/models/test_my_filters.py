@@ -479,7 +479,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
                     self._run(favorite, user)
 
     def test_favorites_hide_archived_requests(self):
-        """Clicking a favorite drops the "Aktiva ärenden" facet, so the
+        """Clicking a favorite drops the "Alla ärenden" facet, so the
         favorites carry archive = False themselves."""
         self.own_elsewhere.sudo().write({"archive": True})
 

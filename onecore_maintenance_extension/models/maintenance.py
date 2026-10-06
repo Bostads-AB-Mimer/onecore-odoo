@@ -1436,7 +1436,8 @@ class OneCoreMaintenanceRequest(
             create_service.setup_team_assignment(request)
             # Snapshot distrikt / kvartersvärdsområde from OneCore. Best
             # effort (never blocks creation); skipped when the caller already
-            # stamped the fields (core does for mimer.nu requests).
+            # stamped the fields. Core sends no codes for mimer.nu requests,
+            # so those are looked up here too.
             management_area_service.populate(request)
             # Spärr skadedjur, from the same TTL-cached set the cron refreshes.
             # Without this a case opened on a blocked flat shows no warning
