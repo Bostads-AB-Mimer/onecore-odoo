@@ -78,14 +78,29 @@ class TestStatusFilters(TransactionCase):
                 request.write({"stage_id": stage.id})
         return request
 
-    def _filter_nodes(self):
-        """Every <filter>, from the search view as the client gets it."""
+    def _arch(self):
+        """The search view as the client gets it."""
         arch = (
             self.env["maintenance.request"]
             .with_user(self.user)
             .get_view(view_type="search")["arch"]
         )
-        return list(etree.fromstring(arch).iter("filter"))
+        return etree.fromstring(arch)
+
+    def _filter_nodes(self):
+        return list(self._arch().iter("filter"))
+
+    def _filter_groups(self):
+        """Filter names per group, as the client groups them: a <separator/>
+        starts a new group, hidden filters included. Filters in one group
+        are ORed, filters in different groups ANDed."""
+        groups = [[]]
+        for node in self._arch():
+            if node.tag == "separator":
+                groups.append([])
+            elif node.tag == "filter":
+                groups[-1].append(node.get("name"))
+        return [group for group in groups if group]
 
     def _filters(self):
         return {node.get("name"): node for node in self._filter_nodes()}
@@ -146,6 +161,13 @@ class TestStatusFilters(TransactionCase):
             self._with_status("status_active") | self._with_status("performed"),
         )
 
+    def test_todo_is_not_ored_with_the_status_filters(self):
+        """Ärendekalendern opens with Att göra. In the status group it would
+        be ORed with Aktiva, and Utförd would stay in the list."""
+        status_group = next(g for g in self._filter_groups() if "status_active" in g)
+
+        self.assertEqual(status_group, list(STATUS_FILTERS))
+
     def test_stock_search_defaults_resolve_to_a_filter(self):
         """search_default_<name> is silently ignored when no filter has that
         name."""
@@ -187,7 +209,8 @@ class TestStatusFilters(TransactionCase):
     # Förfallna and the date filters
     # ------------------------------------------------------------------
     def test_overdue_is_past_due_and_still_active(self):
-        today = fields.Date.context_today(self.user)
+        # In the test user's timezone, the one 'today' in the domain uses.
+        today = fields.Date.context_today(self.requests)
         for request in self.requests:
             request.due_date = today - timedelta(days=1)
         due_today = self.by_stage["maintenance.stage_0"]
@@ -219,6 +242,16 @@ class TestStatusFilters(TransactionCase):
                 self.assertEqual(filters[name].get("string"), label)
                 self.assertTrue(Request._fields[field].store)
                 self.assertIn(Request._fields[field].type, ("date", "datetime"))
+
+    def test_planned_and_due_date_filters_offer_future_periods(self):
+        """Odoo's default periods stop at the current month and year, which
+        makes "förfaller i november" unselectable in October. end_year must
+        reach next year too, or a month across new year gets this year."""
+        filters = self._filters()
+        for name in ("filter_due_date", "filter_schedule_date"):
+            with self.subTest(filter=name):
+                self.assertGreater(int(filters[name].get("end_month", 0)), 0)
+                self.assertGreaterEqual(int(filters[name].get("end_year", 0)), 1)
 
     def test_performed_date_finds_closed_requests_too(self):
         """Utfört datum is what an avtalsägare filters on; a request that was

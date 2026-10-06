@@ -43,10 +43,13 @@
                             domain="[('is_performed', '=', True)]" />
                         <filter string="Avslutade" name="done"
                             domain="[('stage_id.done', '=', True)]" />
+                        <separator invisible="1" />
                         <!-- Stock's "To Do", Utförd included. Hidden, but kept
                              for the stock actions that open with
                              search_default_todo (Ärendekalendern, the team
-                             card's "To Do"). -->
+                             card's "To Do"). In a group of its own: filters in
+                             one group are ORed, so next to Aktiva it would
+                             let Utförd back in. -->
                         <filter string="Att göra" name="todo" invisible="1"
                             domain="[('stage_id.done', '=', False)]" />
                         <separator />
@@ -79,8 +82,15 @@
                             domain="[('due_date', '&lt;', 'today'), ('stage_id.done', '=', False), ('is_performed', '=', False)]" />
                         <separator />
                         <filter name="filter_request_date" date="request_date" />
-                        <filter name="filter_schedule_date" date="schedule_date" />
-                        <filter name="filter_due_date" date="due_date" string="Förfallodatum" />
+                        <!-- Planned and due dates look ahead, so these two
+                             also offer the next two months and next year
+                             (Odoo's default stops at the current period).
+                             end_year must be 1 for a month that falls in
+                             next year to get the right year. -->
+                        <filter name="filter_schedule_date" date="schedule_date"
+                            end_month="2" end_year="1" />
+                        <filter name="filter_due_date" date="due_date" string="Förfallodatum"
+                            end_month="2" end_year="1" />
                         <filter name="filter_performed_date" date="performed_date"
                             string="Utfört datum" />
                         <filter name="filter_close_date" date="close_date" />
