@@ -20,18 +20,22 @@ QUEUE_BUCKETS = {
     "new_info": None,
 }
 # "Bevakning av beställningar": what the team's people ordered that sits with
-# someone else. Active here includes Väntar på handläggning — the order is
-# still out, whether or not the other side has picked it up.
+# someone else. Active is everything not Utförd or Avslutad, so Väntar på
+# handläggning counts (the order is still out, picked up or not), and so does
+# Återsänd: a request returned to a third team, e.g. Kundcenter because the
+# orderer is in no resource group, is still open with someone else.
 ORDERED_BUCKETS = {
     "active": (
         "maintenance.stage_0",
         "maintenance.stage_1",
         "maintenance.stage_3",
         "maintenance.stage_4",
+        "onecore_maintenance_extension.stage_atersand",
     ),
     "performed": ("maintenance.stage_5",),
     "new_info": None,
 }
+CARD_BLOCKS = {"queue": QUEUE_BUCKETS, "ordered": ORDERED_BUCKETS}
 BUCKET_LABELS = {
     "waiting": "Väntar på handläggning",
     "active": "Aktiva",
@@ -124,6 +128,19 @@ class MaintenanceTeam(models.Model):
             )
         return domain
 
+    def _card_bucket_domain(self, key):
+        """The stage condition behind one card number, e.g. "ordered:active".
+
+        The drilldown actions filter on it through the search-only
+        card_bucket field, so the stages behind a number are defined once,
+        here, for both the count and the list it opens.
+        """
+        block, _sep, bucket = (key or "").partition(":")
+        buckets = CARD_BLOCKS.get(block, {})
+        if bucket not in buckets:
+            raise ValueError(f"Unknown card bucket: {key!r}")
+        return self._bucket_domain(buckets, bucket)
+
     def _count_requests_by_bucket(self, domain, groupby, buckets):
         """Count active requests matching ``domain`` per bucket and group.
 
@@ -186,46 +203,30 @@ class MaintenanceTeam(models.Model):
     # ------------------------------------------------------------------
     # Card drilldown
     # ------------------------------------------------------------------
-    def _queue_domain(self):
-        return Domain("maintenance_team_id", "=", self.id)
-
-    def _ordered_domain(self):
-        return Domain("ordered_by_team_id", "=", self.id) & Domain(
-            "maintenance_team_id", "!=", self.id
-        )
-
-    def _open_requests(self, domain, buckets, heading, context=None):
+    # One ir.actions.act_window record per number (maintenance_team_view.xml),
+    # each with its own path and a domain on active_id. The URL keeps both, so
+    # the list survives a new tab, a shared link or browser Back; an action
+    # built here as a dict would fall back to the stock action or to an
+    # unfiltered list.
+    def _open_requests(self, block, heading):
         self.ensure_one()
         bucket = self.env.context.get("request_bucket")
-        if bucket not in buckets:
+        if bucket not in CARD_BLOCKS[block]:
             raise ValueError(f"Unknown request bucket: {bucket!r}")
         action = self.env["ir.actions.act_window"]._for_xml_id(
-            "maintenance.hr_equipment_todo_request_action_from_dashboard"
+            f"onecore_maintenance_extension.action_team_{block}_{bucket}"
         )
-        domain = domain & Domain("archive", "=", False) & self._bucket_domain(buckets, bucket)
         label = BUCKET_LABELS[bucket]
         title = f"{self.name}: {heading}{label.lower() if heading else label}"
-        action.update(
-            # The web client shows display_name before name, and _for_xml_id
-            # fills it with the stock action's title.
-            name=title,
-            display_name=title,
-            domain=list(domain),
-            context=context or {},
-        )
+        # The web client shows display_name before name. Only the click gets
+        # the team in the title; a restored URL shows the record's own name.
+        action.update(name=title, display_name=title)
         return action
 
     def action_open_queue_requests(self):
         """The requests behind one "Att göra" number (context: request_bucket)."""
-        return self._open_requests(
-            self._queue_domain(),
-            QUEUE_BUCKETS,
-            "",
-            context={"default_maintenance_team_id": self.id},
-        )
+        return self._open_requests("queue", "")
 
     def action_open_ordered_requests(self):
         """The requests behind one "Bevakning" number (context: request_bucket)."""
-        return self._open_requests(
-            self._ordered_domain(), ORDERED_BUCKETS, "Beställda, "
-        )
+        return self._open_requests("ordered", "Beställda, ")

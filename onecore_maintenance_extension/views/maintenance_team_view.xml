@@ -1,5 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!--
+    The lists behind the numbers on the resource group card, one record per
+    number. A real record with its own path is what survives a new tab, a
+    shared link or browser Back: the URL keeps the path and the team as
+    active_id, and the domain is evaluated against it. The stages behind each
+    number come from the search-only card_bucket field, so they are defined
+    once in maintenance_team.py for both the count and the list. Att göra:
+    what sits with the team. Bevakning: what the team's people ordered that
+    sits with another team.
+    -->
+    <record id="action_team_queue_waiting" model="ir.actions.act_window">
+        <field name="name">Väntar på handläggning</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-queue-waiting</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('archive', '=', False), ('card_bucket', '=', 'queue:waiting')]</field>
+        <field name="context">{'default_maintenance_team_id': active_id}</field>
+    </record>
+    <record id="action_team_queue_active" model="ir.actions.act_window">
+        <field name="name">Aktiva</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-queue-active</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('archive', '=', False), ('card_bucket', '=', 'queue:active')]</field>
+        <field name="context">{'default_maintenance_team_id': active_id}</field>
+    </record>
+    <record id="action_team_queue_performed" model="ir.actions.act_window">
+        <field name="name">Utförda</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-queue-performed</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('archive', '=', False), ('card_bucket', '=', 'queue:performed')]</field>
+        <field name="context">{'default_maintenance_team_id': active_id}</field>
+    </record>
+    <record id="action_team_queue_returned" model="ir.actions.act_window">
+        <field name="name">Återsända</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-queue-returned</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('archive', '=', False), ('card_bucket', '=', 'queue:returned')]</field>
+        <field name="context">{'default_maintenance_team_id': active_id}</field>
+    </record>
+    <record id="action_team_queue_new_info" model="ir.actions.act_window">
+        <field name="name">Ny kundinfo</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-queue-new-info</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('maintenance_team_id', '=', active_id), ('archive', '=', False), ('card_bucket', '=', 'queue:new_info')]</field>
+        <field name="context">{'default_maintenance_team_id': active_id}</field>
+    </record>
+    <record id="action_team_ordered_active" model="ir.actions.act_window">
+        <field name="name">Beställda, aktiva</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-orders-active</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('ordered_by_team_id', '=', active_id), ('maintenance_team_id', '!=', active_id), ('archive', '=', False), ('card_bucket', '=', 'ordered:active')]</field>
+        <field name="context">{}</field>
+    </record>
+    <record id="action_team_ordered_performed" model="ir.actions.act_window">
+        <field name="name">Beställda, utförda</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-orders-performed</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('ordered_by_team_id', '=', active_id), ('maintenance_team_id', '!=', active_id), ('archive', '=', False), ('card_bucket', '=', 'ordered:performed')]</field>
+        <field name="context">{}</field>
+    </record>
+    <record id="action_team_ordered_new_info" model="ir.actions.act_window">
+        <field name="name">Beställda, ny kundinfo</field>
+        <field name="res_model">maintenance.request</field>
+        <field name="path">team-orders-new-info</field>
+        <field name="view_mode">kanban,list,form,pivot,graph,calendar,activity</field>
+        <field name="domain">[('ordered_by_team_id', '=', active_id), ('maintenance_team_id', '!=', active_id), ('archive', '=', False), ('card_bucket', '=', 'ordered:new_info')]</field>
+        <field name="context">{}</field>
+    </record>
+
     <record id="maintenance_team_kanban_extension" model="ir.ui.view">
         <field name="name">maintenance.team.kanban.extension</field>
         <field name="model">maintenance.team</field>
@@ -22,7 +97,7 @@
                      for Återsända, green for Ny kundinfo. -->
                 <div class="row g-0 mt-3 ms-2 pb-4">
                     <div class="col-6">
-                        <div class="d-flex align-items-start small text-uppercase text-muted fw-bold mb-2">Att göra
+                        <div class="small text-uppercase text-muted fw-bold mb-2">Att göra
                             <widget name="mimer_help_tooltip"
                                text="Det som ligger hos er grupp just nu.&#10;&#10;Väntar på handläggning: nya ärenden som ingen har tagit än.&#10;Aktiva: någon jobbar med ärendet, eller det väntar på beställda varor.&#10;Utförda: arbetet är klart, ärendet ska kontrolleras och avslutas.&#10;Återsända: ärenden som skickats tillbaka till er.&#10;Ny kundinfo: kunden har skrivit, eller en ny hyresgäst har kopplats på. Försvinner när någon kvitterar.&#10;&#10;Klicka på en siffra för att se ärendena."/>
                         </div>
@@ -64,7 +139,7 @@
                         <div t-if="!(record.first_column_request_count.raw_value + record.active_request_count.raw_value + record.performed_request_count.raw_value + record.returned_request_count.raw_value + record.new_info_request_count.raw_value > 0)" class="text-muted">Inget att göra</div>
                     </div>
                     <div class="col-6" t-if="record.ordered_active_count.raw_value + record.ordered_performed_count.raw_value + record.ordered_new_info_count.raw_value > 0">
-                        <div class="d-flex align-items-start small text-uppercase text-muted fw-bold mb-2">Bevakning av beställningar
+                        <div class="small text-uppercase text-muted fw-bold mb-2">Bevakning av beställningar
                             <widget name="mimer_help_tooltip"
                                text="Det er avdelning har beställt som en annan grupp eller entreprenör har nu.&#10;&#10;Aktiva: inte klart än, även om mottagaren inte har börjat.&#10;Utförda: mottagaren är klar, kontrollera och avsluta.&#10;Ny kundinfo: kunden har hört av sig om ärendet.&#10;&#10;Det som ligger hos er själva syns under Att göra."/>
                         </div>

@@ -1,5 +1,6 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
+from odoo.tools.safe_eval import safe_eval
 
 from ..utils.test_utils import (
     create_internal_user,
@@ -135,13 +136,18 @@ class TestMaintenanceTeamCard(TransactionCase):
         team = team.with_user(self.viewer)
         return {bucket: team[field] for bucket, field in fields.items()}
 
+    def _search(self, domain, team):
+        """Search the way the web client evaluates the action: the domain is
+        a string on active_id, which the URL carries as the team."""
+        return self.env["maintenance.request"].with_user(self.viewer).search(
+            safe_eval(domain, {"active_id": team.id})
+        )
+
     def _opened(self, team, method, bucket):
         action = getattr(
             team.with_user(self.viewer).with_context(request_bucket=bucket), method
         )()
-        return self.env["maintenance.request"].with_user(self.viewer).search(
-            action["domain"]
-        )
+        return self._search(action["domain"], team)
 
     def test_queue_counts(self):
         self.assertEqual(
@@ -186,17 +192,65 @@ class TestMaintenanceTeamCard(TransactionCase):
         self.assertEqual(self._counts(self.contractor, QUEUE_FIELDS)["new_info"], 1)
 
     def test_every_number_opens_the_requests_it_counts(self):
+        """Read the action records themselves, as a restored URL does: their
+        domains must match the counts, so a number can't drift from its list."""
         for team in self.vast | self.ost | self.contractor:
-            for method, fields in (
-                ("action_open_queue_requests", QUEUE_FIELDS),
-                ("action_open_ordered_requests", ORDERED_FIELDS),
-            ):
+            for block, fields in (("queue", QUEUE_FIELDS), ("ordered", ORDERED_FIELDS)):
                 for bucket, field in fields.items():
-                    with self.subTest(team=team.name, method=method, bucket=bucket):
+                    with self.subTest(team=team.name, block=block, bucket=bucket):
+                        action = self.env.ref(
+                            f"onecore_maintenance_extension.action_team_{block}_{bucket}"
+                        )
                         self.assertEqual(
-                            len(self._opened(team, method, bucket)),
+                            len(self._search(action.domain, team)),
                             team.with_user(self.viewer)[field],
                         )
+
+    def test_numbers_open_real_actions_with_their_own_path(self):
+        """A new tab, a shared link and browser Back rebuild the list from the
+        URL: the action's path plus the team as active_id. The returned action
+        must therefore be the record, not the stock action or a bare dict."""
+        stock = self.env.ref("maintenance.hr_equipment_todo_request_action_from_dashboard")
+        paths = set()
+        for method, fields in (
+            ("action_open_queue_requests", QUEUE_FIELDS),
+            ("action_open_ordered_requests", ORDERED_FIELDS),
+        ):
+            for bucket in fields:
+                with self.subTest(method=method, bucket=bucket):
+                    action = getattr(
+                        self.vast.with_context(request_bucket=bucket), method
+                    )()
+                    record = self.env["ir.actions.act_window"].browse(action["id"])
+                    self.assertNotEqual(record, stock)
+                    self.assertTrue(action["path"])
+                    self.assertEqual(action["path"], record.path)
+                    self.assertEqual(action["domain"], record.domain)
+                    paths.add(action["path"])
+        self.assertEqual(len(paths), len(QUEUE_FIELDS) + len(ORDERED_FIELDS))
+
+    def test_request_returned_to_a_third_team_is_active_in_bevakning(self):
+        """Returned by the contractor to an orderer in no resource group, the
+        request goes to Kundcenter: still open with another team, so it is
+        Aktiva in the department's Bevakning, and Ny kundinfo stays a subset
+        of Aktiva + Utförda."""
+        loner = create_internal_user(self.env, ad_office_location="Testavdelning Väst")
+        returned = self._request(
+            loner, self.ost, "onecore_maintenance_extension.stage_atersand"
+        )
+        returned.recently_added_tenant = True
+        self.assertNotIn(returned.maintenance_team_id, self.vast | self.ost)
+
+        self.assertIn(
+            returned, self._opened(self.vast, "action_open_ordered_requests", "active")
+        )
+        counts = self._counts(self.vast, ORDERED_FIELDS)
+        self.assertEqual(counts["active"], 4)
+        new_info = self._opened(self.vast, "action_open_ordered_requests", "new_info")
+        active_or_performed = self._opened(
+            self.vast, "action_open_ordered_requests", "active"
+        ) | self._opened(self.vast, "action_open_ordered_requests", "performed")
+        self.assertLessEqual(new_info, active_or_performed)
 
     def test_opened_lists_hold_the_expected_requests(self):
         self.assertEqual(
@@ -215,7 +269,8 @@ class TestMaintenanceTeamCard(TransactionCase):
             request_bucket="waiting"
         ).action_open_queue_requests()
         self.assertEqual(
-            action["context"], {"default_maintenance_team_id": self.vast.id}
+            safe_eval(action["context"], {"active_id": self.vast.id}),
+            {"default_maintenance_team_id": self.vast.id},
         )
 
     def test_opened_list_is_titled_after_the_number(self):

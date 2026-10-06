@@ -83,6 +83,13 @@ $mimer-purple-text: #4A148C;
     }
 }
 
+// The help "?" widget (static/src/js/help_tooltip.js) inline after its
+// heading's last word, also when the heading wraps; widgets are wrapped in
+// a block div by default.
+.o_widget_mimer_help_tooltip {
+    display: inline;
+}
+
 // Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
 $mimer-address-blue: #1D4ED8;
 

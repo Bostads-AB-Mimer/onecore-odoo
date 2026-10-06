@@ -68,6 +68,15 @@ class SearchFieldsMixin(models.AbstractModel):
         help="Ärenden beställda av någon av resursgruppens medlemmars "
         "avdelningar.",
     )
+    # The stage condition behind one number on the resource group card, e.g.
+    # "queue:active" or "ordered:new_info" (maintenance.team._card_bucket_domain).
+    # Lets the card's drilldown actions, which are XML records, filter on the
+    # same definition the count uses.
+    card_bucket = fields.Char(
+        "Siffra på resursgruppskortet",
+        store=False,
+        search="_search_card_bucket",
+    )
 
     # ------------------------------------------------------------------
     # What the current user is
@@ -159,6 +168,17 @@ class SearchFieldsMixin(models.AbstractModel):
         stage = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
         domain = Domain("stage_id", "=", stage.id) if stage else Domain(False)
         return self._boolean_search_domain(operator, value, domain)
+
+    def _search_card_bucket(self, operator, value):
+        if operator in ("in", "not in") and not isinstance(value, str):
+            keys = list(value)
+        elif operator in ("=", "!="):
+            keys = [value]
+        else:
+            return NotImplemented
+        Team = self.env["maintenance.team"]
+        domain = Domain.OR(Team._card_bucket_domain(key) for key in keys)
+        return ~domain if operator in ("!=", "not in") else domain
 
     def _search_ordered_by_team_id(self, operator, value):
         """Requests ordered by any department a member of the team belongs to
