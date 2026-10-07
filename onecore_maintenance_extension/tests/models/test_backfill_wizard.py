@@ -4,7 +4,17 @@ from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import UserError
 
-from ..utils.test_utils import create_maintenance_request
+from ..utils.test_utils import (
+    create_building,
+    create_external_contractor_user,
+    create_internal_user,
+    create_maintenance_request,
+    create_maintenance_team,
+    create_maintenance_unit,
+    create_property,
+    create_rental_property,
+    create_tenant,
+)
 from ...models.services.management_area_service import ManagementAreaService
 from ...models.services.record_management_service import RecordManagementService
 
@@ -698,3 +708,129 @@ class TestBackfillWizard(TransactionCase):
             with self.assertRaises(UserError) as caught:
                 wiz.action_search()
         self.assertIn("misslyckades", str(caught.exception))
+
+    def test_empty_request_on_non_rental_space_attaches_and_switches_space(self):
+        # MIM-2056: an ärende with neither object nor tenant, raised on a space
+        # that carries no rentalId, can be filled in from the wizard — the attach
+        # realigns Utrymme to the object's type.
+        for space in ("Övrigt", "Tvättstuga"):
+            with self.subTest(space=space):
+                request = create_maintenance_request(self.env, space_caption=space)
+                self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+                wiz = self._wizard(request, "rental_object")
+                wiz.lookup_value = "216-034-03-0101"
+                with patch.object(
+                    type(wiz), "_get_core_api", return_value=self.fake_api
+                ):
+                    wiz.action_search()
+                    wiz.action_confirm()
+                    wiz.action_confirm_no_hide()
+
+                reloaded = self.env["maintenance.request"].browse(request.id)
+                reloaded.invalidate_recordset()
+                self.assertEqual(reloaded.space_caption, "Lägenhet")
+                self.assertTrue(reloaded.rental_property_id)
+                self.assertEqual(reloaded.contact_code, "P005468")
+
+    def _pens_visible(self, request, user):
+        """Evaluate each add pen's own ``invisible`` expression against ``request``
+        as seen by ``user``.
+
+        Uses the view's own arch, not get_view(): the rendered one drops nodes by
+        the user's groups, and the pens are group-gated. ``user`` matters because
+        the expression reads ``user_is_external_contractor``, and the test
+        superuser is in that group.
+        """
+        request = request.with_user(user)
+        from lxml import etree
+
+        from odoo import models
+        from odoo.tools.safe_eval import safe_eval
+        from odoo.tools.view_validation import get_expression_field_names
+
+        view = self.env.ref(
+            "onecore_maintenance_extension.hr_equipment_request_view_form_extension"
+        )
+        tree = etree.fromstring(view.arch_db.encode())
+        visible = {}
+        for name in ("open_backfill_rental_object_wizard", "open_backfill_tenant_wizard"):
+            [button] = tree.xpath(f"//button[@name='{name}']")
+            expression = button.get("invisible")
+            values = {}
+            for field in get_expression_field_names(expression):
+                value = request[field]
+                # The web client sees a many2one as its id.
+                values[field] = value.id if isinstance(value, models.BaseModel) else value
+            visible[name] = not safe_eval(expression, values)
+        return visible
+
+    def test_add_pens_offered_on_non_rental_space_only_when_request_is_empty(self):
+        # MIM-2056: an ärende may lack a customer but should have a location. An
+        # ärende with neither (od-29) needs the pens to be repairable. One that
+        # has either must not get them on a non-rental space: the attach would
+        # re-type it to Lägenhet/Bilplats/Lokal and hide its location.
+        def with_building(request):
+            request.write({"building_id": create_building(self.env, request.id).id})
+
+        def with_property(request):
+            request.write({"property_id": create_property(self.env, request.id).id})
+
+        def with_maintenance_unit(request):
+            request.write(
+                {"maintenance_unit_id": create_maintenance_unit(self.env, request.id).id}
+            )
+
+        def with_rental_property_and_tenant(request):
+            # What RentalPropertyHandler leaves on a Tvättstuga/Miljöbod ärende
+            # created from a pnr/kundnummer search.
+            request.write(
+                {
+                    "rental_property_id": create_rental_property(self.env, request.id).id,
+                    "tenant_id": create_tenant(self.env, request.id).id,
+                }
+            )
+
+        def with_rental_property(request):
+            request.write(
+                {"rental_property_id": create_rental_property(self.env, request.id).id}
+            )
+
+        cases = [
+            ("Övrigt", None, True),
+            ("Tvättstuga", None, True),
+            ("Övrigt", with_building, False),
+            ("Tvättstuga", with_property, False),
+            ("Tvättstuga", with_maintenance_unit, False),
+            ("Tvättstuga", with_rental_property_and_tenant, False),
+            # Unchanged from MIM-1841: always offered on the rentalId spaces.
+            ("Lägenhet", None, True),
+            ("Lägenhet", with_rental_property, True),
+        ]
+        manager = create_internal_user(self.env)
+        for space, link, expected in cases:
+            label = link.__name__ if link else "empty"
+            with self.subTest(space=space, request=label):
+                request = create_maintenance_request(self.env, space_caption=space)
+                if link:
+                    link(request)
+                self.assertEqual(
+                    self._pens_visible(request, manager),
+                    {
+                        "open_backfill_rental_object_wizard": expected,
+                        "open_backfill_tenant_wizard": expected,
+                    },
+                )
+
+        with self.subTest("an external contractor never gets the pens"):
+            contractor = create_external_contractor_user(self.env)
+            team = create_maintenance_team(self.env, member_ids=[(4, contractor.id)])
+            request = create_maintenance_request(
+                self.env, space_caption="Övrigt", maintenance_team_id=team.id
+            )
+            self.assertEqual(
+                self._pens_visible(request, contractor),
+                {
+                    "open_backfill_rental_object_wizard": False,
+                    "open_backfill_tenant_wizard": False,
+                },
+            )
