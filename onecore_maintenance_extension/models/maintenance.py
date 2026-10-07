@@ -1484,6 +1484,13 @@ class OneCoreMaintenanceRequest(
             )
             vals.update(stage_updates)
 
+        # Closing a mixed recordset: handle_stage_change dates only a recordset
+        # with no Utfört datum at all, so the undated part is dated after the
+        # write, with the closing time (see handle_stage_change).
+        undated_on_close_ids = []
+        if "stage_id" in vals and vals.get("closed_date") and "performed_date" not in vals:
+            undated_on_close_ids = [record.id for record in self if not record.performed_date]
+
         # MIM-486: entering Återsänd clears the assigned resource and hands the
         # request back to the orderer's team. The team switch happens after
         # super().write() + notifications (see below), since the write may be
@@ -1560,6 +1567,9 @@ class OneCoreMaintenanceRequest(
             self.browse(master_key_changed_ids).write(
                 {"master_key_changed_at": fields.Datetime.now()}
             )
+
+        if undated_on_close_ids:
+            self.browse(undated_on_close_ids).write({"performed_date": vals["closed_date"]})
 
         # Post loan product messages first, then other change notifications
         if not skip_tracking:

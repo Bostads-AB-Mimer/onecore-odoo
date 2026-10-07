@@ -45,6 +45,13 @@ class MaintenanceStageManager:
 
         if new_stage.name == "Avslutad":
             updates["closed_date"] = fields.Datetime.now()
+            # Closed without passing Utförd: the work counts as performed when
+            # the request is closed (decided with the business 2026-10-07), so
+            # "Utfört datum" covers it. These updates apply to the whole
+            # recordset, so only when none of it has a date; write() dates the
+            # undated part of a mixed recordset.
+            if not any(r.performed_date for r in record):
+                updates["performed_date"] = updates["closed_date"]
             # MIM-2036: a tenant's close request cannot outlive the case being
             # closed, whether through "Avsluta ärendet" or a drag to Avslutad.
             # Same write as the stage, so a transition that fails validation

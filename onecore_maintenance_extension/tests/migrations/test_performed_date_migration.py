@@ -1,5 +1,6 @@
 """Tests for migrations/19.0.1.0.13/post-migration.py: performed_date
-("Utfört datum") backfilled from the stage history.
+("Utfört datum") backfilled from the stage history: the move into Utförd, or
+the closing time for a request closed without passing Utförd.
 
 The stage moves are written the way the chatter stores them
 (mail.message + mail.tracking.value on stage_id), with dates chosen by the
@@ -48,14 +49,16 @@ class TestPerformedDateBackfill(TransactionCase):
         self.stage_field = self.env["ir.model.fields"]._get("maintenance.request", "stage_id")
         self.t0 = fields.Datetime.now().replace(microsecond=0) - timedelta(days=200)
 
-    def _request(self, stage, performed_date=None):
+    def _request(self, stage, performed_date=None, closed_date=None):
         """A request sitting in ``stage``, set with SQL as an old database
         has it."""
         request = create_maintenance_request(self.env)
         self.env.flush_all()
         self.env.cr.execute(
-            "UPDATE maintenance_request SET stage_id = %s, performed_date = %s WHERE id = %s",
-            (self.stage[stage], performed_date, request.id),
+            """UPDATE maintenance_request
+               SET stage_id = %s, performed_date = %s, closed_date = %s, close_date = NULL
+               WHERE id = %s""",
+            (self.stage[stage], performed_date, closed_date, request.id),
         )
         self.env.invalidate_all()
         return request
@@ -135,25 +138,40 @@ class TestPerformedDateBackfill(TransactionCase):
 
         self.assertEqual(request.performed_date, performed_at)
 
-    def test_leaves_what_the_workflow_would_leave_empty(self):
-        """Reopened after Utförd (to an active stage or Återsänd) and closed
-        without passing it again, closed without ever passing Utförd, never
-        tracked, and still active: the workflow clears or never stamps the
-        date for all of them."""
+    def test_closed_without_utford_gets_its_closing_time(self):
+        """Closing without passing Utförd counts as performed when closed.
+        Reopened after Utförd (to an active stage or Återsänd) and closed
+        again also counts: the reopen cleared the first date."""
         reopened = self._request("closed")
         self._move(reopened, "performed", 10)
         self._move(reopened, "started", 20)
-        self._move(reopened, "closed", 30)
+        reopened_closed_at = self._move(reopened, "closed", 30)
 
         returned = self._request("closed")
         self._move(returned, "performed", 10)
         self._move(returned, "returned", 20)
-        self._move(returned, "closed", 30)
+        returned_closed_at = self._move(returned, "closed", 30)
 
         never_performed = self._request("closed")
-        self._move(never_performed, "closed", 10)
+        self._move(never_performed, "started", 5)
+        closed_at = self._move(never_performed, "closed", 10)
 
-        never_tracked = self._request("performed")
+        # No tracked move into Avslutad: the stamped closing date.
+        stamped = self.t0 + timedelta(days=50)
+        never_tracked = self._request("closed", closed_date=stamped)
+
+        self._run()
+
+        self.assertEqual(reopened.performed_date, reopened_closed_at)
+        self.assertEqual(returned.performed_date, returned_closed_at)
+        self.assertEqual(never_performed.performed_date, closed_at)
+        self.assertEqual(never_tracked.performed_date, stamped)
+
+    def test_leaves_what_cannot_be_dated_empty(self):
+        """In Utförd with no tracked move, closed with no closing time at
+        all, and still active."""
+        performed_untracked = self._request("performed")
+        closed_undated = self._request("closed")
 
         still_open = self._request("started")
         self._move(still_open, "performed", 10)
@@ -161,7 +179,7 @@ class TestPerformedDateBackfill(TransactionCase):
 
         self._run()
 
-        for request in (reopened, returned, never_performed, never_tracked, still_open):
+        for request in (performed_untracked, closed_undated, still_open):
             with self.subTest(request=request.id):
                 self.assertFalse(request.performed_date)
 

@@ -1,23 +1,24 @@
 """Backfill performed_date ("Utfört datum") from the stage history.
 
-performed_date is stamped when a request enters Utförd, and the field only
-exists since March 2026. Requests performed before that have no date, so the
+performed_date is stamped when a request enters Utförd, and, since this
+version, when a request is closed without one (MaintenanceStageManager). The
+field only exists since March 2026, so older requests have no date and the
 "Utfört datum" filter undercounts them. stage_id is tracked
-(mail.tracking.value), so the moment each request entered Utförd is still in
-its chatter.
+(mail.tracking.value), so each request's stage moves are still in its chatter.
 
-The rule is the one the workflow applies (MaintenanceWorkflowService): entering
-Utförd stamps, any other stage except Avslutad clears, closing keeps. So for a
-request in Utförd or Avslutad without a date, what counts is its latest tracked
-move into any stage other than Avslutad: if that move went into Utförd, its
-time is the date. Two moves in the same second are ordered by message id.
-Moves into stages that no longer exist (duplicates merged by
-hooks._repair_duplicate_stages) are ignored, as if they were not there.
+The rule is the one the workflow applies: entering Utförd stamps, any other
+stage except Avslutad clears, closing keeps the date or stamps the closing
+time when there is none. So, for requests in Utförd or Avslutad without a date:
 
-Left empty: requests closed without passing Utförd (closing also covers
-duplicates and requests that turned out not to be needed), and requests whose
-stage was never tracked (created directly in the stage, or by an import). The
-log line reports how many requests stay empty for either reason.
+1. If the latest tracked move into a stage other than Avslutad went into
+   Utförd, its time is the date.
+2. Otherwise a request in Avslutad gets its closing time: the latest tracked
+   move into Avslutad, else closed_date, else stock's close_date.
+
+Two moves in the same second are ordered by message id. Moves into stages that
+no longer exist (duplicates merged by hooks._repair_duplicate_stages) are
+ignored. A request in Utförd whose stage was never tracked stays empty; the
+log line reports how many.
 
 Idempotent: only rows with no date are touched, and a second run finds none it
 can fill.
@@ -29,6 +30,18 @@ from odoo import api, SUPERUSER_ID
 
 _logger = logging.getLogger(__name__)
 
+# Tracked stage moves of maintenance requests, into stages that still exist.
+MOVES = """
+    SELECT m.res_id AS request_id, m.date AS moved_at, m.id AS message_id,
+           t.new_value_integer AS stage_id
+    FROM mail_tracking_value t
+    JOIN mail_message m ON m.id = t.mail_message_id
+    JOIN ir_model_fields f ON f.id = t.field_id
+    JOIN maintenance_stage s ON s.id = t.new_value_integer
+    WHERE m.model = 'maintenance.request'
+      AND f.model = 'maintenance.request' AND f.name = 'stage_id'
+"""
+
 
 def migrate(cr, version):
     env = api.Environment(cr, SUPERUSER_ID, {})
@@ -39,20 +52,14 @@ def migrate(cr, version):
         return
     params = {"performed": performed.id, "closed": closed.id}
 
+    # 1. Performed: the latest move other than closing went into Utförd.
     cr.execute(
-        """
+        f"""
         WITH last_move AS (
-            SELECT DISTINCT ON (m.res_id)
-                   m.res_id AS request_id, m.date AS moved_at,
-                   t.new_value_integer AS stage_id
-            FROM mail_tracking_value t
-            JOIN mail_message m ON m.id = t.mail_message_id
-            JOIN ir_model_fields f ON f.id = t.field_id
-            JOIN maintenance_stage s ON s.id = t.new_value_integer
-            WHERE m.model = 'maintenance.request'
-              AND f.model = 'maintenance.request' AND f.name = 'stage_id'
-              AND t.new_value_integer != %(closed)s
-            ORDER BY m.res_id, m.date DESC, m.id DESC
+            SELECT DISTINCT ON (request_id) request_id, moved_at, stage_id
+            FROM ({MOVES}) moves
+            WHERE stage_id != %(closed)s
+            ORDER BY request_id, moved_at DESC, message_id DESC
         )
         UPDATE maintenance_request r
         SET performed_date = lm.moved_at
@@ -64,7 +71,30 @@ def migrate(cr, version):
         """,
         params,
     )
-    dated = cr.rowcount
+    from_utford = cr.rowcount
+
+    # 2. Closed without passing Utförd (since): the closing time.
+    cr.execute(
+        f"""
+        WITH last_close AS (
+            SELECT DISTINCT ON (request_id) request_id, moved_at
+            FROM ({MOVES}) moves
+            WHERE stage_id = %(closed)s
+            ORDER BY request_id, moved_at DESC, message_id DESC
+        )
+        UPDATE maintenance_request r
+        SET performed_date = c.closed_at
+        FROM (
+            SELECT u.id, coalesce(lc.moved_at, u.closed_date, u.close_date::timestamp) AS closed_at
+            FROM maintenance_request u
+            LEFT JOIN last_close lc ON lc.request_id = u.id
+            WHERE u.performed_date IS NULL AND u.stage_id = %(closed)s
+        ) c
+        WHERE r.id = c.id AND c.closed_at IS NOT NULL
+        """,
+        params,
+    )
+    from_closing = cr.rowcount
 
     cr.execute(
         """
@@ -74,10 +104,11 @@ def migrate(cr, version):
         params,
     )
     _logger.info(
-        "performed_date backfill: %d request(s) dated from the stage history, "
-        "%d in Utförd/Avslutad still without a date (closed without passing "
-        "Utförd, or no tracked stage change).",
-        dated,
+        "performed_date backfill: %d request(s) dated from their move into "
+        "Utförd, %d closed without passing Utförd dated with their closing "
+        "time, %d in Utförd/Avslutad still without a date.",
+        from_utford,
+        from_closing,
         cr.fetchone()[0],
     )
     # Raw SQL: anything already cached would keep the old value.
