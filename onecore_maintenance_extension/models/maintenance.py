@@ -94,9 +94,9 @@ class OneCoreMaintenanceRequest(
         store=True,
     )
     start_date = fields.Date("Startdatum", store=True)
-    performed_date = fields.Datetime("Utförd datum", store=True, readonly=True)
-    closed_date = fields.Datetime("Avslutad datum", store=True, readonly=True)
-    returned_date = fields.Datetime("Återsänd datum", store=True, readonly=True)
+    performed_date = fields.Datetime("Utfört datum", store=True, readonly=True)
+    closed_date = fields.Datetime("Avslutat datum", store=True, readonly=True)
+    returned_date = fields.Datetime("Återsänt datum", store=True, readonly=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
     )
@@ -1436,7 +1436,8 @@ class OneCoreMaintenanceRequest(
             create_service.setup_team_assignment(request)
             # Snapshot distrikt / kvartersvärdsområde from OneCore. Best
             # effort (never blocks creation); skipped when the caller already
-            # stamped the fields (core does for mimer.nu requests).
+            # stamped the fields. Core sends no codes for mimer.nu requests,
+            # so those are looked up here too.
             management_area_service.populate(request)
             # Spärr skadedjur, from the same TTL-cached set the cron refreshes.
             # Without this a case opened on a blocked flat shows no warning
@@ -1482,6 +1483,13 @@ class OneCoreMaintenanceRequest(
                 self, vals["stage_id"], vals
             )
             vals.update(stage_updates)
+
+        # Closing a mixed recordset: handle_stage_change dates only a recordset
+        # with no Utfört datum at all, so the undated part is dated after the
+        # write, with the closing time (see handle_stage_change).
+        undated_on_close_ids = []
+        if "stage_id" in vals and vals.get("closed_date") and "performed_date" not in vals:
+            undated_on_close_ids = [record.id for record in self if not record.performed_date]
 
         # MIM-486: entering Återsänd clears the assigned resource and hands the
         # request back to the orderer's team. The team switch happens after
@@ -1559,6 +1567,9 @@ class OneCoreMaintenanceRequest(
             self.browse(master_key_changed_ids).write(
                 {"master_key_changed_at": fields.Datetime.now()}
             )
+
+        if undated_on_close_ids:
+            self.browse(undated_on_close_ids).write({"performed_date": vals["closed_date"]})
 
         # Post loan product messages first, then other change notifications
         if not skip_tracking:

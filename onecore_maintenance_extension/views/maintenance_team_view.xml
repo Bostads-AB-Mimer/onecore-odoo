@@ -170,6 +170,27 @@
         </field>
     </record>
 
+    <!--
+    The card's ⋮ menu keeps stock's request links, two of which opened with
+    filters the request search view does not have, so they listed the whole
+    queue. "To Do" gets Aktiva + Utförda: the same set as stock's, and the
+    same as the card's Att göra block. "In Progress" goes: the card's own
+    Aktiva number is the team's work in progress, and the search filter
+    Aktiva would also count Väntar på handläggning and Återsänd, so the two
+    would disagree. "Done" already resolves to Avslutade.
+    -->
+    <record id="maintenance_team_kanban_menu_links" model="ir.ui.view">
+        <field name="name">maintenance.team.kanban.menu.links</field>
+        <field name="model">maintenance.team</field>
+        <field name="inherit_id" ref="maintenance.maintenance_team_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//a[@context=&quot;{'search_default_todo': 1}&quot;]" position="attributes">
+                <attribute name="context">{'search_default_status_active': 1, 'search_default_performed': 1}</attribute>
+            </xpath>
+            <xpath expr="//a[@context=&quot;{'search_default_progress': 1}&quot;]/.." position="replace" />
+        </field>
+    </record>
+
     <!-- Kostnadsställe (distrikt) pairing used by "Tilldela resursgrupp" -->
     <record id="maintenance_team_form_cost_center" model="ir.ui.view">
         <field name="name">maintenance.team.form.cost.center</field>
