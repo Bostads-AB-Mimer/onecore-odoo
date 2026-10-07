@@ -183,6 +183,10 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
+        # MIM-1965: logged in the body of Odoo's own "Status förändrad"
+        # tracking message instead (maintenance.request._message_track), so a
+        # stage change gives one message showing "Status: gammal → ny"
+        "stage_id",
     }
 
     def __init__(self, env):
@@ -228,6 +232,16 @@ class FieldChangeTracker:
                     message_type="notification",
                     subtype_xmlid="mail.mt_note",
                 )
+
+    def format_stage_change(self, record, old_stage):
+        """Format a stage change on record as "Status: old → new" (MIM-1965).
+
+        Returns None when the displayed stage name did not change."""
+        field_obj = record._fields["stage_id"]
+        field_label = field_obj.get_description(self.env)["string"]
+        return self._format_many2one_change(
+            field_obj, old_stage, record.stage_id.id, field_label
+        )
 
     def _should_skip_field_change(self, field_obj, old_value, new_value):
         """Check if field change should be skipped."""
