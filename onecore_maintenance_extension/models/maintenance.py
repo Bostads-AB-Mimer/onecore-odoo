@@ -6,6 +6,7 @@ import time
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
+from odoo.tools import is_html_empty
 from odoo.exceptions import AccessError, UserError
 
 from ...onecore_api import core_api
@@ -1260,6 +1261,40 @@ class OneCoreMaintenanceRequest(
                 )
 
         return result
+
+    def _message_track(self, fields_iter, initial_values_dict):
+        """MIM-1965: write "Status: gammal → ny" into the body of the native
+        "Status förändrad" tracking message.
+
+        Without a body that message is just the subtype description, and when
+        its tracking values are not rendered the chatter shows a status update
+        with no information about what changed. The initial stage comes from
+        Odoo's tracking snapshot, so several writes in one transaction log the
+        overall change. A body set via _track_set_log_message wins."""
+        bodies = self.env.cr.precommit.data.setdefault(
+            f"mail.tracking.message.{self._name}", {}
+        )
+        change_tracker = FieldChangeTracker(self.env)
+        for record in self.exists():
+            initial_values = initial_values_dict.get(record.id) or {}
+            if "stage_id" not in initial_values or record.id in bodies:
+                continue
+            change_text = change_tracker.format_stage_change(
+                record, initial_values["stage_id"]
+            )
+            if change_text:
+                bodies[record.id] = Markup("<div>%s</div>") % Markup(change_text)
+        return super()._message_track(fields_iter, initial_values_dict)
+
+    def _track_filter_for_display(self, tracking_values):
+        """MIM-1965: hide the stage tracking value when the message body
+        already shows the stage change, so it is not displayed twice. Older
+        tracking messages without a body keep their tracking value."""
+        tracking_values = super()._track_filter_for_display(tracking_values)
+        return tracking_values.filtered(
+            lambda tracking: tracking.field_id.name != "stage_id"
+            or is_html_empty(tracking.mail_message_id.body)
+        )
 
     def _track_loan_product_changes(self, vals):
         """Track loan product changes for existing records."""
