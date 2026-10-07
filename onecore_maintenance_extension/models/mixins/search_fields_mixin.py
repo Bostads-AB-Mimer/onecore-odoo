@@ -58,6 +58,16 @@ class SearchFieldsMixin(models.AbstractModel):
         search="_search_is_performed",
         help="Ärenden i steget Utförd (klara men inte avslutade).",
     )
+    # The one definition of "active" the search filters share (Aktiva,
+    # Förfallna, Blockerat, Klart, Ej schemalagt): Utförd is not a done
+    # stage, so "not done" alone would count it.
+    is_active_status = fields.Boolean(
+        "Aktiv",
+        store=False,
+        search="_search_is_active_status",
+        help="Ärenden som varken är utförda eller avslutade. Väntar på "
+        "handläggning och Återsänd räknas som aktiva.",
+    )
     # The domain behind the resource group card's "Bevakning" numbers
     # (maintenance.team._ordered_domain). Not in the search view: nobody
     # types a team id.
@@ -167,6 +177,13 @@ class SearchFieldsMixin(models.AbstractModel):
         # stage_5 = Utförd, owned by us under the stock xml-id.
         stage = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
         domain = Domain("stage_id", "=", stage.id) if stage else Domain(False)
+        return self._boolean_search_domain(operator, value, domain)
+
+    def _search_is_active_status(self, operator, value):
+        domain = Domain("stage_id.done", "=", False)
+        stage = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
+        if stage:
+            domain &= Domain("stage_id", "!=", stage.id)
         return self._boolean_search_domain(operator, value, domain)
 
     def _search_card_bucket(self, operator, value):

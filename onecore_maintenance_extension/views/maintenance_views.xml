@@ -34,31 +34,29 @@
                             domain="[('user_id', '=', uid)]" />
                         <separator />
                         <!-- Aktiva, Utförda and Avslutade split every request
-                             into three, without overlap: Utförd is not a done
-                             stage, so Aktiva has to leave it out by hand. -->
+                             into three, without overlap. "Active" is
+                             is_active_status everywhere below, so the filters
+                             that read as "open" agree. Stock's "To Do" (open,
+                             Utförd included) is gone: a hidden superset can
+                             neither share this group (it swallows Aktiva) nor
+                             sit outside it (it empties Avslutade). Its users
+                             open with Aktiva + Utförda instead, see
+                             hr_equipment_request_action_cal below and the
+                             team card menu in maintenance_team_view.xml. -->
                         <filter string="Aktiva" name="status_active"
-                            domain="[('stage_id.done', '=', False), ('is_performed', '=', False)]" />
+                            domain="[('is_active_status', '=', True)]" />
                         <!-- Utförd by xml-id, never by name. -->
                         <filter string="Utförda" name="performed"
                             domain="[('is_performed', '=', True)]" />
                         <filter string="Avslutade" name="done"
                             domain="[('stage_id.done', '=', True)]" />
-                        <separator invisible="1" />
-                        <!-- Stock's "To Do", Utförd included. Hidden, but kept
-                             for the stock actions that open with
-                             search_default_todo (Ärendekalendern, the team
-                             card's "To Do"). In a group of its own: filters in
-                             one group are ORed, so next to Aktiva it would
-                             let Utförd back in. -->
-                        <filter string="Att göra" name="todo" invisible="1"
-                            domain="[('stage_id.done', '=', False)]" />
                         <separator />
                         <filter string="Blockerat" name="kanban_state_block"
-                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'blocked')]" />
+                            domain="[('is_active_status', '=', True), ('kanban_state', '=', 'blocked')]" />
                         <!-- Not "done": stock names this one done as well,
                              which makes search_default_done ambiguous. -->
                         <filter string="Klart" name="kanban_state_done"
-                            domain="[('stage_id.done', '=', False), ('kanban_state', '=', 'done')]" />
+                            domain="[('is_active_status', '=', True), ('kanban_state', '=', 'done')]" />
                         <separator />
                         <!-- MIM-2038: ranges rather than one filter per value —
                              antal veckor is free-form, so a filter per literal
@@ -73,13 +71,13 @@
                             domain="[('priority_expanded', '!=', False), ('priority_days', '&gt;', 30)]" />
                         <separator />
                         <filter string="Ej schemalagt" name="unscheduled"
-                            domain="[('stage_id.done', '=', False), ('schedule_date', '=', False)]" />
+                            domain="[('is_active_status', '=', True), ('schedule_date', '=', False)]" />
                         <separator />
                         <!-- Past due and still active. 'today' is resolved
                              by the ORM in the user's timezone, so a saved
                              favorite stays relative. -->
                         <filter string="Förfallna" name="overdue"
-                            domain="[('due_date', '&lt;', 'today'), ('stage_id.done', '=', False), ('is_performed', '=', False)]" />
+                            domain="[('due_date', '&lt;', 'today'), ('is_active_status', '=', True)]" />
                         <separator />
                         <filter name="filter_request_date" date="request_date" />
                         <!-- Planned and due dates look ahead, so these two
@@ -89,10 +87,9 @@
                              next year to get the right year. -->
                         <filter name="filter_schedule_date" date="schedule_date"
                             end_month="2" end_year="1" />
-                        <filter name="filter_due_date" date="due_date" string="Förfallodatum"
+                        <filter name="filter_due_date" date="due_date"
                             end_month="2" end_year="1" />
-                        <filter name="filter_performed_date" date="performed_date"
-                            string="Utfört datum" />
+                        <filter name="filter_performed_date" date="performed_date" />
                         <filter name="filter_close_date" date="close_date" />
                         <separator />
                         <filter string="Olästa meddelanden" name="message_needaction"
@@ -203,6 +200,12 @@
                     </search>
                 </xpath>
             </field>
+        </record>
+        <!-- Ärendekalendern opened with stock's "To Do". Aktiva + Utförda is
+             the same set, as filters the user can see and combine: adding
+             Avslutade shows the closed requests too. -->
+        <record id="maintenance.hr_equipment_request_action_cal" model="ir.actions.act_window">
+            <field name="context">{'search_default_active': True, 'search_default_status_active': True, 'search_default_performed': True}</field>
         </record>
         <record id="hr_equipment_request_view_form_extension" model="ir.ui.view">
             <field name="name">equipment.request.form</field>

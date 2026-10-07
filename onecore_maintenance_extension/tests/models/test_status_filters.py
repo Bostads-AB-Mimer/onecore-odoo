@@ -2,16 +2,20 @@
 search view.
 
 Aktiva, Utförda and Avslutade must split the requests into three without
-overlap; the stock "Att göra" stays, hidden, for the stock actions that open
-with it. The domains are read from the search view's arch, the way the web
-client gets them, and run as an internal user: root is an external
+overlap, and every filter that reads as "open" shares Aktiva's definition
+(is_active_status). The domains are read from the search view's arch, the way
+the web client gets them, and combined the way it combines them: ORed within
+a group, ANDed across groups. Run as an internal user: root is an external
 contractor in tests.
 """
+import re
 from collections import Counter
 from datetime import timedelta
+from itertools import chain
 
 from lxml import etree
 from odoo import fields
+from odoo.fields import Domain
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 from odoo.tools.safe_eval import safe_eval
@@ -36,6 +40,10 @@ NEEDS_RESOURCE = {
     "maintenance.stage_4",
     "maintenance.stage_5",
 }
+# The client starts a new filter group at each of these (search_arch_parser.js:
+# visitSeparator, visitField and visitGroup all push a group).
+GROUP_BREAKS = {"separator", "field", "group"}
+SEARCH_DEFAULT = re.compile(r"search_default_(\w+)")
 
 
 @tagged("onecore")
@@ -59,6 +67,15 @@ class TestStatusFilters(TransactionCase):
 
         self.requests = self.archived.union(*self.by_stage.values())
 
+        # Parsed once: every helper below reads from these.
+        self.arch = etree.fromstring(
+            self.env["maintenance.request"]
+            .with_user(self.user)
+            .get_view(view_type="search")["arch"]
+        )
+        self.filters = {node.get("name"): node for node in self.arch.iter("filter")}
+        self.groups = self._filter_groups()
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -78,42 +95,38 @@ class TestStatusFilters(TransactionCase):
                 request.write({"stage_id": stage.id})
         return request
 
-    def _arch(self):
-        """The search view as the client gets it."""
-        arch = (
-            self.env["maintenance.request"]
-            .with_user(self.user)
-            .get_view(view_type="search")["arch"]
-        )
-        return etree.fromstring(arch)
-
-    def _filter_nodes(self):
-        return list(self._arch().iter("filter"))
-
     def _filter_groups(self):
-        """Filter names per group, as the client groups them: a <separator/>
-        starts a new group, hidden filters included. Filters in one group
-        are ORed, filters in different groups ANDed."""
+        """Filter names per group, as the client builds them from the
+        search view's top level, hidden filters included."""
         groups = [[]]
-        for node in self._arch():
-            if node.tag == "separator":
+        for node in self.arch:
+            if node.tag in GROUP_BREAKS:
                 groups.append([])
             elif node.tag == "filter":
                 groups[-1].append(node.get("name"))
         return [group for group in groups if group]
 
-    def _filters(self):
-        return {node.get("name"): node for node in self._filter_nodes()}
-
     def _domain(self, name):
-        return safe_eval(self._filters()[name].get("domain"))
+        return safe_eval(self.filters[name].get("domain"))
 
     def _search(self, *names):
-        """The requests of this test that all the named filters let through,
-        each filter ANDed with the next, as filters in different groups are."""
+        """The requests of this test that all the named filters let through.
+        ANDs every filter, so only for filters from different groups."""
         domain = [("id", "in", self.requests.ids)]
         for name in names:
             domain += self._domain(name)
+        return self.env["maintenance.request"].with_user(self.user).search(domain)
+
+    def _client_search(self, *names):
+        """What the web client lists with these filters on: ORed within a
+        group, ANDed across groups."""
+        unknown = set(names) - set(chain.from_iterable(self.groups))
+        self.assertFalse(unknown, "not filters in the search view")
+        domain = Domain("id", "in", self.requests.ids)
+        for group in self.groups:
+            active = [name for name in group if name in names]
+            if active:
+                domain &= Domain.OR(Domain(self._domain(name)) for name in active)
         return self.env["maintenance.request"].with_user(self.user).search(domain)
 
     def _with_status(self, status):
@@ -147,63 +160,101 @@ class TestStatusFilters(TransactionCase):
         self.assertEqual(sum(len(requests) for requests in found), len(self.by_stage))
         self.assertEqual(self.requests - self.archived, found[0].union(*found[1:]))
 
-    def test_archive_filter_still_applies_on_top(self):
-        self.assertEqual(self._search("status_active", "inactive"), self.archived)
-
-    def test_todo_is_kept_but_hidden(self):
-        """Stock's "To Do": still opens Ärendekalendern and the team card's
-        "To Do", Utförd included as before."""
-        todo = self._filters()["todo"]
-
-        self.assertEqual(todo.get("invisible"), "1")
-        self.assertEqual(
-            self._search("todo", "active"),
-            self._with_status("status_active") | self._with_status("performed"),
-        )
-
-    def test_todo_is_not_ored_with_the_status_filters(self):
-        """Ärendekalendern opens with Att göra. In the status group it would
-        be ORed with Aktiva, and Utförd would stay in the list."""
-        status_group = next(g for g in self._filter_groups() if "status_active" in g)
+    def test_status_filters_are_one_group_of_their_own(self):
+        """ORed with each other, ANDed with everything else."""
+        status_group = next(g for g in self.groups if "status_active" in g)
 
         self.assertEqual(status_group, list(STATUS_FILTERS))
 
-    def test_stock_search_defaults_resolve_to_a_filter(self):
-        """search_default_<name> is silently ignored when no filter has that
-        name."""
-        names = set(self._filters())
-        for xml_id in (
-            "maintenance.hr_equipment_request_action_cal",
-            "maintenance.hr_equipment_request_action",
-        ):
-            action = self.env.ref(xml_id)
-            defaults = {
-                key[len("search_default_"):]
-                for key in safe_eval(action.context or "{}")
-                if key.startswith("search_default_")
-            }
-            with self.subTest(action=xml_id):
-                self.assertLessEqual(defaults, names)
+    def test_archive_filter_still_applies_on_top(self):
+        self.assertEqual(self._search("status_active", "inactive"), self.archived)
+
+    def test_is_active_status(self):
+        """Both polarities: favorites and drilldowns negate search fields."""
+        Request = self.env["maintenance.request"].with_user(self.user)
+        scope = [("id", "in", self.requests.ids)]
+        active = self._with_status("status_active") | self.archived
+
+        self.assertEqual(Request.search(scope + [("is_active_status", "=", True)]), active)
+        for negation in (("is_active_status", "=", False), ("is_active_status", "!=", True)):
+            with self.subTest(negation=negation):
+                self.assertEqual(Request.search(scope + [negation]), self.requests - active)
+
+    def test_open_filters_leave_performed_out(self):
+        """Blockerat, Klart and Ej schemalagt read as "open" next to Aktiva,
+        so they share its definition: a performed request is in none of them."""
+        # No request in the fixture has a planned date.
+        self.assertEqual(
+            self._search("unscheduled", "active"), self._with_status("status_active")
+        )
+        for name, state in (("kanban_state_block", "blocked"), ("kanban_state_done", "done")):
+            with self.subTest(filter=name):
+                self.requests.write({"kanban_state": state})
+                self.assertEqual(
+                    self._search(name, "active"), self._with_status("status_active")
+                )
+
+    # ------------------------------------------------------------------
+    # Where lists open with filters already on
+    # ------------------------------------------------------------------
+    def test_calendar_combines_with_every_status_filter(self):
+        """Ärendekalendern opens with Aktiva + Utförda, the set stock's hidden
+        "To Do" stood for. Adding Avslutade must add the closed requests: next
+        to that hidden filter, which was ANDed with it, the list went empty."""
+        action = self.env.ref("maintenance.hr_equipment_request_action_cal")
+        defaults = set(SEARCH_DEFAULT.findall(action.context))
+        open_requests = self._with_status("status_active") | self._with_status("performed")
+
+        self.assertEqual(defaults, {"active", "status_active", "performed"})
+        self.assertEqual(self._client_search(*defaults), open_requests)
+        self.assertEqual(
+            self._client_search(*defaults, "done"), self.requests - self.archived
+        )
+
+    def test_every_search_default_resolves(self):
+        """search_default_<name> is silently ignored when the search view has
+        no filter or field by that name, and the list opens unfiltered. Checks
+        every request action and every link on the resource group card."""
+        known = set(self.filters) | {node.get("name") for node in self.arch.iter("field")}
+        sources = [
+            (action.xml_id or str(action.id), action.context or "")
+            for action in self.env["ir.actions.act_window"].search(
+                [("res_model", "=", "maintenance.request")]
+            )
+        ]
+        card = etree.fromstring(
+            self.env["maintenance.team"]
+            .with_user(self.user)
+            .get_view(self.env.ref("maintenance.maintenance_team_kanban").id, "kanban")["arch"]
+        )
+        sources += [
+            (f"team card: {' '.join(node.itertext()).strip() or node.tag}", node.get("context"))
+            for node in card.iter()
+            if node.get("context")
+        ]
+
+        for source, context in sources:
+            with self.subTest(source=source):
+                self.assertLessEqual(set(SEARCH_DEFAULT.findall(context)), known)
 
     def test_filter_names_are_unique(self):
         """Two filters with one name make search_default_<name> ambiguous;
         stock names both Avslutad and Klart "done"."""
-        names = Counter(node.get("name") for node in self._filter_nodes())
+        names = Counter(node.get("name") for node in self.arch.iter("filter"))
 
         self.assertEqual([name for name, n in names.items() if n > 1], [])
-        self.assertEqual(self._filters()["done"].get("string"), "Avslutade")
+        self.assertEqual(self.filters["done"].get("string"), "Avslutade")
         self.assertIn("kanban_state_done", names)
 
     def test_labels(self):
-        filters = self._filters()
         self.assertEqual(
-            {name: filters[name].get("string") for name in STATUS_FILTERS},
+            {name: self.filters[name].get("string") for name in STATUS_FILTERS},
             {"status_active": "Aktiva", "performed": "Utförda", "done": "Avslutade"},
         )
         # Not "Aktiva ärenden": the default facet lets Utförda and Avslutade
         # through, and Aktiva is the status filter.
-        self.assertEqual(filters["active"].get("string"), "Alla ärenden")
-        self.assertEqual(filters["inactive"].get("string"), "Arkiverade ärenden")
+        self.assertEqual(self.filters["active"].get("string"), "Alla ärenden")
+        self.assertEqual(self.filters["inactive"].get("string"), "Arkiverade ärenden")
 
     # ------------------------------------------------------------------
     # Förfallna and the date filters
@@ -230,16 +281,18 @@ class TestStatusFilters(TransactionCase):
         self.assertFalse(self._search("overdue"))
 
     def test_date_filters_are_on_stored_date_fields(self):
-        """A date filter on a field that is not stored breaks the dropdown."""
-        filters = self._filters()
+        """A date filter on a field that is not stored breaks the dropdown.
+        No label of their own: the filter shows the field's label, the same
+        as the form and the list column."""
         Request = self.env["maintenance.request"]
         for name, field, label in (
             ("filter_due_date", "due_date", "Förfallodatum"),
             ("filter_performed_date", "performed_date", "Utfört datum"),
         ):
             with self.subTest(filter=name):
-                self.assertEqual(filters[name].get("date"), field)
-                self.assertEqual(filters[name].get("string"), label)
+                self.assertEqual(self.filters[name].get("date"), field)
+                self.assertIsNone(self.filters[name].get("string"))
+                self.assertEqual(Request._fields[field].string, label)
                 self.assertTrue(Request._fields[field].store)
                 self.assertIn(Request._fields[field].type, ("date", "datetime"))
 
@@ -247,11 +300,10 @@ class TestStatusFilters(TransactionCase):
         """Odoo's default periods stop at the current month and year, which
         makes "förfaller i november" unselectable in October. end_year must
         reach next year too, or a month across new year gets this year."""
-        filters = self._filters()
         for name in ("filter_due_date", "filter_schedule_date"):
             with self.subTest(filter=name):
-                self.assertGreater(int(filters[name].get("end_month", 0)), 0)
-                self.assertGreaterEqual(int(filters[name].get("end_year", 0)), 1)
+                self.assertGreater(int(self.filters[name].get("end_month", 0)), 0)
+                self.assertGreaterEqual(int(self.filters[name].get("end_year", 0)), 1)
 
     def test_performed_date_finds_closed_requests_too(self):
         """Utfört datum is what an avtalsägare filters on; a request that was
