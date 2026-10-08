@@ -69,6 +69,35 @@ class MaintenanceBackfillWizard(models.TransientModel):
     prev_object_property = fields.Char(string="Fastighet", readonly=True)
     prev_tenant_name = fields.Char(string="Hyresgäst", readonly=True)
     prev_tenant_contact = fields.Char(string="Kundnummer", readonly=True)
+    # The attach realigns Utrymme to the object's type (see ``_attach``); say so
+    # in the preview, since the user otherwise only finds out from the chatter.
+    space_change = fields.Char(string="Utrymme", compute="_compute_space_change")
+
+    @api.depends(
+        "state",
+        "lease_option_id",
+        "object_option_ref",
+        "maintenance_request_id.space_caption",
+    )
+    def _compute_space_change(self):
+        for wizard in self:
+            route = wizard._target_route() if wizard.state == "preview" else None
+            current = wizard.maintenance_request_id.space_caption
+            if route and route["space"] != current:
+                wizard.space_change = _("Utrymme ändras från %(old)s till %(new)s") % {
+                    "old": current or "–",
+                    "new": route["space"],
+                }
+            else:
+                wizard.space_change = False
+
+    def _target_route(self):
+        """The route the current preview would attach through, if any."""
+        if self.lease_option_id and self.lease_option_id.exists():
+            return route_for_lease_option(self.lease_option_id)
+        if self.object_option_ref and self.object_option_ref.exists():
+            return route_for_object_option(self.object_option_ref)
+        return None
 
     def _get_core_api(self):
         """The client, with a failed authentication reported like a failed lookup.

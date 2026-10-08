@@ -25,6 +25,12 @@
                             av en typ som inte kan hanteras här. Det kopplas till ärendet utan
                             kontrakt och hyresgäst, men ärendet markeras inte som tomställt. </div>
 
+                        <div class="alert alert-info" role="status"
+                            invisible="state != 'preview' or not space_change">
+                            <i class="fa fa-info-circle me-2" />
+                            <field name="space_change" class="d-inline" />
+                        </div>
+
                         <group invisible="state != 'input'">
                             <field name="lookup_value"
                                 string="Objektnummer"
