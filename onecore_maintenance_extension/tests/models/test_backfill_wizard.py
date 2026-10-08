@@ -732,6 +732,67 @@ class TestBackfillWizard(TransactionCase):
                 self.assertTrue(reloaded.rental_property_id)
                 self.assertEqual(reloaded.contact_code, "P005468")
 
+    def test_preview_announces_the_space_change(self):
+        # The attach realigns Utrymme to the object's type, so the preview says
+        # so before the user confirms — on both entry points.
+        for kind, value in (
+            ("rental_object", "216-034-03-0101"),
+            ("tenant", "P005468"),
+        ):
+            with self.subTest(kind=kind):
+                request = create_maintenance_request(self.env, space_caption="Övrigt")
+                self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+                wiz = self._wizard(request, kind)
+                wiz.lookup_value = value
+                self.assertFalse(wiz.space_change)  # nothing to say before Sök
+                with patch.object(
+                    type(wiz), "_get_core_api", return_value=self.fake_api
+                ):
+                    wiz.action_search()
+
+                self.assertEqual(
+                    wiz.space_change, "Utrymme ändras från Övrigt till Lägenhet"
+                )
+
+    def test_preview_is_silent_when_the_space_stays(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns([RES_LEASE], residence=RESIDENCE)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+
+        self.assertFalse(wiz.space_change)
+
+    def test_preview_space_change_follows_the_chosen_contract(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self._onecore_returns(
+            [RES_LEASE, PARK_LEASE], residence=RESIDENCE, parking=PARKING
+        )
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+        leases = self._lease_options()
+
+        wiz.lease_option_id = leases.filtered(lambda l: l.parking_space_option_id)
+        self.assertEqual(wiz.space_change, "Utrymme ändras från Lägenhet till Bilplats")
+        wiz.lease_option_id = leases.filtered(lambda l: l.rental_property_option_id)
+        self.assertFalse(wiz.space_change)
+
+    def test_preview_announces_the_space_change_for_a_vacant_object(self):
+        request = create_maintenance_request(self.env, space_caption="Tvättstuga")
+        self._onecore_returns([], residence=RESIDENCE)
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+
+        self.assertTrue(wiz.is_vacant)
+        self.assertEqual(
+            wiz.space_change, "Utrymme ändras från Tvättstuga till Lägenhet"
+        )
+
     def _pens_visible(self, request, user):
         """Evaluate each add pen's own ``invisible`` expression against ``request``
         as seen by ``user``.
