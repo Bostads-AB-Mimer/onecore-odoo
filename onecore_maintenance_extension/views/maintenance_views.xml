@@ -789,13 +789,6 @@
                                         class="btn btn-secondary mt-2 mb-2 me-2"
                                         help="Rapportera tid direkt från ärendet"
                                         invisible="user_is_external_contractor or not id" />
-                                    <button name="open_component_wizard"
-                                        type="object"
-                                        string="Uppdatera/lägg till Komponent"
-                                        icon="fa-plus"
-                                        class="btn btn-secondary mt-2 mb-2"
-                                        help="Uppdatera eller lägg till komponent"
-                                        invisible="space_caption != 'Lägenhet' or user_is_external_contractor or not id" />
                                 </div>
                             </div>
                         </div>
