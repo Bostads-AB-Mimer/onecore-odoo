@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.ComponentNotes">
+        <div t-if="links.length" class="mimer-component-notes">
+            <div t-foreach="links" t-as="link" t-key="link.id" class="mimer-component-note">
+                <!-- The room tells surfaces apart: Målning tak is in every room -->
+                <span class="fw-bold">
+                    <t t-esc="link.data.label" />
+                    <span t-if="link.data.room_name" class="fw-normal text-muted"> (<t t-esc="link.data.room_name" />)</span><t t-if="link.data.note">:</t>
+                </span>
+                <span t-if="link.data.note" class="ms-1" t-esc="link.data.note" />
+            </div>
+        </div>
+    </t>
+
+</templates>

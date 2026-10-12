@@ -2,12 +2,14 @@
 """Tests for ComponentOneCoreService."""
 
 import json
+import time
 from datetime import date
 from unittest.mock import Mock
 
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
+from odoo.addons.onecore_maintenance_extension.models.services import component_onecore_service
 from odoo.addons.onecore_maintenance_extension.models.services.component_onecore_service import (
     ComponentOneCoreService,
 )
@@ -314,6 +316,58 @@ class TestComponentOneCoreService(TransactionCase):
 
         self.assertIsNone(result)
 
+    def test_onecore_transform_reads_subtype_on_component_without_model(self):
+        """Surfaces have no model; the hierarchy sits on the component."""
+        service = self._create_service()
+
+        component = {
+            'id': 'comp-001',
+            'modelId': None,
+            'model': None,
+            'subtype': {
+                'subTypeName': 'Parkettgolv',
+                'technicalLifespan': 30,
+                'componentType': {
+                    'typeName': 'Golv',
+                    'category': {'categoryName': 'Ytskikt', 'type': 'SURFACE'},
+                },
+            },
+            'componentInstallations': [{'id': 'inst-001', 'installationDate': '2024-01-15'}],
+        }
+
+        result = service._transform_component_data(component, 'Vardagsrum', 'room-001')
+
+        self.assertEqual(result['subtype'], 'Parkettgolv')
+        self.assertEqual(result['typ'], 'Golv')
+        self.assertEqual(result['category'], 'Ytskikt')
+        self.assertEqual(result['technical_lifespan'], 30)
+        self.assertIsNone(result['model'])
+        self.assertIsNone(result['model_id'])
+
+    def test_onecore_transform_still_reads_subtype_nested_under_model(self):
+        """Older responses nest the hierarchy under model."""
+        service = self._create_service()
+
+        component = {
+            'id': 'comp-002',
+            'model': {
+                'id': 'model-002',
+                'modelName': 'KG-1234',
+                'subtype': {
+                    'subTypeName': 'Frys',
+                    'componentType': {'typeName': 'Vitvara', 'category': {'categoryName': 'Kök'}},
+                },
+            },
+            'componentInstallations': [{'id': 'inst-002', 'installationDate': '2024-01-15'}],
+        }
+
+        result = service._transform_component_data(component, 'Kök', 'room-002')
+
+        self.assertEqual(result['subtype'], 'Frys')
+        self.assertEqual(result['typ'], 'Vitvara')
+        self.assertEqual(result['category'], 'Kök')
+        self.assertEqual(result['model_id'], 'model-002')
+
     def test_onecore_fetch_image_urls_success(self):
         """Returns valid image URLs."""
         service = self._create_service()
@@ -354,3 +408,289 @@ class TestComponentOneCoreService(TransactionCase):
         self.assertEqual(len(result), 2)
         self.assertIn(url_valid_1, result)
         self.assertIn(url_valid_2, result)
+
+
+def _room(room_id, name=None, sorting_order=0, **kwargs):
+    room = {'propertyObjectId': room_id, 'name': name, 'sortingOrder': sorting_order}
+    room.update(kwargs)
+    return room
+
+
+def _component(comp_id, type_name, subtype_name, category_type='EQUIPMENT',
+               installation_date='2024-01-15'):
+    return {
+        'id': comp_id,
+        'modelId': None,
+        'model': None,
+        'subtype': {
+            'subTypeName': subtype_name,
+            'componentType': {
+                'typeName': type_name,
+                'category': {'categoryName': 'Kategori', 'type': category_type},
+            },
+        },
+        'componentInstallations': [
+            {'id': f'inst-{comp_id}', 'installationDate': installation_date}
+        ],
+    }
+
+
+@tagged("onecore")
+class TestLoadRoomComponents(TransactionCase):
+    """Rooms and their components for the room grid on the ärende."""
+
+    def setUp(self):
+        super().setUp()
+        component_onecore_service._room_components_cache.clear()
+        self.mock_api = Mock()
+
+    def _load(self, rental_id='406-096-04-0101'):
+        service = ComponentOneCoreService(self.env)
+        service._api = self.mock_api
+        return service.load_room_components(rental_id)
+
+    def test_rooms_with_their_components(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-kok', 'Kök', 1),
+            _room('room-vard', 'Vardagsrum', 2),
+        ]
+        self.mock_api.parallel_get_json.return_value = [
+            [_component('comp-frys', 'Frys', 'Frysskåp fristående 190-225 liter')],
+            [_component('comp-golv', 'Golv', 'Parkettgolv', 'SURFACE')],
+        ]
+
+        result = self._load()
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(
+            result['rooms'],
+            [
+                {
+                    'id': 'room-kok', 'name': 'Kök', 'sequence': 0, 'loaded': True,
+                    'components': [{
+                        'id': 'comp-frys', 'label': 'Frys',
+                        'full_name': 'Frysskåp fristående 190-225 liter',
+                        'category_type': 'EQUIPMENT', 'installation_id': 'inst-comp-frys',
+                    }],
+                },
+                {
+                    'id': 'room-vard', 'name': 'Vardagsrum', 'sequence': 1, 'loaded': True,
+                    'components': [{
+                        'id': 'comp-golv', 'label': 'Parkettgolv', 'full_name': 'Parkettgolv',
+                        'category_type': 'SURFACE', 'installation_id': 'inst-comp-golv',
+                    }],
+                },
+            ],
+        )
+        self.mock_api.fetch_rooms.assert_called_once_with('406-096-04-0101')
+        # One wave for all rooms, and no /component-categories
+        self.mock_api.parallel_get_json.assert_called_once_with(
+            ['/components/by-room/room-kok', '/components/by-room/room-vard']
+        )
+
+    def test_rooms_follow_sorting_order(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-b', 'Badrum', 2),
+            _room('room-x', 'Utan ordning', None),
+            _room('room-k', 'Kök', 1),
+        ]
+        self.mock_api.parallel_get_json.return_value = [[], [], []]
+
+        result = self._load()
+
+        self.assertEqual([r['name'] for r in result['rooms']], ['Kök', 'Badrum', 'Utan ordning'])
+        self.assertEqual([r['sequence'] for r in result['rooms']], [0, 1, 2])
+
+    def test_room_name_falls_back_to_room_type_then_code(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-1', None, 1, roomType={'name': 'Sovrum'}, code='SOV'),
+            _room('room-2', None, 2, roomType=None, code='HALL'),
+        ]
+        self.mock_api.parallel_get_json.return_value = [[], []]
+
+        result = self._load()
+
+        self.assertEqual([r['name'] for r in result['rooms']], ['Sovrum', 'Hall'])
+
+    def test_room_names_in_capitals_get_sentence_case(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-1', 'KÖK', 1),
+            _room('room-2', 'KLÄDKAMMARE 1', 2),
+            _room('room-3', 'WC/DUSCH', 3),
+            _room('room-4', 'RUM 1', 4),
+            _room('room-5', 'Allrum', 5),
+        ]
+        self.mock_api.parallel_get_json.return_value = [[], [], [], [], []]
+
+        result = self._load()
+
+        self.assertEqual(
+            [r['name'] for r in result['rooms']],
+            ['Kök', 'Klädkammare 1', 'WC/dusch', 'Rum 1', 'Allrum'],
+        )
+
+    def test_deleted_rooms_are_left_out(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-1', 'Kök', 1),
+            _room('room-2', 'Gammalt förråd', 2, deleted=True),
+        ]
+        self.mock_api.parallel_get_json.return_value = [[]]
+
+        result = self._load()
+
+        self.assertEqual([r['id'] for r in result['rooms']], ['room-1'])
+        self.mock_api.parallel_get_json.assert_called_once_with(['/components/by-room/room-1'])
+
+    def test_rooms_error_gives_not_ok(self):
+        # Core answers 500 for an unknown rental id
+        self.mock_api.fetch_rooms.side_effect = Exception("500 Server Error")
+
+        result = self._load()
+
+        self.assertEqual(result, {'ok': False, 'rooms': []})
+        self.mock_api.parallel_get_json.assert_not_called()
+
+    def test_one_failed_room_keeps_the_others(self):
+        self.mock_api.fetch_rooms.return_value = [
+            _room('room-1', 'Kök', 1),
+            _room('room-2', 'Badrum', 2),
+        ]
+        self.mock_api.parallel_get_json.return_value = [
+            [_component('comp-frys', 'Frys', 'Frysskåp')],
+            None,
+        ]
+
+        result = self._load()
+
+        self.assertTrue(result['ok'])
+        kok, badrum = result['rooms']
+        self.assertTrue(kok['loaded'])
+        self.assertEqual(len(kok['components']), 1)
+        self.assertFalse(badrum['loaded'])
+        self.assertEqual(badrum['components'], [])
+
+    def test_same_label_in_one_room_is_numbered_in_installation_order(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Vardagsrum', 1)]
+        self.mock_api.parallel_get_json.return_value = [[
+            _component('comp-b', 'Fönster', '3-glas', installation_date='2020-05-01'),
+            _component('comp-a', 'Fönster', '2-glas', installation_date='2018-03-01'),
+            _component('comp-c', 'Element', 'Radiator'),
+        ]]
+
+        result = self._load()
+
+        components = result['rooms'][0]['components']
+        self.assertEqual(
+            [(c['id'], c['label']) for c in components],
+            [('comp-c', 'Element'), ('comp-a', 'Fönster 1'), ('comp-b', 'Fönster 2')],
+        )
+
+    def test_equipment_is_named_by_type_and_surface_by_subtype(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [[
+            _component('comp-spis', 'Spis', 'Elspisar bredd = 60 cm'),
+            _component('comp-golv', 'Golv', 'Linoleum', 'SURFACE'),
+        ]]
+
+        result = self._load()
+
+        self.assertEqual(
+            [(c['label'], c['full_name']) for c in result['rooms'][0]['components']],
+            [('Linoleum', 'Linoleum'), ('Spis', 'Elspisar bredd = 60 cm')],
+        )
+
+    def test_label_falls_back_when_a_name_is_missing(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        no_type = _component('comp-1', None, 'Kylskåp fristående', 'EQUIPMENT')
+        # An older core without category type: named like a surface
+        no_category_type = _component('comp-2', 'Vägg', 'Tapetsering', None)
+        nameless = _component('comp-3', None, None)
+        self.mock_api.parallel_get_json.return_value = [[no_type, no_category_type, nameless]]
+
+        result = self._load()
+
+        self.assertEqual(
+            sorted(c['label'] for c in result['rooms'][0]['components']),
+            ['Kylskåp fristående', 'Okänd komponent', 'Tapetsering'],
+        )
+
+    def test_two_of_the_same_type_are_numbered(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [[
+            _component('comp-a', 'Kombiskåp', 'Kyl- och frysskåp', installation_date='2019-01-01'),
+            _component('comp-b', 'Kombiskåp', 'Kombinerad Kyl/Frys 200 cm',
+                       installation_date='2021-01-01'),
+        ]]
+
+        result = self._load()
+
+        self.assertEqual(
+            [(c['label'], c['full_name']) for c in result['rooms'][0]['components']],
+            [('Kombiskåp 1', 'Kyl- och frysskåp'), ('Kombiskåp 2', 'Kombinerad Kyl/Frys 200 cm')],
+        )
+
+    def test_label_never_comes_from_model(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        component = _component('comp-1', 'Diskmaskin', 'Diskmaskin 60 cm')
+        component['model'] = {'id': 'model-1', 'modelName': 'SMV4HVX33E'}
+        self.mock_api.parallel_get_json.return_value = [[component]]
+
+        result = self._load()
+
+        self.assertEqual(result['rooms'][0]['components'][0]['label'], 'Diskmaskin')
+
+    def test_deinstalled_component_is_skipped(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        removed = _component('comp-old', 'Spis', 'Elspis')
+        removed['componentInstallations'][0]['deinstallationDate'] = '2025-01-01'
+        self.mock_api.parallel_get_json.return_value = [
+            [removed, _component('comp-new', 'Spis', 'Elspis')]
+        ]
+
+        result = self._load()
+
+        self.assertEqual([c['id'] for c in result['rooms'][0]['components']], ['comp-new'])
+
+    def test_no_rental_id_makes_no_call(self):
+        self.assertEqual(self._load(rental_id=False), {'ok': False, 'rooms': []})
+        self.mock_api.fetch_rooms.assert_not_called()
+
+    def test_result_is_cached_within_ttl(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [[_component('comp-1', 'Frys', 'Frysskåp')]]
+        first = self._load()
+
+        self.mock_api.reset_mock()
+        second = self._load()
+
+        self.assertEqual(second, first)
+        self.mock_api.fetch_rooms.assert_not_called()
+        self.mock_api.parallel_get_json.assert_not_called()
+
+    def test_expired_cache_entry_is_refetched(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [[]]
+        self._load()
+        cache = component_onecore_service._room_components_cache
+        cache['406-096-04-0101'] = (time.monotonic() - 1, cache['406-096-04-0101'][1])
+
+        self._load()
+
+        self.assertEqual(self.mock_api.fetch_rooms.call_count, 2)
+
+    def test_partial_failure_is_not_cached(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [None]
+        self._load()
+
+        self._load()
+
+        self.assertEqual(self.mock_api.fetch_rooms.call_count, 2)
+
+    def test_rooms_error_is_not_cached(self):
+        self.mock_api.fetch_rooms.side_effect = Exception("500 Server Error")
+        self._load()
+
+        self._load()
+
+        self.assertEqual(self.mock_api.fetch_rooms.call_count, 2)

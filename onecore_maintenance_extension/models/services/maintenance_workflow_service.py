@@ -183,6 +183,9 @@ class FieldChangeTracker:
         "cost_center_code",
         "cost_center_name",
         "management_area_lookup_at",
+        # One2many commands, not a value: the generic formatting would post
+        # the raw command list on every save
+        "component_link_ids",
     }
 
     def __init__(self, env):

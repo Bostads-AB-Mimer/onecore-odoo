@@ -2,6 +2,8 @@
 
 import json
 import logging
+import re
+import time
 import urllib.parse
 from datetime import datetime
 
@@ -15,6 +17,104 @@ _logger = logging.getLogger(__name__)
 APARTMENT_SPACE_CAPTION = 'Lägenhet'
 # Space type for property objects (rooms)
 PROPERTY_OBJECT_SPACE_TYPE = 'PropertyObject'
+
+# Per-worker cache for the ärende form's room grid, which loads on every form
+# open; users page back and forth between ärenden on the same apartment.
+# Worst-case staleness = TTL.
+ROOM_COMPONENTS_CACHE_TTL = 300  # seconds
+_room_components_cache = {}  # rental_id -> (expires_at_monotonic, result)
+
+
+def _component_subtype(comp):
+    """The component's subtype, with its componentType and category nested.
+
+    OneCore now returns the hierarchy on the component itself, and model is
+    null for components without one (every surface). Older responses nest it
+    under model, so fall back to that.
+    """
+    return comp.get('subtype') or (comp.get('model') or {}).get('subtype') or {}
+
+
+def _sentence_case(name):
+    """KÖK -> Kök, KLÄDKAMMARE 1 -> Klädkammare 1, WC/DUSCH -> WC/dusch.
+
+    OneCore's room names are all capitals. Words of one or two letters stay
+    capitals (WC). A name that isn't all capitals is left as it is.
+    """
+    if name != name.upper():
+        return name
+    # Odd indexes are runs of letters; a plain \b would split "kök" at the ö
+    parts = re.split(r'([^\W\d_]+)', name)
+    for i in range(1, len(parts), 2):
+        if len(parts[i]) > 2:
+            parts[i] = parts[i].lower()
+    result = ''.join(parts)
+    for i, char in enumerate(result):
+        if char.isalpha():
+            return result[:i] + char.upper() + result[i + 1:]
+    return result
+
+
+def _room_name(room):
+    # Same fallback as property-tree's getRoomDisplayName
+    return _sentence_case(
+        room.get('name')
+        or (room.get('roomType') or {}).get('name')
+        or room.get('code')
+        or 'Okänt rum'
+    )
+
+
+def _room_sort_key(room):
+    sorting_order = room.get('sortingOrder')
+    return (sorting_order is None, sorting_order or 0, _room_name(room))
+
+
+def _component_options(components):
+    """Selectable components of one room, labelled for the grid."""
+    options = []
+    for comp in components:
+        installations = comp.get('componentInstallations') or []
+        if installations and installations[0].get('deinstallationDate'):
+            continue
+        subtype = _component_subtype(comp)
+        component_type = subtype.get('componentType') or {}
+        category = component_type.get('category') or {}
+        type_name = component_type.get('typeName')
+        subtype_name = subtype.get('subTypeName')
+        # Equipment by its type (Frys, Spis): the subtype is a catalogue line
+        # such as "Elspisar bredd = 60 cm". A surface's type is only Golv,
+        # Vägg or Tak, so there the subtype names it (Linoleum, Tapetsering).
+        # Never from model: it is null for surfaces.
+        if category.get('type') == 'EQUIPMENT':
+            label = type_name or subtype_name
+        else:
+            label = subtype_name or type_name
+        options.append({
+            'id': comp.get('id'),
+            'label': label or 'Okänd komponent',
+            'full_name': subtype_name,
+            'category_type': category.get('type'),
+            'installation_id': installations[0].get('id') if installations else None,
+            'installation_date': (
+                installations[0].get('installationDate') if installations else None
+            ),
+        })
+
+    # Two components with the same label in one room (two Fönster) must be
+    # told apart: number them in installation order.
+    by_label = {}
+    for option in options:
+        by_label.setdefault(option['label'], []).append(option)
+    for same in by_label.values():
+        if len(same) > 1:
+            same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
+            for number, option in enumerate(same, start=1):
+                option['label'] = f"{option['label']} {number}"
+
+    for option in options:
+        del option['installation_date']
+    return sorted(options, key=lambda o: o['label'].casefold())
 
 
 class ComponentOneCoreService:
@@ -170,6 +270,71 @@ class ComponentOneCoreService:
             _logger.warning(f"Failed to fetch components from OneCore: {e}")
             return '[]', '[]', []
 
+    def load_room_components(self, rental_id):
+        """Load the rooms of a rental object with the components in each.
+
+        Args:
+            rental_id: The rental object's id, e.g. '406-096-04-0101'
+
+        Returns:
+            dict: {'ok': bool, 'rooms': [{'id', 'name', 'sequence', 'loaded',
+            'components': [{'id', 'label', 'full_name', 'category_type',
+            'installation_id'}]}]}.
+            'ok' is False when the rooms can't be fetched. Core answers 500,
+            not 404, for an unknown rental id, so this is shown as "no rooms"
+            rather than as an error. A room whose components can't be fetched
+            has 'loaded' False; the other rooms still load.
+        """
+        if not rental_id:
+            return {'ok': False, 'rooms': []}
+
+        cached = _room_components_cache.get(rental_id)
+        if cached and time.monotonic() < cached[0]:
+            return cached[1]
+
+        try:
+            # Fetch rooms first (serial): primes/refreshes the auth token so
+            # the parallel wave below runs with a valid token.
+            rooms = [
+                room for room in self.api.fetch_rooms(rental_id) or []
+                if not room.get('deleted')
+            ]
+            rooms.sort(key=_room_sort_key)
+            room_paths = [
+                "/components/by-room/%s"
+                % urllib.parse.quote(str(room.get('propertyObjectId')), safe='')
+                for room in rooms
+            ]
+            results = self.api.parallel_get_json(room_paths) if room_paths else []
+        except Exception as e:
+            _logger.warning(
+                "Failed to fetch rooms for rental id %s from OneCore: %s", rental_id, e
+            )
+            return {'ok': False, 'rooms': []}
+
+        result = {
+            'ok': True,
+            'rooms': [
+                {
+                    'id': room.get('propertyObjectId'),
+                    'name': _room_name(room),
+                    'sequence': sequence,
+                    # parallel_get_json gives None for a failed call, e.g. the
+                    # 500 core returns when one component in the room fails
+                    # to parse
+                    'loaded': room_components is not None,
+                    'components': _component_options(room_components or []),
+                }
+                for sequence, (room, room_components) in enumerate(zip(rooms, results))
+            ],
+        }
+        if all(room['loaded'] for room in result['rooms']):
+            _room_components_cache[rental_id] = (
+                time.monotonic() + ROOM_COMPONENTS_CACHE_TTL,
+                result,
+            )
+        return result
+
     def _transform_component_data(self, comp, room_name, room_id):
         """Transform OneCore component data to wizard format.
 
@@ -183,7 +348,7 @@ class ComponentOneCoreService:
         """
         # Extract nested data
         model_data = comp.get('model', {}) or {}
-        subtype_data = model_data.get('subtype', {}) or {}
+        subtype_data = _component_subtype(comp)
         component_type_data = subtype_data.get('componentType', {}) or {}
         category_data = component_type_data.get('category', {}) or {}
 
