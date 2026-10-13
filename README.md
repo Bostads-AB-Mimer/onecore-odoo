@@ -11,6 +11,14 @@
 - Run native Odoo test suite with `bash run_tests.sh`
 - Navigate to onecore_api and follow README to run ONECore specific tests
 
+## Vendored OCA modules
+
+`helpdesk_mgmt`, `helpdesk_ticket_partner_response`, `helpdesk_ticket_close_inactive` and `helpdesk_type` are copied unchanged from [OCA/helpdesk](https://github.com/OCA/helpdesk/tree/19.0), branch `19.0`, commit `68c7efd786f5f483ce94bd5fee07e464db35fbca` (2026-10-13). License AGPL-3. Mimer-specific changes go in `onecore_helpdesk`, never in these folders.
+
+To update: copy the module folders from a newer commit of the same branch, update the commit above, and upgrade the modules in Odoo.
+
+Note: the `odoo-git-installer` and `odoo-module-upgrade` jobs in prod only pick up `onecore_*` folders, so these modules need an installer change before they reach a production Odoo.
+
 ## Deploying to test environment
 
 This assumes you are using [Lens](https://k8slens.dev/), but you can of course use for example `kubectl` instead if you want.
