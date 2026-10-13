@@ -637,14 +637,18 @@ class TestStageChangeLog(StageTestMixin, TransactionCase):
         self.assertEqual(request.stage_id, self.stage_tilldelad)
         before = self._status_messages(request)
 
-        request.with_user(self.internal_user).write(
-            {"stage_id": self.stage_paborjad.id}
-        )
+        # create() returns records with creating_records=True, which skips
+        # FieldChangeTracker; clear it so the duplicate-note check can fail.
+        # Same for lang: ONECore writes over RPC without one.
+        request.with_user(self.internal_user).with_context(
+            creating_records=False, lang=None
+        ).write({"stage_id": self.stage_paborjad.id})
         self._flush_tracking()
 
         new_messages = self._status_messages(request) - before
         self.assertEqual(len(new_messages), 1)
         body = str(new_messages.body)
+        self.assertIn("Status:", body)
         self.assertIn(self.stage_tilldelad.name, body)
         self.assertIn(self.stage_paborjad.name, body)
         self.assertIn("→", body)
