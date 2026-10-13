@@ -236,11 +236,12 @@ class FieldChangeTracker:
     def format_stage_change(self, record, old_stage):
         """Format a stage change on record as "Status: old → new" (MIM-1965).
 
-        Returns None when the displayed stage name did not change."""
+        Returns None when the displayed stage name did not change. The label
+        is hardcoded: ONECore closes ärenden over RPC without a lang, which
+        would otherwise store the untranslated "Stage" in the body."""
         field_obj = record._fields["stage_id"]
-        field_label = field_obj.get_description(self.env)["string"]
         return self._format_many2one_change(
-            field_obj, old_stage, record.stage_id.id, field_label
+            field_obj, old_stage, record.stage_id.id, "Status"
         )
 
     def _should_skip_field_change(self, field_obj, old_value, new_value):
