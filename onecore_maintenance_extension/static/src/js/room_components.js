@@ -13,7 +13,7 @@ import { linkFields } from "./component_link_fields";
 /**
  * "Rum och komponenter": one column per room of the rental object, listing
  * the components installed there. Checking a component adds a line to
- * component_link_ids and opens its note right under it; the change is saved
+ * component_ids and opens its note right under it; the change is saved
  * with the form like any other field.
  *
  * Rooms and components come from OneCore through get_room_components, loaded
@@ -43,13 +43,17 @@ export class RoomComponents extends Component {
             }
         });
         this.state = useState({
-            loading: false,
+            // Loading from the first render: before the result arrives,
+            // saved components would otherwise show as removed
+            loading: Boolean(this.rentalId),
             ok: true,
             rooms: [],
-            // Rental id already fetched for: guards against refetching on
-            // every re-render
-            lastFetched: null,
+            // Rental id fully loaded for. Only set on success, so a failed or
+            // partial load is retried, like the server, which doesn't cache it
+            loadedFor: null,
         });
+        // Latest request; answers to older ones are ignored
+        this.requestCount = 0;
         // Component ids with an add or remove in flight: the list update is
         // async, and a double click must not add the same component twice.
         this.pending = new Set();
@@ -57,38 +61,48 @@ export class RoomComponents extends Component {
         useEffect(
             (rentalId) => {
                 if (!rentalId) {
-                    this.state.lastFetched = null;
-                    this.state.rooms = [];
-                    this.state.ok = true;
+                    this.requestCount++;
+                    Object.assign(this.state, {
+                        loading: false,
+                        ok: true,
+                        rooms: [],
+                        loadedFor: null,
+                    });
                     return;
                 }
-                if (this.state.lastFetched === rentalId) {
+                if (this.state.loadedFor === rentalId) {
                     return;
                 }
-                this.state.lastFetched = rentalId;
+                const request = ++this.requestCount;
                 this.state.loading = true;
                 this.orm
                     .call("maintenance.request", "get_room_components", [rentalId])
                     .then((result) => {
-                        if (this.state.lastFetched === rentalId) {
+                        if (request === this.requestCount) {
                             this.state.ok = result.ok;
                             this.state.rooms = result.rooms;
+                            const complete =
+                                result.ok && result.rooms.every((room) => room.loaded);
+                            this.state.loadedFor = complete ? rentalId : null;
                         }
                     })
                     .catch((e) => {
                         console.warn("Failed to load rooms and components", e);
-                        if (this.state.lastFetched === rentalId) {
+                        if (request === this.requestCount) {
                             this.state.ok = false;
                             this.state.rooms = [];
+                            this.state.loadedFor = null;
                         }
                     })
                     .finally(() => {
-                        if (this.state.lastFetched === rentalId) {
+                        if (request === this.requestCount) {
                             this.state.loading = false;
                         }
                     });
             },
-            () => [this.props.record.data.component_rental_id]
+            // The ärende too: the form keeps this widget when paging, and
+            // another ärende on the same apartment retries a failed load
+            () => [this.props.record.data.component_rental_id, this.props.record.resId]
         );
     }
 
@@ -119,7 +133,9 @@ export class RoomComponents extends Component {
                 shownIds.add(component.id);
                 return {
                     key: component.id,
-                    label: component.label,
+                    label: component.number
+                        ? `${component.label} ${component.number}`
+                        : component.label,
                     subtypeName: component.subtype_name || "",
                     link: linksById.get(component.id),
                     room,
@@ -135,15 +151,15 @@ export class RoomComponents extends Component {
             if (shownIds.has(componentId)) {
                 continue;
             }
-            const roomId = link.data.room_id || `snapshot:${link.data.room_name}`;
+            const roomId = link.data.space_id || `snapshot:${link.data.space_name}`;
             let column = columnsByRoomId.get(roomId);
             if (!column) {
                 // The room itself is gone from OneCore, or nothing could be
                 // fetched at all
                 column = {
                     key: roomId,
-                    name: link.data.room_name || "Okänt rum",
-                    sequence: link.data.room_sequence,
+                    name: link.data.space_name || "Okänt rum",
+                    sequence: link.data.space_sequence,
                     loaded: this.state.ok,
                     items: [],
                 };
@@ -152,7 +168,7 @@ export class RoomComponents extends Component {
             }
             column.items.push({
                 key: componentId,
-                label: link.data.label,
+                label: link.data.component_name,
                 subtypeName: link.data.subtype_name || "",
                 link,
                 // Only known to be removed when OneCore answered for the room
@@ -190,11 +206,14 @@ export class RoomComponents extends Component {
                         {
                             onecore_component_id: component.id,
                             installation_id: component.installation_id || false,
-                            room_id: room.id,
-                            room_name: room.name,
-                            room_sequence: room.sequence,
-                            label: component.label,
+                            rental_id: this.rentalId,
+                            space_id: room.id,
+                            space_name: room.name,
+                            space_sequence: room.sequence,
+                            // Without the grid's number: it shifts over time
+                            component_name: component.label,
                             subtype_name: component.subtype_name || false,
+                            subtype_xpand_code: component.subtype_xpand_code || false,
                             category_type: component.category_type || false,
                             note: false,
                         },
@@ -226,7 +245,7 @@ export class RoomComponentsCount extends Component {
     static props = { ...standardWidgetProps };
 
     get count() {
-        return this.props.record.data.component_link_ids?.count || 0;
+        return this.props.record.data.component_ids?.count || 0;
     }
 }
 

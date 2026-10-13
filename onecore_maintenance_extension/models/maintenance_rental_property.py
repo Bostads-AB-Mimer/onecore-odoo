@@ -37,7 +37,7 @@ class OnecoreMaintenanceRentalProperty(models.Model):
     _description = "Rental Property"
     _unaccent = True
 
-    rental_property_id = fields.Char(string="Hyresobjekt ID", store=True)
+    rental_property_id = fields.Char(string="Hyresobjekt ID", store=True, index=True)
     name = fields.Char("Namn", required=True)
     property_type = fields.Char("Fastighetstyp", required=True)
     address = fields.Char("Adress")

@@ -5,17 +5,19 @@
 const LINK_FIELDS = [
     ["onecore_component_id", "char"],
     ["installation_id", "char"],
-    ["room_id", "char"],
-    ["room_name", "char"],
-    ["room_sequence", "integer"],
-    ["label", "char"],
+    ["rental_id", "char"],
+    ["space_id", "char"],
+    ["space_name", "char"],
+    ["space_sequence", "integer"],
+    ["component_name", "char"],
     ["subtype_name", "char"],
+    ["subtype_xpand_code", "char"],
     ["category_type", "char"],
     ["note", "text"],
 ];
 
 /**
- * relatedFields for a widget on maintenance.request.component_link_ids.
+ * relatedFields for a widget on maintenance.request.component_ids.
  *
  * readonly: false is required. Odoo makes relatedFields readonly by default
  * and leaves readonly fields out of the save, so a new link would be sent

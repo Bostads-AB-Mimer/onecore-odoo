@@ -192,7 +192,7 @@
                         <!-- One note per selected component; selected in "Rum och
                         komponenter". Never statically invisible: the room grid reads the
                         same lines. -->
-                        <field name="component_link_ids" widget="component_notes" nolabel="1"
+                        <field name="component_ids" widget="component_notes" nolabel="1"
                             readonly="restricted_external"
                             invisible="space_caption != 'Lägenhet'" />
                     </div>
@@ -862,7 +862,7 @@
                                 <div class="accordion-body">
                                     <!-- Contractors choose components too, until Utförd:
                                     restricted_external, like their other edits -->
-                                    <field name="component_link_ids" widget="room_components"
+                                    <field name="component_ids" widget="room_components"
                                         nolabel="1" readonly="restricted_external" />
                                 </div>
                             </div>

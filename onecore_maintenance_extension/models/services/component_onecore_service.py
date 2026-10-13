@@ -91,8 +91,10 @@ def _component_options(components):
         options.append({
             'id': comp.get('id'),
             'label': label,
+            'number': None,
             # Empty when it would only repeat the name
             'subtype_name': subtype_name if subtype_name != label else None,
+            'subtype_xpand_code': subtype.get('xpandCode'),
             'category_type': category.get('type'),
             'installation_id': installations[0].get('id') if installations else None,
             'installation_date': (
@@ -101,8 +103,9 @@ def _component_options(components):
         })
 
     # The subtype tells two of the same type apart (two Kombiskåp). Only the
-    # same type and subtype twice (two identical Fönster) are numbered, in
-    # installation order.
+    # same type and subtype twice (two identical Fönster) get a number, in
+    # installation order. The number is for the grid only and isn't stored on
+    # the link: it shifts when a sibling is installed or removed.
     identical = {}
     for option in options:
         identical.setdefault((option['label'], option['subtype_name']), []).append(option)
@@ -110,13 +113,17 @@ def _component_options(components):
         if len(same) > 1:
             same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
             for number, option in enumerate(same, start=1):
-                option['label'] = f"{option['label']} {number}"
+                option['number'] = number
 
     for option in options:
         del option['installation_date']
     return sorted(
         options,
-        key=lambda o: (o['label'].casefold(), (o['subtype_name'] or '').casefold()),
+        key=lambda o: (
+            o['label'].casefold(),
+            (o['subtype_name'] or '').casefold(),
+            o['number'] or 0,
+        ),
     )
 
 
@@ -229,38 +236,26 @@ class ComponentOneCoreService:
             return '[]', '[]', []
 
         try:
-            # Fetch rooms first (serial): primes/refreshes the auth token so
-            # the parallel wave below runs with a valid token.
-            rooms = self.api.fetch_rooms(rental_property_id)
+            # Component categories ride along in the same parallel wave
+            rooms, room_results, (categories,) = self._fetch_rooms_with_components(
+                rental_property_id, ["/component-categories"]
+            )
             if not rooms:
                 return '[]', '[]', []
 
             # Build rooms JSON
             rooms_json = json.dumps([
-                {'id': r.get('propertyObjectId'), 'name': r.get('name', 'Okänt rum')}
+                {'id': r.get('propertyObjectId'), 'name': _room_name(r)}
                 for r in rooms
             ])
-
-            # Fan out concurrently: component categories + components for every
-            # room in a single parallel wave (was a serial call per room, which
-            # dominated the wizard's load time).
-            categories_path = "/component-categories"
-            room_paths = [
-                "/components/by-room/%s"
-                % urllib.parse.quote(str(room.get('propertyObjectId')), safe='')
-                for room in rooms
-            ]
-            results = self.api.parallel_get_json([categories_path] + room_paths)
-
-            categories = results[0]
             categories_json = json.dumps(categories) if categories else '[]'
 
             # Transform components (main thread — pure dict work, no HTTP/ORM).
             # Image URLs are intentionally NOT loaded here; the wizard loads a
             # component's images lazily when its detail is opened.
             component_data_list = []
-            for room, room_components in zip(rooms, results[1:]):
-                room_name = room.get('name', 'Okänt rum')
+            for room, room_components in zip(rooms, room_results):
+                room_name = _room_name(room)
                 room_id = room.get('propertyObjectId')
                 for comp in room_components or []:
                     comp_data = self._transform_component_data(comp, room_name, room_id)
@@ -273,6 +268,32 @@ class ComponentOneCoreService:
             _logger.warning(f"Failed to fetch components from OneCore: {e}")
             return '[]', '[]', []
 
+    def _fetch_rooms_with_components(self, rental_id, extra_paths=()):
+        """Rooms of a rental object in display order, with each room's
+        components, fetched in one parallel wave together with extra_paths.
+
+        Returns:
+            tuple: (rooms, room_results, extra_results). A failed call gives
+            None in its slot. Raises when the rooms themselves can't be
+            fetched.
+        """
+        # Fetch rooms first (serial): primes/refreshes the auth token so the
+        # parallel wave below runs with a valid token.
+        rooms = [
+            room for room in self.api.fetch_rooms(rental_id) or []
+            if not room.get('deleted')
+        ]
+        if not rooms:
+            return [], [], [None] * len(extra_paths)
+        rooms.sort(key=_room_sort_key)
+        room_paths = [
+            "/components/by-room/%s"
+            % urllib.parse.quote(str(room.get('propertyObjectId')), safe='')
+            for room in rooms
+        ]
+        results = self.api.parallel_get_json(list(extra_paths) + room_paths)
+        return rooms, results[len(extra_paths):], results[:len(extra_paths)]
+
     def load_room_components(self, rental_id):
         """Load the rooms of a rental object with the components in each.
 
@@ -281,8 +302,8 @@ class ComponentOneCoreService:
 
         Returns:
             dict: {'ok': bool, 'rooms': [{'id', 'name', 'sequence', 'loaded',
-            'components': [{'id', 'label', 'subtype_name', 'category_type',
-            'installation_id'}]}]}.
+            'components': [{'id', 'label', 'number', 'subtype_name',
+            'subtype_xpand_code', 'category_type', 'installation_id'}]}]}.
             'ok' is False when the rooms can't be fetched. Core answers 500,
             not 404, for an unknown rental id, so this is shown as "no rooms"
             rather than as an error. A room whose components can't be fetched
@@ -296,19 +317,7 @@ class ComponentOneCoreService:
             return cached[1]
 
         try:
-            # Fetch rooms first (serial): primes/refreshes the auth token so
-            # the parallel wave below runs with a valid token.
-            rooms = [
-                room for room in self.api.fetch_rooms(rental_id) or []
-                if not room.get('deleted')
-            ]
-            rooms.sort(key=_room_sort_key)
-            room_paths = [
-                "/components/by-room/%s"
-                % urllib.parse.quote(str(room.get('propertyObjectId')), safe='')
-                for room in rooms
-            ]
-            results = self.api.parallel_get_json(room_paths) if room_paths else []
+            rooms, results, _extra = self._fetch_rooms_with_components(rental_id)
         except Exception as e:
             _logger.warning(
                 "Failed to fetch rooms for rental id %s from OneCore: %s", rental_id, e

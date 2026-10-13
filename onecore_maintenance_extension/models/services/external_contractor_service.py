@@ -36,15 +36,18 @@ class ExternalContractorService:
                 "Du har inte behörighet att flytta detta ärende till Avslutad"
             )
     
+    def restricted_stages(self):
+        """Stages in which external contractors can no longer change a record."""
+        return self.env["maintenance.stage"].search(
+            [("name", "in", ["Utförd", "Avslutad", "Återsänd"])]
+        )
+
     def get_restricted_status(self, record):
         """Check if record is in a restricted state for external contractors."""
         if not self.is_external_contractor():
             return False
-            
-        restricted_stage_ids = self.env["maintenance.stage"].search(
-            [("name", "in", ["Utförd", "Avslutad", "Återsänd"])]
-        )
-        return record.stage_id in restricted_stage_ids
+
+        return record.stage_id in self.restricted_stages()
     
     def can_access_record(self, record):
         """Check if external contractor can access this record."""

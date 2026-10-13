@@ -20,8 +20,8 @@ export class ComponentNotes extends Component {
         // Same order as the grid: room, then component
         return [...this.props.record.data[this.props.name].records].sort(
             (a, b) =>
-                a.data.room_sequence - b.data.room_sequence ||
-                a.data.label.localeCompare(b.data.label, "sv")
+                a.data.space_sequence - b.data.space_sequence ||
+                a.data.component_name.localeCompare(b.data.component_name, "sv")
         );
     }
 }

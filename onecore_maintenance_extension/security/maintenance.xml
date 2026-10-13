@@ -44,18 +44,17 @@
             <field name="perm_create" eval="False" />
         </record>
 
-        <!--
-        Components on an ärende are visible and editable exactly when the ärende is: each rule
-        mirrors one of the maintenance.request rules. That contractors can't change them once
-        the ärende is in Utförd, Avslutad or Återsänd is checked in Python
-        (maintenance.request.component._check_contractor_may_change): contractors imply
-        base.group_user, and group rules are OR'ed, so a stage condition in their own rule would
-        be bypassed by the follower rule.
-        -->
+        <!-- Components on an ärende: each rule mirrors one of the maintenance.request rules -->
+        <record id="maintenance_request_component_comp_rule" model="ir.rule">
+            <field name="name">Components: multi-company</field>
+            <field name="model_id" ref="model_maintenance_request_component" />
+            <field name="domain_force">[('maintenance_request_id.company_id', 'in', company_ids + [False])]</field>
+        </record>
+
         <record id="maintenance_request_component_rule_user" model="ir.rule">
             <field name="name">Components on own, followed or assigned requests</field>
             <field name="model_id" ref="model_maintenance_request_component" />
-            <field name="domain_force">['|', '|', ('request_id.owner_user_id', '=', user.id), ('request_id.message_partner_ids', 'in', [user.partner_id.id]), ('request_id.user_id', '=', user.id)]</field>
+            <field name="domain_force">['|', '|', ('maintenance_request_id.owner_user_id', '=', user.id), ('maintenance_request_id.message_partner_ids', 'in', [user.partner_id.id]), ('maintenance_request_id.user_id', '=', user.id)]</field>
             <field name="groups" eval="[(4, ref('base.group_user'))]" />
             <field name="perm_read" eval="True" />
             <field name="perm_write" eval="True" />
@@ -77,7 +76,7 @@
         <record id="maintenance_request_component_rule_external_contractor" model="ir.rule">
             <field name="name">Components on the external contractor's team's requests</field>
             <field name="model_id" ref="model_maintenance_request_component" />
-            <field name="domain_force">[('request_id.maintenance_team_id.member_ids', 'in', [user.id])]</field>
+            <field name="domain_force">[('maintenance_request_id.maintenance_team_id.member_ids', 'in', [user.id])]</field>
             <field name="groups" eval="[(4, ref('group_external_contractor'))]" />
             <field name="perm_read" eval="True" />
             <field name="perm_write" eval="True" />

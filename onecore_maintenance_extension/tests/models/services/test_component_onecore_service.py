@@ -117,8 +117,8 @@ class TestComponentOneCoreService(TransactionCase):
         self.mock_api.fetch_residence.return_value = {'id': 'res-123'}
 
         self.mock_api.fetch_rooms.return_value = [
-            {'propertyObjectId': room_1_id, 'name': 'Kök'},
-            {'propertyObjectId': room_2_id, 'name': 'Badrum'},
+            {'propertyObjectId': room_1_id, 'name': 'Kök', 'sortingOrder': 1},
+            {'propertyObjectId': room_2_id, 'name': 'Badrum', 'sortingOrder': 2},
         ]
 
         cat_id = self.fake.component_category_id()
@@ -417,13 +417,14 @@ def _room(room_id, name=None, sorting_order=0, **kwargs):
 
 
 def _component(comp_id, type_name, subtype_name, category_type='EQUIPMENT',
-               installation_date='2024-01-15'):
+               installation_date='2024-01-15', xpand_code=None):
     return {
         'id': comp_id,
         'modelId': None,
         'model': None,
         'subtype': {
             'subTypeName': subtype_name,
+            'xpandCode': xpand_code,
             'componentType': {
                 'typeName': type_name,
                 'category': {'categoryName': 'Kategori', 'type': category_type},
@@ -442,6 +443,7 @@ class TestLoadRoomComponents(TransactionCase):
     def setUp(self):
         super().setUp()
         component_onecore_service._room_components_cache.clear()
+        self.addCleanup(component_onecore_service._room_components_cache.clear)
         self.mock_api = Mock()
 
     def _load(self, rental_id='406-096-04-0101'):
@@ -455,7 +457,8 @@ class TestLoadRoomComponents(TransactionCase):
             _room('room-vard', 'Vardagsrum', 2),
         ]
         self.mock_api.parallel_get_json.return_value = [
-            [_component('comp-frys', 'Frys', 'Frysskåp fristående 190-225 liter')],
+            [_component('comp-frys', 'Frys', 'Frysskåp fristående 190-225 liter',
+                        xpand_code='FRY01')],
             [_component('comp-golv', 'Golv', 'Parkettgolv', 'SURFACE')],
         ]
 
@@ -468,15 +471,17 @@ class TestLoadRoomComponents(TransactionCase):
                 {
                     'id': 'room-kok', 'name': 'Kök', 'sequence': 0, 'loaded': True,
                     'components': [{
-                        'id': 'comp-frys', 'label': 'Frys',
+                        'id': 'comp-frys', 'label': 'Frys', 'number': None,
                         'subtype_name': 'Frysskåp fristående 190-225 liter',
+                        'subtype_xpand_code': 'FRY01',
                         'category_type': 'EQUIPMENT', 'installation_id': 'inst-comp-frys',
                     }],
                 },
                 {
                     'id': 'room-vard', 'name': 'Vardagsrum', 'sequence': 1, 'loaded': True,
                     'components': [{
-                        'id': 'comp-golv', 'label': 'Golv', 'subtype_name': 'Parkettgolv',
+                        'id': 'comp-golv', 'label': 'Golv', 'number': None,
+                        'subtype_name': 'Parkettgolv', 'subtype_xpand_code': None,
                         'category_type': 'SURFACE', 'installation_id': 'inst-comp-golv',
                     }],
                 },
@@ -581,12 +586,26 @@ class TestLoadRoomComponents(TransactionCase):
 
         components = result['rooms'][0]['components']
         self.assertEqual(
-            [(c['id'], c['label'], c['subtype_name']) for c in components],
+            [(c['id'], c['label'], c['number']) for c in components],
             [
-                ('comp-c', 'Element', 'Radiator'),
-                ('comp-a', 'Fönster 1', 'Fönster 3-glas'),
-                ('comp-b', 'Fönster 2', 'Fönster 3-glas'),
+                ('comp-c', 'Element', None),
+                ('comp-a', 'Fönster', 1),
+                ('comp-b', 'Fönster', 2),
             ],
+        )
+
+    def test_numbered_components_sort_by_number_not_text(self):
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Vardagsrum', 1)]
+        self.mock_api.parallel_get_json.return_value = [[
+            _component(f'comp-{i:02d}', 'Fönster', 'Fönster 3-glas',
+                       installation_date=f'2020-01-{i:02d}')
+            for i in range(1, 12)
+        ]]
+
+        result = self._load()
+
+        self.assertEqual(
+            [c['number'] for c in result['rooms'][0]['components']], list(range(1, 12))
         )
 
     def test_components_are_named_by_type_with_the_subtype_below(self):
