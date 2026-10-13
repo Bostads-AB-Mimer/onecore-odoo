@@ -120,9 +120,7 @@ export class RoomComponents extends Component {
                 return {
                     key: component.id,
                     label: component.label,
-                    // Full catalogue name on hover, when the label is shorter
-                    title:
-                        component.full_name !== component.label ? component.full_name : "",
+                    subtypeName: component.subtype_name || "",
                     link: linksById.get(component.id),
                     room,
                     component,
@@ -155,7 +153,7 @@ export class RoomComponents extends Component {
             column.items.push({
                 key: componentId,
                 label: link.data.label,
-                title: "",
+                subtypeName: link.data.subtype_name || "",
                 link,
                 // Only known to be removed when OneCore answered for the room
                 removed: this.state.ok && column.loaded,
@@ -196,6 +194,7 @@ export class RoomComponents extends Component {
                             room_name: room.name,
                             room_sequence: room.sequence,
                             label: component.label,
+                            subtype_name: component.subtype_name || false,
                             category_type: component.category_type || false,
                             note: false,
                         },

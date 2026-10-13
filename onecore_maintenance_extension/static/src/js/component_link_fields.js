@@ -9,6 +9,7 @@ const LINK_FIELDS = [
     ["room_name", "char"],
     ["room_sequence", "integer"],
     ["label", "char"],
+    ["subtype_name", "char"],
     ["category_type", "char"],
     ["note", "text"],
 ];

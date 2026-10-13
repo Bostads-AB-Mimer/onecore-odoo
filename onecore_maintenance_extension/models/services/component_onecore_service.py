@@ -70,16 +70,14 @@ def _room_sort_key(room):
     return (sorting_order is None, sorting_order or 0, _room_name(room))
 
 
-def _same_label_groups(options):
-    """Groups of two or more options that share a label."""
-    by_label = {}
-    for option in options:
-        by_label.setdefault(option['label'], []).append(option)
-    return [same for same in by_label.values() if len(same) > 1]
-
-
 def _component_options(components):
-    """Selectable components of one room, labelled for the grid."""
+    """Selectable components of one room, named for the grid.
+
+    Each is named by its component type (Spis, Golv), with the subtype shown
+    under it (Elspisar bredd = 60 cm, Linoleum): the type is short to scan,
+    the subtype says which one it is. Never from model: it is null for
+    surfaces.
+    """
     options = []
     for comp in components:
         installations = comp.get('componentInstallations') or []
@@ -88,20 +86,13 @@ def _component_options(components):
         subtype = _component_subtype(comp)
         component_type = subtype.get('componentType') or {}
         category = component_type.get('category') or {}
-        type_name = component_type.get('typeName')
         subtype_name = subtype.get('subTypeName')
-        # Equipment by its type (Frys, Spis): the subtype is a catalogue line
-        # such as "Elspisar bredd = 60 cm". A surface's type is only Golv,
-        # Vägg or Tak, so there the subtype names it (Linoleum, Tapetsering).
-        # Never from model: it is null for surfaces.
-        if category.get('type') == 'EQUIPMENT':
-            label = type_name or subtype_name
-        else:
-            label = subtype_name or type_name
+        label = component_type.get('typeName') or subtype_name or 'Okänd komponent'
         options.append({
             'id': comp.get('id'),
-            'label': label or 'Okänd komponent',
-            'full_name': subtype_name,
+            'label': label,
+            # Empty when it would only repeat the name
+            'subtype_name': subtype_name if subtype_name != label else None,
             'category_type': category.get('type'),
             'installation_id': installations[0].get('id') if installations else None,
             'installation_date': (
@@ -109,22 +100,24 @@ def _component_options(components):
             ),
         })
 
-    # Two components with the same name in one room (two Kombiskåp) must be
-    # told apart. Use their subtype names first: they belong to the
-    # component, so they don't change when a neighbour is installed or
-    # removed, which a number would. Number only what still collides (two
-    # identical Fönster), in installation order.
-    for same in _same_label_groups(options):
-        for option in same:
-            option['label'] = option['full_name'] or option['label']
-    for same in _same_label_groups(options):
-        same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
-        for number, option in enumerate(same, start=1):
-            option['label'] = f"{option['label']} {number}"
+    # The subtype tells two of the same type apart (two Kombiskåp). Only the
+    # same type and subtype twice (two identical Fönster) are numbered, in
+    # installation order.
+    identical = {}
+    for option in options:
+        identical.setdefault((option['label'], option['subtype_name']), []).append(option)
+    for same in identical.values():
+        if len(same) > 1:
+            same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
+            for number, option in enumerate(same, start=1):
+                option['label'] = f"{option['label']} {number}"
 
     for option in options:
         del option['installation_date']
-    return sorted(options, key=lambda o: o['label'].casefold())
+    return sorted(
+        options,
+        key=lambda o: (o['label'].casefold(), (o['subtype_name'] or '').casefold()),
+    )
 
 
 class ComponentOneCoreService:
@@ -288,7 +281,7 @@ class ComponentOneCoreService:
 
         Returns:
             dict: {'ok': bool, 'rooms': [{'id', 'name', 'sequence', 'loaded',
-            'components': [{'id', 'label', 'full_name', 'category_type',
+            'components': [{'id', 'label', 'subtype_name', 'category_type',
             'installation_id'}]}]}.
             'ok' is False when the rooms can't be fetched. Core answers 500,
             not 404, for an unknown rental id, so this is shown as "no rooms"

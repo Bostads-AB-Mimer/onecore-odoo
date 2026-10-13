@@ -33,6 +33,8 @@ class MaintenanceRequestComponent(models.Model):
     # follow the same order without knowing the rooms.
     room_sequence = fields.Integer("Rumsordning")
     label = fields.Char("Komponent", required=True)
+    # Shown under the label; tells two of the same type apart
+    subtype_name = fields.Char("Undertyp")
     category_type = fields.Char("Kategorityp")
     note = fields.Text("Anteckning")
 

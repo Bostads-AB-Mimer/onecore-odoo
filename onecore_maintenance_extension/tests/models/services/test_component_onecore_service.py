@@ -469,14 +469,14 @@ class TestLoadRoomComponents(TransactionCase):
                     'id': 'room-kok', 'name': 'Kök', 'sequence': 0, 'loaded': True,
                     'components': [{
                         'id': 'comp-frys', 'label': 'Frys',
-                        'full_name': 'Frysskåp fristående 190-225 liter',
+                        'subtype_name': 'Frysskåp fristående 190-225 liter',
                         'category_type': 'EQUIPMENT', 'installation_id': 'inst-comp-frys',
                     }],
                 },
                 {
                     'id': 'room-vard', 'name': 'Vardagsrum', 'sequence': 1, 'loaded': True,
                     'components': [{
-                        'id': 'comp-golv', 'label': 'Parkettgolv', 'full_name': 'Parkettgolv',
+                        'id': 'comp-golv', 'label': 'Golv', 'subtype_name': 'Parkettgolv',
                         'category_type': 'SURFACE', 'installation_id': 'inst-comp-golv',
                     }],
                 },
@@ -581,26 +581,28 @@ class TestLoadRoomComponents(TransactionCase):
 
         components = result['rooms'][0]['components']
         self.assertEqual(
-            [(c['id'], c['label']) for c in components],
+            [(c['id'], c['label'], c['subtype_name']) for c in components],
             [
-                ('comp-c', 'Element'),
-                ('comp-a', 'Fönster 3-glas 1'),
-                ('comp-b', 'Fönster 3-glas 2'),
+                ('comp-c', 'Element', 'Radiator'),
+                ('comp-a', 'Fönster 1', 'Fönster 3-glas'),
+                ('comp-b', 'Fönster 2', 'Fönster 3-glas'),
             ],
         )
 
-    def test_equipment_is_named_by_type_and_surface_by_subtype(self):
+    def test_components_are_named_by_type_with_the_subtype_below(self):
         self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
         self.mock_api.parallel_get_json.return_value = [[
             _component('comp-spis', 'Spis', 'Elspisar bredd = 60 cm'),
             _component('comp-golv', 'Golv', 'Linoleum', 'SURFACE'),
+            _component('comp-frys', 'Frys', 'Frys'),
         ]]
 
         result = self._load()
 
         self.assertEqual(
-            [(c['label'], c['full_name']) for c in result['rooms'][0]['components']],
-            [('Linoleum', 'Linoleum'), ('Spis', 'Elspisar bredd = 60 cm')],
+            [(c['label'], c['subtype_name']) for c in result['rooms'][0]['components']],
+            # No subtype line when it would only repeat the name
+            [('Frys', None), ('Golv', 'Linoleum'), ('Spis', 'Elspisar bredd = 60 cm')],
         )
 
     def test_label_falls_back_when_a_name_is_missing(self):
@@ -615,12 +617,12 @@ class TestLoadRoomComponents(TransactionCase):
 
         self.assertEqual(
             sorted(c['label'] for c in result['rooms'][0]['components']),
-            ['Kylskåp fristående', 'Okänd komponent', 'Tapetsering'],
+            ['Kylskåp fristående', 'Okänd komponent', 'Vägg'],
         )
 
-    def test_two_of_the_same_type_are_named_by_subtype(self):
-        # A number would shift when a neighbour is installed or removed; the
-        # subtype name belongs to the component
+    def test_two_of_the_same_type_are_told_apart_by_subtype(self):
+        # No numbers: a number would shift when a neighbour is installed or
+        # removed, the subtype belongs to the component
         self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
         self.mock_api.parallel_get_json.return_value = [[
             _component('comp-a', 'Kombiskåp', 'Kyl- och frysskåp', installation_date='2019-01-01'),
@@ -632,8 +634,12 @@ class TestLoadRoomComponents(TransactionCase):
         result = self._load()
 
         self.assertEqual(
-            [c['label'] for c in result['rooms'][0]['components']],
-            ['Kombinerad Kyl/Frys 200 cm', 'Kyl- och frysskåp', 'Spis'],
+            [(c['label'], c['subtype_name']) for c in result['rooms'][0]['components']],
+            [
+                ('Kombiskåp', 'Kombinerad Kyl/Frys 200 cm'),
+                ('Kombiskåp', 'Kyl- och frysskåp'),
+                ('Spis', 'Elspis'),
+            ],
         )
 
     def test_unexpected_component_data_only_affects_its_room(self):
