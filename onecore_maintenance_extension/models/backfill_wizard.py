@@ -81,22 +81,49 @@ class MaintenanceBackfillWizard(models.TransientModel):
     )
     def _compute_space_change(self):
         for wizard in self:
-            route = wizard._target_route() if wizard.state == "preview" else None
-            current = wizard.maintenance_request_id.space_caption
-            if route and route["space"] != current:
+            target = wizard._target() if wizard.state == "preview" else None
+            route = target and target["route"]
+            request = wizard.maintenance_request_id
+            new_space = route and self._new_space(request, route)
+            if new_space:
                 wizard.space_change = _("Utrymme ändras från %(old)s till %(new)s") % {
-                    "old": current or "–",
-                    "new": route["space"],
+                    "old": request.space_caption or "–",
+                    "new": new_space,
                 }
             else:
                 wizard.space_change = False
 
-    def _target_route(self):
-        """The route the current preview would attach through, if any."""
-        if self.lease_option_id and self.lease_option_id.exists():
-            return route_for_lease_option(self.lease_option_id)
-        if self.object_option_ref and self.object_option_ref.exists():
-            return route_for_object_option(self.object_option_ref)
+    def _target(self):
+        """What the current preview would attach, or None when there is nothing.
+
+        The one place the contract-vs-object choice is made: both the preview's
+        Utrymme line and ``action_confirm`` go through it, so the dialog cannot
+        announce one Utrymme while the attach writes another. Returns a dict with
+        ``route`` (None when the object's type cannot be resolved),
+        ``object_option`` and ``lease_option`` (empty in the contract-less case).
+        """
+        lease_option = self.lease_option_id
+        if lease_option and lease_option.exists():
+            route = route_for_lease_option(lease_option)
+            return {
+                "route": route,
+                "object_option": lease_option[route["option_field"]] if route else None,
+                "lease_option": lease_option,
+            }
+        object_option = self.object_option_ref
+        if object_option and object_option.exists():
+            return {
+                "route": route_for_object_option(object_option),
+                "object_option": object_option,
+                "lease_option": None,
+            }
+        return None
+
+    @staticmethod
+    def _new_space(request, route):
+        """The Utrymme an attach through ``route`` writes, or None if it stays."""
+        if request.space_caption != route["space"]:
+            return route["space"]
         return None
 
     def _get_core_api(self):
@@ -199,36 +226,33 @@ class MaintenanceBackfillWizard(models.TransientModel):
     # ----------------------------------------------------------------- confirm
     def action_confirm(self):
         self.ensure_one()
-        request = self.maintenance_request_id
-
-        if self.lease_option_id and self.lease_option_id.exists():
-            lease_option = self.lease_option_id
-            self._check_own_option(lease_option)
-            route = route_for_lease_option(lease_option)
-            if not route:
-                raise exceptions.UserError(
-                    _("Kunde inte avgöra hyresobjektets typ för det valda kontraktet.")
-                )
-            new_tenant_attached = self._attach(
-                request, route, lease_option[route["option_field"]], lease_option
-            )
-        elif self.object_option_ref:
-            object_option = self.object_option_ref
-            if not object_option.exists():
+        target = self._target()
+        if not target:
+            if self.object_option_ref:
+                # The search found an object, but its option row has since gone.
                 raise exceptions.UserError(
                     _("Resultatet är inte längre giltigt. Sök igen.")
                 )
-            self._check_own_option(object_option)
-            route = route_for_object_option(object_option)
-            if not route:
-                raise exceptions.UserError(
-                    _("Kunde inte avgöra hyresobjektets typ.")
-                )
-            new_tenant_attached = self._attach(
-                request, route, object_option, None, vacant=self.is_vacant
-            )
-        else:
             raise exceptions.UserError(_("Sök fram ett resultat först."))
+
+        lease_option = target["lease_option"]
+        self._check_own_option(lease_option or target["object_option"])
+        route = target["route"]
+        if not route:
+            raise exceptions.UserError(
+                _("Kunde inte avgöra hyresobjektets typ för det valda kontraktet.")
+                if lease_option
+                else _("Kunde inte avgöra hyresobjektets typ.")
+            )
+        # ``vacant`` only matters without a contract; ``_attach`` ignores it
+        # otherwise.
+        new_tenant_attached = self._attach(
+            self.maintenance_request_id,
+            route,
+            target["object_option"],
+            lease_option,
+            vacant=self.is_vacant,
+        )
 
         if new_tenant_attached:
             # A genuine no-tenant -> tenant transition - ask whether to hide
@@ -303,8 +327,9 @@ class MaintenanceBackfillWizard(models.TransientModel):
         # Everything that is a plain field write goes in one write: the space type,
         # the object fields of other types, and (vacant case) the cleared contract.
         vals = {}
-        if request.space_caption != route["space"]:
-            vals["space_caption"] = route["space"]
+        new_space = self._new_space(request, route)
+        if new_space:
+            vals["space_caption"] = new_space
         for r in all_routes():
             field = r["record_field"]
             if field != route["record_field"] and request[field]:

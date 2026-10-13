@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from odoo.tests.common import TransactionCase
-from odoo.tests import tagged
+from odoo.tests import Form, tagged
 from odoo.exceptions import UserError
 
 from ..utils.test_utils import (
@@ -53,6 +53,18 @@ def _parking(rental_id, code):
     }
 
 
+def _facility(rental_id, code):
+    return {
+        "name": f"Lokal {code}",
+        "code": code,
+        "type": {"name": "Butik", "code": "BUT"},
+        "area": 120,
+        "building": {"code": "B-1", "name": "Byggnaden"},
+        "property": {"code": "P-1", "name": "Klädnypan 3"},
+        "rentalInformation": {"type": {"name": "Lokal"}},
+    }
+
+
 def _tenant(contact_code, name):
     first, last = name.split(" ", 1)
     return {
@@ -96,6 +108,10 @@ OTHER_RES_LEASE = _lease(
 RESIDENCE = _residence("216-034-03-0101", "RES-001")
 OTHER_RESIDENCE = _residence("700-111-22-3333", "RES-OTHER")
 PARKING = _parking("216-704-00-0034", "0034")
+FACILITY_LEASE = _lease(
+    "216-900-00-0001/01", "216-900-00-0001", "Lokalkontrakt", "P005468", "Sven Olofsson"
+)
+FACILITY = _facility("216-900-00-0001", "LOK-001")
 
 # A co-signed lease: two tenants in payload order (primary first).
 CO_SIGNED_LEASE = dict(
@@ -117,11 +133,12 @@ class TestBackfillWizard(TransactionCase):
             {"maintenance_request_id": request.id, "lookup_kind": kind}
         )
 
-    def _onecore_returns(self, leases, residence=None, parking=None):
+    def _onecore_returns(self, leases, residence=None, parking=None, facility=None):
         """Stub the two calls a lookup makes: the leases, then their object."""
         self.fake_api.fetch_leases_unfiltered.return_value = leases
         self.fake_api.fetch_residence.return_value = residence
         self.fake_api.fetch_parking_space.return_value = parking
+        self.fake_api.fetch_facility.return_value = facility
 
     def _lease_options(self):
         return self.env["maintenance.lease.option"].search(
@@ -775,10 +792,16 @@ class TestBackfillWizard(TransactionCase):
             wiz.action_search()
         leases = self._lease_options()
 
-        wiz.lease_option_id = leases.filtered(lambda l: l.parking_space_option_id)
-        self.assertEqual(wiz.space_change, "Utrymme ändras från Lägenhet till Bilplats")
-        wiz.lease_option_id = leases.filtered(lambda l: l.rental_property_option_id)
-        self.assertFalse(wiz.space_change)
+        # Through Form, so the switch goes through onchange like in the dialog.
+        with Form(wiz) as form:
+            form.lease_option_id = leases.filtered(lambda l: l.parking_space_option_id)
+            self.assertEqual(
+                form.space_change, "Utrymme ändras från Lägenhet till Bilplats"
+            )
+            form.lease_option_id = leases.filtered(
+                lambda l: l.rental_property_option_id
+            )
+            self.assertFalse(form.space_change)
 
     def test_preview_announces_the_space_change_for_a_vacant_object(self):
         request = create_maintenance_request(self.env, space_caption="Tvättstuga")
@@ -792,6 +815,74 @@ class TestBackfillWizard(TransactionCase):
         self.assertEqual(
             wiz.space_change, "Utrymme ändras från Tvättstuga till Lägenhet"
         )
+
+    def test_preview_announces_the_space_change_for_a_facility_contract(self):
+        request = create_maintenance_request(self.env, space_caption="Övrigt")
+        self._onecore_returns([FACILITY_LEASE], facility=FACILITY)
+        wiz = self._wizard(request, "tenant")
+        wiz.lookup_value = "P005468"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            self.assertEqual(wiz.space_change, "Utrymme ändras från Övrigt till Lokal")
+            self._confirm_and_check_preview(wiz)
+
+        self.assertTrue(request.facility_id)
+
+    def test_preview_announces_the_space_change_for_an_unsupported_contract(self):
+        # Attached on its own like the vacant case, through the same object route.
+        request = create_maintenance_request(self.env, space_caption="Övrigt")
+        self._onecore_returns(
+            [dict(RES_LEASE, type="Korttidskontrakt")], residence=RESIDENCE
+        )
+        wiz = self._wizard(request, "rental_object")
+        wiz.lookup_value = "216-034-03-0101"
+        with patch.object(type(wiz), "_get_core_api", return_value=self.fake_api):
+            wiz.action_search()
+            self.assertTrue(wiz.has_unsupported_contract)
+            self.assertEqual(
+                wiz.space_change, "Utrymme ändras från Övrigt till Lägenhet"
+            )
+            self._confirm_and_check_preview(wiz)
+
+    def test_attach_writes_the_space_the_preview_announced(self):
+        # Round trip: whatever the preview says, the attach must do — including
+        # saying nothing when Utrymme stays.
+        both = [RES_LEASE, PARK_LEASE]
+        # (space, entry point, value, leases, object of the contract to switch to)
+        cases = [
+            ("Övrigt", "rental_object", "216-034-03-0101", [RES_LEASE], None),
+            ("Lägenhet", "rental_object", "216-034-03-0101", [RES_LEASE], None),
+            ("Tvättstuga", "rental_object", "216-034-03-0101", [], None),
+            ("Lägenhet", "tenant", "P005468", both, "parking_space_option_id"),
+            ("Bilplats", "tenant", "P005468", both, "rental_property_option_id"),
+        ]
+        for space, kind, value, leases, pick in cases:
+            with self.subTest(space=space, kind=kind, pick=pick):
+                request = create_maintenance_request(self.env, space_caption=space)
+                self._onecore_returns(leases, residence=RESIDENCE, parking=PARKING)
+                wiz = self._wizard(request, kind)
+                wiz.lookup_value = value
+                with patch.object(
+                    type(wiz), "_get_core_api", return_value=self.fake_api
+                ):
+                    wiz.action_search()
+                    if pick:
+                        with Form(wiz) as form:
+                            form.lease_option_id = self._lease_options().filtered(
+                                lambda l: l[pick]
+                            )
+                    self._confirm_and_check_preview(wiz)
+
+    def _confirm_and_check_preview(self, wiz):
+        """Confirm, then assert the ärende got the Utrymme the preview announced
+        (or kept its own when the preview said nothing)."""
+        request = wiz.maintenance_request_id
+        before = request.space_caption
+        announced = wiz.space_change
+        wiz.action_confirm()
+        request.invalidate_recordset()
+        expected = announced.rsplit(" till ", 1)[1] if announced else before
+        self.assertEqual(request.space_caption, expected)
 
     def _pens_visible(self, request, user):
         """Evaluate each add pen's own ``invisible`` expression against ``request``
@@ -856,6 +947,7 @@ class TestBackfillWizard(TransactionCase):
                 {"rental_property_id": create_rental_property(self.env, request.id).id}
             )
 
+        # (space, entry point, value, leases, object type of the contract to pick)
         cases = [
             ("Övrigt", None, True),
             ("Tvättstuga", None, True),
