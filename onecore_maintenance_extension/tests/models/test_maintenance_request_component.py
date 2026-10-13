@@ -8,7 +8,7 @@ from psycopg2 import IntegrityError
 
 from odoo import Command
 from odoo.exceptions import AccessError
-from odoo.tests import tagged
+from odoo.tests import new_test_user, tagged
 from odoo.tests.common import TransactionCase
 from odoo.tools import mute_logger
 
@@ -168,6 +168,31 @@ class TestRequestComponentLinks(TransactionCase):
         self.assertFalse(record.component_link_ids)
         self.assertEqual(record.component_rental_id, "406-096-04-0102")
 
+    def test_changing_space_away_from_lagenhet_clears_the_components(self):
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Lägenhet",
+                "component_link_ids": [Command.create(_link_vals())],
+            }
+        )
+
+        record.space_caption = "Tvättstuga"
+        record._onchange_space_caption_components()
+
+        self.assertFalse(record.component_link_ids)
+
+    def test_keeping_lagenhet_keeps_the_components(self):
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Lägenhet",
+                "component_link_ids": [Command.create(_link_vals())],
+            }
+        )
+
+        record._onchange_space_caption_components()
+
+        self.assertEqual(len(record.component_link_ids), 1)
+
 
 @tagged("onecore")
 class TestGetRoomComponents(TransactionCase):
@@ -199,6 +224,16 @@ class TestGetRoomComponents(TransactionCase):
 
         self.assertEqual(result, self.result)
         load.assert_called_once_with(RENTAL_ID)
+
+    def test_user_without_access_to_arenden_is_refused(self):
+        portal_user = new_test_user(self.env, login="portal_rooms", groups="base.group_portal")
+
+        with patch(SERVICE_PATH) as MockService:
+            with self.assertRaises(AccessError):
+                self.env["maintenance.request"].with_user(portal_user).get_room_components(
+                    RENTAL_ID
+                )
+            MockService.return_value.load_room_components.assert_not_called()
 
     def test_contractor_gets_nothing_for_another_rental_object(self):
         contractor = create_external_contractor_user(self.env)
@@ -315,6 +350,26 @@ class TestRequestComponentAccess(TransactionCase):
             link.unlink()
         # Still readable
         self.assertEqual(link.label, "Frys")
+
+    def test_contractor_saves_components_and_utford_in_one_write(self):
+        # The status bar saves pending changes and the new stage together
+        request = self._request_with_link(self.contractor_team)
+        request.with_user(self.internal_user).write({"user_id": self.internal_user.id})
+        as_contractor = self.env["maintenance.request"].browse(request.id).with_user(
+            self.contractor
+        )
+
+        as_contractor.write(
+            {
+                "stage_id": self.env.ref("maintenance.stage_5").id,
+                "component_link_ids": [Command.create(_link_vals("comp-spis", "Spis"))],
+            }
+        )
+
+        self.assertEqual(request.stage_id, self.env.ref("maintenance.stage_5"))
+        self.assertEqual(
+            sorted(request.component_link_ids.mapped("label")), ["Frys", "Spis"]
+        )
 
     def test_internal_user_can_still_change_components_once_utford(self):
         request = self._request_with_link(self.contractor_team)

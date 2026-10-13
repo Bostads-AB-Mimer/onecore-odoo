@@ -807,6 +807,9 @@ class OneCoreMaintenanceRequest(
         new, unsaved ärende. A contractor only gets rental objects of ärenden
         they can read.
         """
+        # @api.model methods are callable over RPC by any logged-in user:
+        # require access to ärenden before calling OneCore on their behalf
+        self.check_access("read")
         if (
             rental_id
             and not self.env.su
@@ -950,6 +953,15 @@ class OneCoreMaintenanceRequest(
             field_manager.update_rental_property_fields(record)
             # Components chosen for one apartment don't belong to another
             if record.component_link_ids:
+                record.component_link_ids = [Command.clear()]
+
+    @api.onchange("space_caption")
+    def _onchange_space_caption_components(self):
+        # Components are an apartment's: once the ärende is about another
+        # space they would only be hidden. An onchange, not write(), so
+        # Ignorera brings them back if the change was a mistake.
+        for record in self:
+            if record.space_caption != "Lägenhet" and record.component_link_ids:
                 record.component_link_ids = [Command.clear()]
 
     @api.onchange("maintenance_unit_option_id")
@@ -1274,6 +1286,13 @@ class OneCoreMaintenanceRequest(
         }
         for f in _option_fields:
             vals.pop(f, None)
+
+        # The status bar saves pending changes and the new stage in one write,
+        # and Odoo writes one2many fields after the stage. Save the components
+        # first, in the stage they were chosen in, or a contractor moving the
+        # ärende to Utförd is refused their own components.
+        if "component_link_ids" in vals and "stage_id" in vals:
+            super().write({"component_link_ids": vals.pop("component_link_ids")})
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)

@@ -70,6 +70,14 @@ def _room_sort_key(room):
     return (sorting_order is None, sorting_order or 0, _room_name(room))
 
 
+def _same_label_groups(options):
+    """Groups of two or more options that share a label."""
+    by_label = {}
+    for option in options:
+        by_label.setdefault(option['label'], []).append(option)
+    return [same for same in by_label.values() if len(same) > 1]
+
+
 def _component_options(components):
     """Selectable components of one room, labelled for the grid."""
     options = []
@@ -101,16 +109,18 @@ def _component_options(components):
             ),
         })
 
-    # Two components with the same label in one room (two Fönster) must be
-    # told apart: number them in installation order.
-    by_label = {}
-    for option in options:
-        by_label.setdefault(option['label'], []).append(option)
-    for same in by_label.values():
-        if len(same) > 1:
-            same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
-            for number, option in enumerate(same, start=1):
-                option['label'] = f"{option['label']} {number}"
+    # Two components with the same name in one room (two Kombiskåp) must be
+    # told apart. Use their subtype names first: they belong to the
+    # component, so they don't change when a neighbour is installed or
+    # removed, which a number would. Number only what still collides (two
+    # identical Fönster), in installation order.
+    for same in _same_label_groups(options):
+        for option in same:
+            option['label'] = option['full_name'] or option['label']
+    for same in _same_label_groups(options):
+        same.sort(key=lambda o: (o['installation_date'] or '', o['id'] or ''))
+        for number, option in enumerate(same, start=1):
+            option['label'] = f"{option['label']} {number}"
 
     for option in options:
         del option['installation_date']
@@ -312,27 +322,38 @@ class ComponentOneCoreService:
             )
             return {'ok': False, 'rooms': []}
 
-        result = {
-            'ok': True,
-            'rooms': [
-                {
-                    'id': room.get('propertyObjectId'),
-                    'name': _room_name(room),
-                    'sequence': sequence,
-                    # parallel_get_json gives None for a failed call, e.g. the
-                    # 500 core returns when one component in the room fails
-                    # to parse
-                    'loaded': room_components is not None,
-                    'components': _component_options(room_components or []),
-                }
-                for sequence, (room, room_components) in enumerate(zip(rooms, results))
-            ],
-        }
-        if all(room['loaded'] for room in result['rooms']):
-            _room_components_cache[rental_id] = (
-                time.monotonic() + ROOM_COMPONENTS_CACHE_TTL,
-                result,
-            )
+        result_rooms = []
+        for sequence, (room, room_components) in enumerate(zip(rooms, results)):
+            # parallel_get_json gives None for a failed call, e.g. the 500
+            # core returns when one component in the room fails to parse
+            loaded = room_components is not None
+            try:
+                components = _component_options(room_components or [])
+            except Exception as e:
+                # Unexpected data: show this room as not loaded, keep the rest
+                _logger.warning(
+                    "Unexpected components for room %s from OneCore: %s",
+                    room.get('propertyObjectId'), e,
+                )
+                loaded, components = False, []
+            result_rooms.append({
+                'id': room.get('propertyObjectId'),
+                'name': _room_name(room),
+                'sequence': sequence,
+                'loaded': loaded,
+                'components': components,
+            })
+        result = {'ok': True, 'rooms': result_rooms}
+
+        if all(room['loaded'] for room in result_rooms):
+            now = time.monotonic()
+            # Drop expired entries, so the cache only holds the apartments
+            # opened within the TTL. A copy of the items: other worker
+            # threads may change the dict meanwhile.
+            for key, (expires_at, _cached) in list(_room_components_cache.items()):
+                if expires_at <= now:
+                    _room_components_cache.pop(key, None)
+            _room_components_cache[rental_id] = (now + ROOM_COMPONENTS_CACHE_TTL, result)
         return result
 
     def _transform_component_data(self, comp, room_name, room_id):
