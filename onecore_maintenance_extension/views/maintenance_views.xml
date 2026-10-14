@@ -189,6 +189,12 @@
                         <p class="mb-1 fw-bold inline-block">Ärendebeskrivning:</p>
                         <field name="description"
                             readonly="user_is_external_contractor"></field>
+                        <!-- One note per selected component; selected in "Rum och
+                        komponenter". Never statically invisible: the room grid reads the
+                        same lines. -->
+                        <field name="component_ids" widget="component_notes" nolabel="1"
+                            readonly="restricted_external"
+                            invisible="space_caption != 'Lägenhet'" />
                     </div>
 
                     <div class="d-flex w-100 justify-content-between justify-content-md-start"
@@ -789,7 +795,9 @@
                                         class="btn btn-secondary mt-2 mb-2 me-2"
                                         help="Rapportera tid direkt från ärendet"
                                         invisible="user_is_external_contractor or not id" />
-                                    <!-- Hidden until MIM-2069 rebuilds the wizard -->
+                                    <!-- Hidden until the wizard handles components without a
+                                    model (every surface). Components an ärende concerns are
+                                    chosen in "Rum och komponenter". -->
                                     <button name="open_component_wizard"
                                         type="object"
                                         string="Uppdatera/lägg till Komponent"
@@ -825,6 +833,37 @@
                                     <p class="mb-1 fw-bold inline-block">Planlösning:</p>
                                     <field name="floor_plan_image_url" widget="image_viewer"
                                         thumbnailSize="160" nolabel="1" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rum och komponenter: full width, on its own row -->
+                        <div
+                            class="accordion-item bg-transparent shadow-sm flex-grow-1 w-100 mb-3"
+                            invisible="space_caption != 'Lägenhet'">
+                            <h2 class="accordion-header">
+                                <button name="accordion-button-5"
+                                    class="accordion-button collapsed d-md-none fs-3 fw-bold"
+                                    type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#flush-collapse5" aria-expanded="false"
+                                    aria-controls="flush-collapse5">
+                                    Rum och komponenter
+                                </button>
+                                <!-- Show just as a header on desktop -->
+                                <div
+                                    class="accordion-button collapsed d-none d-md-block fs-3 fw-bold">
+                                    <!-- Floats right; first so it shares the title's line -->
+                                    <widget name="room_components_count" />
+                                    Rum och komponenter
+                                </div>
+                            </h2>
+                            <div id="flush-collapse5" class="accordion-collapse collapse d-md-block"
+                                data-bs-parent="#accordionFlush">
+                                <div class="accordion-body">
+                                    <!-- Contractors choose components too, until Utförd:
+                                    restricted_external, like their other edits -->
+                                    <field name="component_ids" widget="room_components"
+                                        nolabel="1" readonly="restricted_external" />
                                 </div>
                             </div>
                         </div>

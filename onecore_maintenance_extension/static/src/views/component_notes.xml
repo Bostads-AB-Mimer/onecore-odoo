@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.ComponentNotes">
+        <div t-if="links.length" class="mimer-component-notes">
+            <div t-foreach="links" t-as="link" t-key="link.id" class="mimer-component-note">
+                <!-- The subtype tells two of the same type apart, the room
+                tells surfaces apart: Tak is in every room -->
+                <span class="fw-bold">
+                    <t t-esc="link.data.component_name" />
+                    <span t-if="link.data.subtype_name" class="fw-normal"> – <t t-esc="link.data.subtype_name" /></span>
+                    <span t-if="link.data.space_name" class="fw-normal text-muted"> (<t t-esc="link.data.space_name" />)</span><t t-if="link.data.note">:</t>
+                </span>
+                <span t-if="link.data.note" class="ms-1" t-esc="link.data.note" />
+            </div>
+        </div>
+    </t>
+
+</templates>

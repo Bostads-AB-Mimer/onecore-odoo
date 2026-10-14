@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.RoomComponents">
+        <div class="mimer-room-components w-100" t-ref="root">
+            <p t-if="!rentalId" class="text-muted mb-0">
+                Välj ett hyresobjekt för att se rum och komponenter.
+            </p>
+            <p t-elif="state.loading" class="text-muted mb-0">
+                <i class="fa fa-spinner fa-spin me-1" />
+                Hämtar rum och komponenter…
+            </p>
+            <t t-else="">
+                <t t-set="roomColumns" t-value="columns" />
+                <p t-if="!state.ok" class="text-muted">
+                    Kunde inte hämta rum och komponenter för hyresobjektet.
+                </p>
+                <p t-elif="!roomColumns.length" class="text-muted mb-0">
+                    Hyresobjektet har inga rum med komponenter.
+                </p>
+                <div t-if="roomColumns.length" class="mimer-room-components-grid">
+                    <div t-foreach="roomColumns" t-as="column" t-key="column.key"
+                        class="mimer-room-card">
+                        <div class="mimer-room-card-header">
+                            <span class="fw-bold" t-esc="column.name" />
+                            <span class="mimer-room-card-count" t-esc="column.selectedCount" />
+                        </div>
+                        <p t-if="state.ok and !column.loaded" class="text-muted small mb-1">
+                            Kunde inte hämta komponenterna.
+                        </p>
+                        <p t-elif="!column.items.length" class="text-muted small mb-1">
+                            Inga komponenter
+                        </p>
+                        <div t-foreach="column.items" t-as="item" t-key="item.key"
+                            class="mimer-room-component-item"
+                            t-att-data-component-id="item.key">
+                            <label class="mimer-room-component"
+                                t-att-class="{
+                                    'mimer-room-component-selected': item.link,
+                                    'mimer-room-component-removed': item.removed,
+                                    'mimer-room-component-readonly': props.readonly,
+                                }">
+                                <input type="checkbox" class="form-check-input me-2"
+                                    t-att-checked="!!item.link"
+                                    t-att-disabled="props.readonly"
+                                    t-on-change="() => this.toggle(item)" />
+                                <span class="mimer-room-component-name">
+                                    <span>
+                                        <t t-esc="item.label" />
+                                        <span t-if="item.removed" class="small ms-1">(borttagen)</span>
+                                    </span>
+                                    <span t-if="item.subtypeName"
+                                        class="mimer-room-component-subtype"
+                                        t-esc="item.subtypeName" />
+                                </span>
+                            </label>
+                            <!-- Outside the label: clicking into the note must not
+                            toggle the checkbox. o_field_text: core's textarea style. -->
+                            <div t-if="item.link and (!props.readonly or item.link.data.note)"
+                                class="mimer-room-component-note o_field_text">
+                                <TextField record="item.link" name="'note'"
+                                    readonly="props.readonly" lineBreaks="false"
+                                    placeholder="'Beskriv vad som är fel'" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+
+    <t t-name="onecore_maintenance_extension.RoomComponentsCount">
+        <span class="mimer-room-components-count">
+            <span class="fw-bold" t-esc="count" />
+            <t t-if="count === 1"> komponent vald</t>
+            <t t-else=""> komponenter valda</t>
+        </span>
+    </t>
+
+</templates>

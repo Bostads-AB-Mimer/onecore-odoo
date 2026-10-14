@@ -44,6 +44,46 @@
             <field name="perm_create" eval="False" />
         </record>
 
+        <!-- Components on an ärende: each rule mirrors one of the maintenance.request rules -->
+        <record id="maintenance_request_component_comp_rule" model="ir.rule">
+            <field name="name">Components: multi-company</field>
+            <field name="model_id" ref="model_maintenance_request_component" />
+            <field name="domain_force">[('maintenance_request_id.company_id', 'in', company_ids + [False])]</field>
+        </record>
+
+        <record id="maintenance_request_component_rule_user" model="ir.rule">
+            <field name="name">Components on own, followed or assigned requests</field>
+            <field name="model_id" ref="model_maintenance_request_component" />
+            <field name="domain_force">['|', '|', ('maintenance_request_id.owner_user_id', '=', user.id), ('maintenance_request_id.message_partner_ids', 'in', [user.partner_id.id]), ('maintenance_request_id.user_id', '=', user.id)]</field>
+            <field name="groups" eval="[(4, ref('base.group_user'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="True" />
+            <field name="perm_create" eval="True" />
+            <field name="perm_unlink" eval="True" />
+        </record>
+
+        <record id="maintenance_request_component_rule_equipment_manager" model="ir.rule">
+            <field name="name">Components on all requests</field>
+            <field name="model_id" ref="model_maintenance_request_component" />
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('maintenance.group_equipment_manager'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="True" />
+            <field name="perm_create" eval="True" />
+            <field name="perm_unlink" eval="True" />
+        </record>
+
+        <record id="maintenance_request_component_rule_external_contractor" model="ir.rule">
+            <field name="name">Components on the external contractor's team's requests</field>
+            <field name="model_id" ref="model_maintenance_request_component" />
+            <field name="domain_force">[('maintenance_request_id.maintenance_team_id.member_ids', 'in', [user.id])]</field>
+            <field name="groups" eval="[(4, ref('group_external_contractor'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="True" />
+            <field name="perm_create" eval="True" />
+            <field name="perm_unlink" eval="True" />
+        </record>
+
     </data>
 
 </odoo>

@@ -5,7 +5,7 @@ import json
 import time
 
 from markupsafe import Markup
-from odoo import api, fields, models, _
+from odoo import Command, api, fields, models, _
 from odoo.exceptions import AccessError, UserError
 
 from ...onecore_api import core_api
@@ -19,6 +19,7 @@ from .services import (
     ExternalContractorService,
     MaintenanceStageManager,
     ManagementAreaService,
+    ComponentOneCoreService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -201,6 +202,19 @@ class OneCoreMaintenanceRequest(
         store=False, readonly=True, compute="_compute_floor_plan"
     )
     form_state = fields.Selection(FORM_STATES, compute="_compute_form_state")
+
+    # ============================================================================
+    # COMPONENTS — rooms and components the ärende concerns
+    # ============================================================================
+
+    component_ids = fields.One2many(
+        "maintenance.request.component", "maintenance_request_id", string="Komponenter"
+    )
+    # The rental id the room grid loads components for. Also set on a new,
+    # unsaved ärende, from the selected search hit.
+    component_rental_id = fields.Char(
+        compute="_compute_component_rental_id", store=False
+    )
 
     # ============================================================================
     # MANAGEMENT AREA — distrikt / kvartersvärdsområde (OneCore snapshot)
@@ -393,6 +407,17 @@ class OneCoreMaintenanceRequest(
                 )
             else:
                 record.floor_plan_image_url = False
+
+    @api.depends("rental_property_id", "rental_property_option_id")
+    def _compute_component_rental_id(self):
+        # No HTTP here: the browser loads rooms and components via the
+        # room_components widget.
+        for record in self:
+            record.component_rental_id = (
+                record.rental_property_id.rental_property_id
+                or record.rental_property_option_id.name
+                or False
+            )
 
     @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
@@ -774,6 +799,28 @@ class OneCoreMaintenanceRequest(
         external_contractor_service = ExternalContractorService(self.env)
         return external_contractor_service.is_external_contractor()
 
+    @api.model
+    def get_room_components(self, rental_id):
+        """Rooms of a rental object and their components, for the room grid.
+
+        Takes the rental id rather than a record so the grid also works on a
+        new, unsaved ärende. A contractor only gets rental objects of ärenden
+        they can read.
+        """
+        # @api.model methods are callable over RPC by any logged-in user:
+        # require access to ärenden before calling OneCore on their behalf
+        self.check_access("read")
+        if (
+            rental_id
+            and not self.env.su
+            and ExternalContractorService(self.env).is_external_contractor()
+            and not self.search_count(
+                [("rental_property_id.rental_property_id", "=", rental_id)], limit=1
+            )
+        ):
+            return {"ok": False, "rooms": []}
+        return ComponentOneCoreService(self.env).load_room_components(rental_id)
+
     # ============================================================================
     # SEARCH FUNCTIONALITY
     # ============================================================================
@@ -904,6 +951,25 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_rental_property_fields(record)
+            # Components chosen for one apartment don't belong to another.
+            # A new search for the same apartment keeps them.
+            other_apartment = record.component_ids.filtered(
+                lambda link: link.rental_id != record.component_rental_id
+            )
+            if other_apartment:
+                record.component_ids -= other_apartment
+
+    @api.onchange("space_caption")
+    def _onchange_space_caption_components(self):
+        # Only on a new ärende: on a saved one the components stay, hidden
+        # while the space isn't a Lägenhet
+        for record in self:
+            if (
+                not record._origin
+                and record.space_caption != "Lägenhet"
+                and record.component_ids
+            ):
+                record.component_ids = [Command.clear()]
 
     @api.onchange("maintenance_unit_option_id")
     def _onchange_maintenance_unit_option_id(self):
@@ -1227,6 +1293,10 @@ class OneCoreMaintenanceRequest(
         }
         for f in _option_fields:
             vals.pop(f, None)
+
+        # Components first, in the stage they were chosen in
+        if "component_ids" in vals and "stage_id" in vals:
+            super().write({"component_ids": vals.pop("component_ids")})
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
