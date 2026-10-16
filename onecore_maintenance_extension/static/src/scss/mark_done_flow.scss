@@ -1,0 +1,21 @@
+// "Markera som utförd" flow
+
+.mimer-mark-done-progress {
+    height: 4px;
+}
+
+// The problem reported on the component, above its outcome buttons
+.mimer-mark-done-problem {
+    background: var(--bs-tertiary-bg, #f8f9fa);
+    border-radius: 0.25rem;
+    padding: 0.4rem 0.6rem;
+}
+
+// Big enough to hit with a thumb
+.mimer-mark-done-outcome {
+    min-height: 3.25rem;
+}
+
+.mimer-mark-done-summary-item {
+    text-align: left;
+}

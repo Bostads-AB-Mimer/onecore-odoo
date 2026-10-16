@@ -122,6 +122,9 @@
                     <field name="has_unread_supplier_dialog" invisible="1" />
                     <field name="has_unread_internal_dialog" invisible="1" />
                     <field name="has_unread_master_key_change" invisible="1" />
+                    <!-- Opens the flow that registers an outcome per component -->
+                    <field name="can_mark_done" invisible="1" />
+                    <widget name="mark_done_button" invisible="not can_mark_done" />
                 </xpath>
 
                 <!-- Add a div before the first group tag -->

@@ -215,6 +215,8 @@ class OneCoreMaintenanceRequest(
     component_rental_id = fields.Char(
         compute="_compute_component_rental_id", store=False
     )
+    # Shows the "Markera som utförd" button: only on ärenden with components
+    can_mark_done = fields.Boolean(compute="_compute_can_mark_done", store=False)
 
     # ============================================================================
     # MANAGEMENT AREA — distrikt / kvartersvärdsområde (OneCore snapshot)
@@ -417,6 +419,19 @@ class OneCoreMaintenanceRequest(
                 record.rental_property_id.rental_property_id
                 or record.rental_property_option_id.name
                 or False
+            )
+
+    @api.depends("space_caption", "stage_id", "archive", "component_ids")
+    def _compute_can_mark_done(self):
+        closed_stages = self._mark_done_closed_stages()
+        for record in self:
+            # _origin: in an onchange the record itself has no id yet
+            record.can_mark_done = bool(
+                record._origin.id
+                and record.space_caption == "Lägenhet"
+                and record.component_ids
+                and not record.archive
+                and record.stage_id not in closed_stages
             )
 
     @api.depends("recently_added_tenant")
@@ -820,6 +835,147 @@ class OneCoreMaintenanceRequest(
         ):
             return {"ok": False, "rooms": []}
         return ComponentOneCoreService(self.env).load_room_components(rental_id)
+
+    # ============================================================================
+    # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
+    # ============================================================================
+
+    def _mark_done_closed_stages(self):
+        """Utförd, Avslutad and Återsänd, by their fixed xml ids. A missing
+        xml id is skipped: this runs on every form read."""
+        stages = MaintenanceStageManager(self.env)._get_atersand_stage()
+        for xml_id in ("maintenance.stage_5", "maintenance.stage_6"):
+            stages |= self.env.ref(xml_id, raise_if_not_found=False) or stages
+        return stages
+
+    def _mark_done_refusal(self):
+        """Why the ärende can't be marked as utförd from the button, or False."""
+        self.ensure_one()
+        if self.space_caption != "Lägenhet":
+            return "Markera som utförd finns bara för ärenden på en lägenhet."
+        if self.archive:
+            return "Ärendet är inaktivt."
+        if self.stage_id in self._mark_done_closed_stages():
+            return f"Ärendet är redan {self.stage_id.name}."
+        if not self.component_ids:
+            return (
+                "Ärendet har inga valda komponenter. Flytta det till Utförd i "
+                "statusraden."
+            )
+        return False
+
+    def check_can_mark_done(self):
+        """Run when "Markera som utförd" opens: what would stop the move to
+        Utförd, and the components to give an outcome, with the outcomes each
+        one can get and the outcome already stored."""
+        self.ensure_one()
+        self.check_access("read")
+        utford = self.env.ref("maintenance.stage_5")
+        error = False
+        if not self.has_access("write"):
+            error = "Du har inte behörighet att ändra ärendet."
+        if not error:
+            error = self._mark_done_refusal()
+        if not error:
+            # The checks write() runs on the move to Utförd, without moving
+            try:
+                ExternalContractorService(self.env).validate_stage_transition(
+                    self, utford.id
+                )
+                MaintenanceStageManager(self.env).handle_stage_change(self, utford.id)
+            except UserError as refused:
+                error = refused.args[0]
+        components = self.env["maintenance.request.component"] if error else self.component_ids
+        return {
+            "error": error or False,
+            "contractor": ExternalContractorService(self.env).is_external_contractor(),
+            "components": [
+                {
+                    "id": component.id,
+                    "name": component.component_name,
+                    "subtype_name": component.subtype_name or "",
+                    "space_name": component.space_name or "",
+                    "note": component.note or "",
+                    "outcomes": component._outcome_options(),
+                    "outcome": component.outcome or False,
+                    "outcome_note": component.outcome_note or "",
+                }
+                for component in components
+            ],
+        }
+
+    def action_register_outcomes(self, outcomes, row_ids):
+        """Store an outcome on every component, post a summary to the chatter
+        and move the ärende to Utförd, all in one transaction.
+
+        :param outcomes: [{"id": component id, "outcome": key, "note": text}]
+        :param row_ids: ids of the components the flow was opened with
+        """
+        self.ensure_one()
+        self.check_access("write")
+        refusal = self._mark_done_refusal()
+        if refusal:
+            raise UserError(refusal)
+
+        components = self.component_ids
+        answers = {
+            answer["id"]: answer
+            for answer in outcomes or []
+            if isinstance(answer, dict) and isinstance(answer.get("id"), int)
+        }
+        row_ids = {row_id for row_id in row_ids or [] if isinstance(row_id, int)}
+        if row_ids != set(components.ids) or not set(answers) <= set(components.ids):
+            raise UserError(
+                "Komponenterna på ärendet har ändrats sedan du började. Stäng och "
+                "öppna Markera som utförd igen."
+            )
+
+        updates = []
+        for component in components:
+            answer = answers.get(component.id, {})
+            outcome = answer.get("outcome")
+            if not outcome:
+                raise UserError(f"Välj ett utfall för {component._summary_name()}.")
+            if not isinstance(outcome, str) or outcome not in dict(
+                component._outcome_options()
+            ):
+                raise UserError(
+                    f"Utfallet går inte att välja för {component._summary_name()}."
+                )
+            note = answer.get("note")
+            note = note.strip() if isinstance(note, str) else ""
+            # outcome_user_id is set by the component model
+            updates.append((component, {"outcome": outcome, "outcome_note": note or False}))
+
+        # One unit: a refused move to Utförd also undoes the outcomes and the
+        # note, for callers that catch the error too
+        with self.env.cr.savepoint():
+            for component, values in updates:
+                component.write(values)
+            self.message_post(
+                body=self._outcome_summary(components),
+                message_type="notification",
+                subtype_xmlid="mail.mt_note",
+            )
+            self.write({"stage_id": self.env.ref("maintenance.stage_5").id})
+        return True
+
+    def _outcome_summary(self, components):
+        """The chatter note for action_register_outcomes."""
+        items = Markup().join(
+            Markup("<li><strong>{}:</strong> {}{}</li>").format(
+                component._summary_name(),
+                dict(component._outcome_options())[component.outcome],
+                # Escaped, with the line breaks kept
+                Markup(" – ") + Markup("<br/>").join(component.outcome_note.splitlines())
+                if component.outcome_note
+                else "",
+            )
+            for component in components
+        )
+        return Markup("<p><strong>Utfall registrerat</strong></p><ul>{}</ul>").format(
+            items
+        )
 
     # ============================================================================
     # SEARCH FUNCTIONALITY
