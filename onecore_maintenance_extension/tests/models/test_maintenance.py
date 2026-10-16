@@ -3,12 +3,15 @@ from odoo.tests import tagged
 from odoo.exceptions import UserError
 from datetime import date, timedelta
 
+from lxml import etree
+
 from ..utils.test_utils import (
     setup_faker,
     create_internal_user,
     create_maintenance_request,
     create_property_option,
     create_building_option,
+    create_parking_space_option,
     create_property,
     create_building,
 )
@@ -280,3 +283,98 @@ class TestMaintenanceRequestUtilityMethods(FakerMixin, TransactionCase):
         # Should have correct domain
         expected_domain = [("id", "in", [self.internal_user.id])]
         self.assertEqual(request.maintenance_team_domain, expected_domain)
+
+
+@tagged("onecore")
+class TestMaintenanceRequestFormPropertyCode(TransactionCase):
+    """MIM-2164: the property number (fastighetsnummer) is shown directly
+    after the property name in every object group of the form."""
+
+    def setUp(self):
+        super().setUp()
+        view = self.env.ref("maintenance.hr_equipment_request_view_form")
+        arch = self.env["maintenance.request"].get_view(view.id, "form")["arch"]
+        self.form = etree.fromstring(arch)
+
+    def _group_fields(self, form_state):
+        groups = self.form.xpath(
+            f"//group[@invisible=\"form_state != '{form_state}'\"]"
+        )
+        self.assertEqual(len(groups), 1, form_state)
+        return groups[0].xpath(".//field")
+
+    def _assert_code_follows_name(self, form_state, name_field, code_field, invisible):
+        fields = self._group_fields(form_state)
+        names = [field.get("name") for field in fields]
+        self.assertIn(code_field, names, form_state)
+        index = names.index(code_field)
+        self.assertGreater(index, 0, form_state)
+        self.assertEqual(names[index - 1], name_field, form_state)
+        code_node = fields[index]
+        self.assertEqual(code_node.get("invisible"), invisible, form_state)
+        self.assertEqual(code_node.get("string"), "Fastighetsnummer", form_state)
+
+    def test_rental_property_shows_estate_code_after_estate(self):
+        self._assert_code_follows_name(
+            "rental-property", "estate", "estate_code", "not estate_code"
+        )
+
+    def test_maintenance_unit_shows_property_code_after_designation(self):
+        self._assert_code_follows_name(
+            "maintenance-unit",
+            "property_designation",
+            "property_code",
+            "not property_code",
+        )
+
+    def test_property_shows_property_code_after_designation(self):
+        self._assert_code_follows_name(
+            "property", "property_designation", "property_code", "not property_code"
+        )
+
+    def test_building_shows_estate_code_after_estate(self):
+        self._assert_code_follows_name(
+            "building", "estate", "estate_code", "not estate_code"
+        )
+
+    def test_building_shows_building_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "building",
+            "building_property_name",
+            "building_property_code",
+            "estate or not building_property_code",
+        )
+
+    def test_parking_space_shows_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "parking-space",
+            "parking_space_property_name",
+            "parking_space_property_code",
+            "not parking_space_property_code",
+        )
+
+    def test_facility_shows_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "facility",
+            "facility_property_name",
+            "facility_property_code",
+            "not facility_property_code",
+        )
+
+    def test_property_code_set_when_property_selected(self):
+        option = create_property_option(self.env, code="0123")
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Fastighet", "property_option_id": option.id}
+        )
+        record._onchange_property_option_id()
+        self.assertEqual(record.property_code, "0123")
+
+    def test_parking_space_property_code_set_when_parking_space_selected(self):
+        option = create_parking_space_option(
+            self.env, property_code="0456", property_name="Fastigheten"
+        )
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Bilplats", "parking_space_option_id": option.id}
+        )
+        record._onchange_parking_space_option_id()
+        self.assertEqual(record.parking_space_property_code, "0456")
