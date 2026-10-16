@@ -290,10 +290,10 @@
                                         <field name="has_elevator"
                                             invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
-                                        <field name="estate_code" invisible="1"
-                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="estate_code" invisible="not estate_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -332,11 +332,11 @@
                                             string="Byggnadskod" />
                                         <field name="building_name" invisible="not building_name"
                                             string="Tillhör byggnad" />
-                                        <field name="property_code" invisible="not property_code"
-                                            string="Fastighetsnummer" />
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
+                                        <field name="property_code" invisible="not property_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -357,6 +357,8 @@
                                         <field name="property_designation"
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
+                                        <field name="property_code" string="Fastighetsnummer"
+                                            invisible="not property_code" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -427,15 +429,18 @@
                                         <field name="building_renovation_year"
                                             string="Renoveringsår"
                                             invisible="not building_renovation_year" />
-                                        <field name="estate_code" invisible="1"
-                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="estate_code" invisible="not estate_code"
+                                            string="Fastighetsnummer" />
                                         <!-- Building-code searches have no rental property:
                                              the property comes from the building itself -->
                                         <field name="building_property_name"
                                             invisible="estate or not building_property_name"
                                             string="Tillhör fastighet" />
+                                        <field name="building_property_code"
+                                            invisible="estate or not building_property_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -465,6 +470,9 @@
                                             invisible="not parking_space_number" />
                                         <field name="parking_space_property_name" string="Fastighet"
                                             invisible="not parking_space_property_name" />
+                                        <field name="parking_space_property_code"
+                                            string="Fastighetsnummer"
+                                            invisible="not parking_space_property_code" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
