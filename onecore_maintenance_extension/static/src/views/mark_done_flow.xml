@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="onecore_maintenance_extension.MarkDoneButton">
+        <button type="button" class="btn btn-primary" t-att-disabled="state.busy"
+            t-on-click="onClick">
+            <i t-if="state.busy" class="fa fa-spinner fa-spin me-1" />
+            Markera som utförd
+        </button>
+    </t>
+
+    <t t-name="onecore_maintenance_extension.MarkDoneDialog">
+        <!-- Outside the Dialog: the body and the footer slot both read it -->
+        <t t-set="current" t-value="step" />
+        <Dialog title="'Markera som utförd'" size="'md'" contentClass="'mimer-mark-done'">
+            <div t-ref="body">
+
+                <!-- One component: its outcome and what was done -->
+                <t t-if="current.kind === 'component'">
+                    <t t-set="component" t-value="current.component" />
+                    <t t-set="answer" t-value="answerFor(component)" />
+                    <div class="mb-3">
+                        <div class="small text-muted mb-1">
+                            Komponent <t t-esc="current.position + 1" /> av <t t-esc="props.components.length" />
+                        </div>
+                        <div class="progress mimer-mark-done-progress" role="progressbar"
+                            t-att-aria-valuenow="current.position + 1" aria-valuemin="1"
+                            t-att-aria-valuemax="props.components.length">
+                            <div class="progress-bar" t-attf-style="width: {{ progressPercent }}%" />
+                        </div>
+                    </div>
+                    <div t-if="component.space_name" class="small text-muted"
+                        t-esc="component.space_name" />
+                    <h4 class="mb-0" t-esc="component.name" />
+                    <div t-if="component.subtype_name" class="text-muted"
+                        t-esc="component.subtype_name" />
+                    <div t-if="component.note" class="mimer-mark-done-problem small mt-2">
+                        <span class="fw-bold">Felanmält:</span> <t t-esc="component.note" />
+                    </div>
+
+                    <div class="d-grid gap-2 my-3" role="group" aria-label="Utfall">
+                        <t t-foreach="component.outcomes" t-as="option" t-key="option[0]">
+                            <t t-set="selected" t-value="answer.outcome === option[0]" />
+                            <button type="button" class="btn btn-lg mimer-mark-done-outcome"
+                                t-att-class="selected ? 'btn-primary' : 'btn-outline-primary'"
+                                t-att-aria-pressed="selected ? 'true' : 'false'"
+                                t-on-click="() => this.selectOutcome(component, option[0])">
+                                <i t-if="selected" class="fa fa-check me-2" />
+                                <t t-esc="option[1]" />
+                            </button>
+                        </t>
+                    </div>
+
+                    <label class="form-label" t-att-for="'mimer_mark_done_note_' + component.id">
+                        Vad som gjordes (valfritt)
+                    </label>
+                    <textarea class="form-control" rows="3"
+                        t-att-id="'mimer_mark_done_note_' + component.id"
+                        t-att-value="answer.note or ''"
+                        t-on-input="(ev) => this.setNote(component, ev.target.value)" />
+                </t>
+
+                <!-- Every component with its outcome; tap one to change it -->
+                <t t-elif="current.kind === 'summary'">
+                    <h4>Sammanfattning</h4>
+                    <div class="list-group mb-3">
+                        <t t-foreach="props.components" t-as="component" t-key="component.id">
+                            <t t-set="answer" t-value="answerFor(component)" />
+                            <button type="button"
+                                class="list-group-item list-group-item-action mimer-mark-done-summary-item"
+                                t-att-disabled="state.saving"
+                                t-on-click="() => this.goTo(component_index)">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <span>
+                                        <span class="fw-bold" t-esc="component.name" />
+                                        <span t-if="component.subtype_name"> – <t t-esc="component.subtype_name" /></span>
+                                        <span t-if="component.space_name" class="text-muted"> (<t t-esc="component.space_name" />)</span>
+                                    </span>
+                                    <span class="badge rounded-pill flex-shrink-0"
+                                        t-att-class="answer.outcome ? 'text-bg-primary' : 'text-bg-warning'"
+                                        t-esc="outcomeLabel(component)" />
+                                </div>
+                                <div t-if="answer.note" class="small text-muted mt-1"
+                                    t-esc="answer.note" />
+                            </button>
+                        </t>
+                    </div>
+                    <p class="mb-2">Ärendet flyttas till Utförd när du sparar.</p>
+                </t>
+
+                <div t-if="current.final and props.contractor" class="alert alert-warning mb-2"
+                    role="alert">
+                    Om du gör detta kan du inte ändra tillbaka.
+                </div>
+                <div t-if="state.error" class="alert alert-danger mb-0" role="alert"
+                    t-esc="state.error" />
+            </div>
+
+            <t t-set-slot="footer">
+                <button t-if="!isFirstStep" type="button" class="btn btn-secondary"
+                    t-att-disabled="state.saving" t-on-click="previous">
+                    Föregående
+                </button>
+                <button t-if="!current.final" type="button" class="btn btn-primary"
+                    t-att-disabled="!canGoNext" t-on-click="next">
+                    Nästa
+                </button>
+                <button t-else="" type="button" class="btn btn-primary"
+                    t-att-disabled="!canSave" t-on-click="save">
+                    <i t-if="state.saving" class="fa fa-spinner fa-spin me-1" />
+                    Spara
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>
