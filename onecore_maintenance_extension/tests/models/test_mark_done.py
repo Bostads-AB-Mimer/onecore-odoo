@@ -219,13 +219,15 @@ class TestRegisterOutcomes(MarkDoneCase):
     def test_contractor_is_refused_once_utford(self):
         contractor = create_external_contractor_user(self.env)
         team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
-        request = self._request(_link_vals(), maintenance_team_id=team.id)
+        request = self._request(
+            _link_vals(outcome="REPAIRED"), maintenance_team_id=team.id
+        )
         self._move(request, "maintenance.stage_5")
 
         with self.assertRaises(UserError):
-            self._register(request, self._answers(request), user=contractor)
+            self._register(request, self._answers(request, "NO_ACTION"), user=contractor)
 
-        self.assertFalse(request.component_ids.outcome)
+        self.assertEqual(request.component_ids.outcome, "REPAIRED")
 
     def test_internal_user_is_refused_once_utford(self):
         request = self._request(_link_vals())
@@ -499,7 +501,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
         self.assertIn("Ingen resurs är tilldelad", result["error"])
 
     def test_explains_that_the_arende_is_already_utford(self):
-        request = self._request(_link_vals())
+        request = self._request(_link_vals(outcome="REPAIRED"))
         self._move(request, "maintenance.stage_5")
 
         result = self._check(request)
@@ -627,7 +629,7 @@ class TestCanMarkDone(MarkDoneCase):
             "onecore_maintenance_extension.stage_atersand",
         ):
             with self.subTest(stage=xml_id):
-                request = self._request(_link_vals())
+                request = self._request(_link_vals(outcome="REPAIRED"))
 
                 self._move(request, xml_id)
 

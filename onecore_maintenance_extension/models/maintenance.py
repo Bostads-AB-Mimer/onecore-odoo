@@ -848,6 +848,48 @@ class OneCoreMaintenanceRequest(
             stages |= self.env.ref(xml_id, raise_if_not_found=False) or stages
         return stages
 
+    def _check_component_outcomes(self, stage, new=False):
+        """Refuse moving the ärenden to Utförd or Avslutad while a component
+        has no outcome. Only Lägenhet ärenden that aren't archived are
+        checked, as only they have "Markera som utförd". Moves from the same
+        stage or from Utförd pass, and so do moves to Avslutad from Väntar på
+        handläggning or Återsänd. A new ärende has no stage it comes from."""
+        utford = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
+        avslutad = self.env.ref("maintenance.stage_6", raise_if_not_found=False)
+        if stage not in (utford, avslutad):
+            return
+        # The stages a move may come from without outcomes
+        unchecked = stage | (utford or stage)
+        if stage == avslutad:
+            waiting = self.env.ref("maintenance.stage_0", raise_if_not_found=False)
+            unchecked |= (waiting or stage) | MaintenanceStageManager(
+                self.env
+            )._get_atersand_stage()
+        for record in self:
+            if record.space_caption != "Lägenhet" or record.archive:
+                continue
+            if not new and record.stage_id in unchecked:
+                continue
+            # sudo: every row counts, also one a record rule hides
+            missing = record.sudo().component_ids.filtered(lambda c: not c.outcome)
+            if not missing:
+                continue
+            # A new ärende's id is rolled back with the refusal, so it isn't named
+            if new:
+                refusal = (
+                    f"Ett nytt ärende kan inte sparas som {stage.name} när en "
+                    "komponent saknar utfall. Spara det i en annan status och "
+                    'använd sedan knappen "Markera som utförd".'
+                )
+            else:
+                refusal = (
+                    f"{WORK_ORDER_PREFIX}{record.id}: Alla komponenter behöver "
+                    "ett utfall innan ärendet kan flyttas till "
+                    f'{stage.name}. Använd knappen "Markera som utförd".'
+                )
+            names = ", ".join(component._summary_name() for component in missing)
+            raise UserError(f"{refusal}\n\nSaknar utfall: {names}.")
+
     def _mark_done_refusal(self):
         """Why the ärende can't be marked as utförd from the button, or False."""
         self.ensure_one()
@@ -877,7 +919,8 @@ class OneCoreMaintenanceRequest(
         if not error:
             error = self._mark_done_refusal()
         if not error:
-            # The checks write() runs on the move to Utförd, without moving
+            # The stage checks write() runs on the move to Utförd, without
+            # moving. Not the outcome check: the flow supplies the outcomes.
             try:
                 ExternalContractorService(self.env).validate_stage_transition(
                     self, utford.id
@@ -1326,6 +1369,11 @@ class OneCoreMaintenanceRequest(
             OneCoreMaintenanceRequest, self.with_context(creating_records=True)
         ).create(vals_list)
 
+        # A new ärende in Utförd or Avslutad needs an outcome on every
+        # component, also when the stage comes from a context default
+        for request in maintenance_requests:
+            request._check_component_outcomes(request.stage_id, new=True)
+
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
@@ -1453,6 +1501,13 @@ class OneCoreMaintenanceRequest(
         # Components first, in the stage they were chosen in
         if "component_ids" in vals and "stage_id" in vals:
             super().write({"component_ids": vals.pop("component_ids")})
+
+        # Utförd and Avslutad need an outcome on every component, also the
+        # ones saved just above
+        if "stage_id" in vals:
+            self._check_component_outcomes(
+                self.env["maintenance.stage"].browse(vals["stage_id"])
+            )
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)

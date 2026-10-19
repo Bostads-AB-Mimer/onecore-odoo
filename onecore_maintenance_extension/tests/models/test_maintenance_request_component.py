@@ -324,7 +324,10 @@ class TestRequestComponentAccess(TransactionCase):
             link.with_user(self.contractor).read(["component_name"])
 
     def _move_to_utford(self, request):
-        # A resource first: an ärende can't be Utförd without one
+        # A resource and outcomes first: an ärende can't be Utförd without them
+        self.env["maintenance.request"].browse(request.id).component_ids.write(
+            {"outcome": "REPAIRED"}
+        )
         request = self.env["maintenance.request"].browse(request.id).with_user(
             self.internal_user
         )
@@ -378,7 +381,8 @@ class TestRequestComponentAccess(TransactionCase):
         self.assertEqual(link.component_name, "Frys")
 
     def test_contractor_saves_components_and_utford_in_one_write(self):
-        # The status bar saves pending changes and the new stage together
+        # The status bar saves pending changes and the new stage together,
+        # here a removed component
         request = self._request_with_link(self.contractor_team)
         request.with_user(self.internal_user).write({"user_id": self.internal_user.id})
         as_contractor = self.env["maintenance.request"].browse(request.id).with_user(
@@ -388,14 +392,12 @@ class TestRequestComponentAccess(TransactionCase):
         as_contractor.write(
             {
                 "stage_id": self.env.ref("maintenance.stage_5").id,
-                "component_ids": [Command.create(_link_vals("comp-spis", "Spis"))],
+                "component_ids": [Command.delete(request.component_ids.id)],
             }
         )
 
         self.assertEqual(request.stage_id, self.env.ref("maintenance.stage_5"))
-        self.assertEqual(
-            sorted(request.component_ids.mapped("component_name")), ["Frys", "Spis"]
-        )
+        self.assertFalse(request.component_ids)
 
     def test_contractor_cannot_add_components_once_utford_via_a_context_default(self):
         request = self._request_with_link(self.contractor_team)
