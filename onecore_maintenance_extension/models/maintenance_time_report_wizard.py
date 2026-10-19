@@ -21,7 +21,7 @@ _logger = logging.getLogger(__name__)
 
 WORK_ORDER_PREFIX = "od-"
 DEFAULT_TZ = "Europe/Stockholm"
-MAX_HOURS = 24
+MAX_HOURS = 999
 
 # job type key -> (typeOfJob sent to the app, costPool)
 JOB_TYPES = {
@@ -86,7 +86,7 @@ class MaintenanceTimeReportWizard(models.TransientModel):
     )
     date_for_work = fields.Date("Datum", default=fields.Date.context_today)
     weekday_label = fields.Char("Veckodag", compute="_compute_weekday_label")
-    hours_spent = fields.Float("Antal timmar", digits=(4, 2))
+    hours_spent = fields.Float("Antal timmar", digits=(5, 2))
     job_type = fields.Selection(
         [(key, label) for key, (label, _pool) in JOB_TYPES.items()],
         string="Typ av jobb",
