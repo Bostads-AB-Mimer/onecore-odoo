@@ -132,6 +132,7 @@ class RecordManagementService:
                 "caption": maintenance_unit_option_record.caption,
                 "type": maintenance_unit_option_record.type,
                 "code": maintenance_unit_option_record.code,
+                "property_object_id": maintenance_unit_option_record.property_object_id,
                 "maintenance_request_id": maintenance_request.id,
             }
         )
@@ -229,6 +230,7 @@ class RecordManagementService:
         )
         new_facility_record = self.env["maintenance.facility"].create(
             {
+                "facility_id": facility_option_record.facility_id,
                 "name": facility_option_record.name,
                 "code": facility_option_record.code,
                 "type_name": facility_option_record.type_name,

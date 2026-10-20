@@ -9,6 +9,8 @@ from ...utils.test_utils import (
     create_rental_property_option,
     create_tenant_option,
     create_lease_option,
+    create_maintenance_unit_option,
+    create_facility_option,
 )
 
 
@@ -58,6 +60,38 @@ class TestRecordManagementService(TransactionCase):
             request.rental_property_id.address, rental_property_option.address
         )
         self.assertEqual(request.rental_property_id.code, rental_property_option.code)
+
+    def test_save_maintenance_unit_option_keeps_property_object_id(self):
+        """The maintenance unit snapshot carries the core property object id"""
+        unit_option = create_maintenance_unit_option(
+            self.env, type="Tvättstuga", property_object_id="_3SB0PK5VC9K1IT"
+        )
+
+        request = create_maintenance_request(
+            self.env,
+            maintenance_unit_option_id=unit_option.id,
+            space_caption="Tvättstuga",
+        )
+
+        self.assertTrue(request.maintenance_unit_id)
+        self.assertEqual(request.maintenance_unit_id.code, unit_option.code)
+        self.assertEqual(
+            request.maintenance_unit_id.property_object_id, "_3SB0PK5VC9K1IT"
+        )
+
+    def test_save_facility_option_keeps_facility_id(self):
+        """The facility snapshot carries the core facility id"""
+        facility_option = create_facility_option(
+            self.env, facility_id="_0HJ0WYQQ6P1XK"
+        )
+
+        request = create_maintenance_request(
+            self.env, facility_option_id=facility_option.id, space_caption="Lokal"
+        )
+
+        self.assertTrue(request.facility_id)
+        self.assertEqual(request.facility_id.code, facility_option.code)
+        self.assertEqual(request.facility_id.facility_id, "_0HJ0WYQQ6P1XK")
 
     def test_save_tenant_option_to_permanent_record(self):
         """Creating request with tenant_option_id should create permanent tenant record"""

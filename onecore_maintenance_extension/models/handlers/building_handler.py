@@ -68,16 +68,8 @@ class BuildingHandler(BaseMaintenanceHandler):
         )
 
         for maintenance_unit in maintenance_units:
-            self.env["maintenance.maintenance.unit.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "id": maintenance_unit["id"],
-                    "name": maintenance_unit["caption"],
-                    "caption": maintenance_unit["caption"],
-                    "type": maintenance_unit["type"],
-                    "code": maintenance_unit["code"],
-                    "building_option_id": building_option.id,
-                }
+            self._create_maintenance_unit_option(
+                maintenance_unit, building_option_id=building_option.id
             )
 
         for staircase in staircases:
@@ -144,16 +136,9 @@ class BuildingHandler(BaseMaintenanceHandler):
             self._create_tenant_options(lease["tenants"])
 
             for maintenance_unit in maintenance_units:
-                self.env["maintenance.maintenance.unit.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "id": maintenance_unit["id"],
-                        "name": maintenance_unit["caption"],
-                        "caption": maintenance_unit["caption"],
-                        "type": maintenance_unit["type"],
-                        "code": maintenance_unit["code"],
-                        "rental_property_option_id": rental_property_option.id,
-                    }
+                self._create_maintenance_unit_option(
+                    maintenance_unit,
+                    rental_property_option_id=rental_property_option.id,
                 )
 
             # Create staircase option if staircase data is available
