@@ -31,7 +31,7 @@ class MarkDoneCase(TransactionCase):
     def setUp(self):
         super().setUp()
         self.internal_user = create_internal_user(self.env)
-        self.utford = self.env.ref("maintenance.stage_5")
+        self.done_stage = self.env.ref("maintenance.stage_5")
 
     def _request(self, *link_vals, assign=True, **kwargs):
         """A Lägenhet ärende with these components, with a resource assigned
@@ -53,11 +53,9 @@ class MarkDoneCase(TransactionCase):
             for component in request.component_ids
         ]
 
-    def _register(self, request, outcomes, user=None, row_ids=None):
-        if row_ids is None:
-            row_ids = request.component_ids.ids
+    def _register(self, request, outcomes, user=None):
         return request.with_user(user or self.internal_user).action_register_outcomes(
-            outcomes, row_ids
+            outcomes
         )
 
     def _messages(self, request):
@@ -79,7 +77,7 @@ class TestOutcomeOptions(TransactionCase):
         )
         return component._outcome_options()
 
-    def test_equipment_gets_reparerad_utbytt_ingen_atgard(self):
+    def test_equipment_gets_repaired_replaced_no_action(self):
         self.assertEqual(
             self._options("EQUIPMENT"),
             [
@@ -89,7 +87,7 @@ class TestOutcomeOptions(TransactionCase):
             ],
         )
 
-    def test_surface_gets_atgardad_fornyad_ingen_atgard(self):
+    def test_surface_gets_remedied_renewed_no_action(self):
         self.assertEqual(
             self._options("SURFACE"),
             [
@@ -105,28 +103,28 @@ class TestOutcomeOptions(TransactionCase):
 
 @tagged("onecore")
 class TestRegisterOutcomes(MarkDoneCase):
-    def test_one_save_stores_outcomes_posts_summary_and_moves_to_utford(self):
+    def test_one_save_stores_outcomes_posts_summary_and_moves_to_done(self):
         request = self._request(_link_vals(), _surface_vals())
-        frys = request.component_ids.filtered(lambda c: c.component_name == "Frys")
-        golv = request.component_ids.filtered(lambda c: c.component_name == "Golv")
+        fridge = request.component_ids.filtered(lambda c: c.component_name == "Frys")
+        floor = request.component_ids.filtered(lambda c: c.component_name == "Golv")
         messages_before = self._messages(request)
 
         self._register(
             request,
             [
-                {"id": frys.id, "outcome": "REPAIRED", "note": "  Bytt termostat "},
-                {"id": golv.id, "outcome": "RENEWED", "note": ""},
+                {"id": fridge.id, "outcome": "REPAIRED", "note": "  Bytt termostat "},
+                {"id": floor.id, "outcome": "RENEWED", "note": ""},
             ],
         )
 
-        self.assertEqual(request.stage_id, self.utford)
+        self.assertEqual(request.stage_id, self.done_stage)
         self.assertTrue(request.performed_date)
-        self.assertEqual(frys.outcome, "REPAIRED")
-        self.assertEqual(frys.outcome_note, "Bytt termostat")
-        self.assertEqual(golv.outcome, "RENEWED")
-        self.assertFalse(golv.outcome_note)
+        self.assertEqual(fridge.outcome, "REPAIRED")
+        self.assertEqual(fridge.outcome_note, "Bytt termostat")
+        self.assertEqual(floor.outcome, "RENEWED")
+        self.assertFalse(floor.outcome_note)
         self.assertEqual(
-            (frys | golv).outcome_user_id, self.internal_user
+            (fridge | floor).outcome_user_id, self.internal_user
         )
 
         new_messages = self._messages(request) - messages_before
@@ -153,7 +151,7 @@ class TestRegisterOutcomes(MarkDoneCase):
 
     def _assert_nothing_saved(self, request, messages_before):
         self.env.invalidate_all()
-        self.assertNotEqual(request.stage_id, self.utford)
+        self.assertNotEqual(request.stage_id, self.done_stage)
         self.assertFalse(request.component_ids.filtered("outcome"))
         self.assertFalse(request.component_ids.outcome_user_id)
         self.assertEqual(self._messages(request), messages_before)
@@ -193,35 +191,33 @@ class TestRegisterOutcomes(MarkDoneCase):
         request = self._request(_link_vals())
         component = request.component_ids
 
-        for outcomes, row_ids in (
-            ([{"id": [component.id], "outcome": "REPAIRED"}], [component.id]),
-            ([{"id": component.id, "outcome": ["REPAIRED"]}], [component.id]),
-            ([{"id": component.id, "outcome": "REPAIRED"}], [[component.id]]),
-            (["REPAIRED"], [component.id]),
-            (5, [component.id]),
-            (None, [component.id]),
-            ("REPAIRED", [component.id]),
-            ({"id": component.id, "outcome": "REPAIRED"}, [component.id]),
-            ([{"id": component.id, "outcome": "REPAIRED"}], 5),
+        for outcomes in (
+            [{"id": [component.id], "outcome": "REPAIRED"}],
+            [{"id": component.id, "outcome": ["REPAIRED"]}],
+            ["REPAIRED"],
+            5,
+            None,
+            "REPAIRED",
+            {"id": component.id, "outcome": "REPAIRED"},
         ):
-            with self.subTest(outcomes=outcomes, row_ids=row_ids):
+            with self.subTest(outcomes=outcomes):
                 with self.assertRaises(UserError):
-                    self._register(request, outcomes, row_ids=row_ids)
+                    self._register(request, outcomes)
 
         self.assertFalse(request.component_ids.filtered("outcome"))
 
-    def test_contractor_on_their_teams_arende_registers_outcomes(self):
+    def test_contractor_on_their_teams_request_registers_outcomes(self):
         contractor = create_external_contractor_user(self.env)
         team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
         request = self._request(_link_vals(), maintenance_team_id=team.id)
 
         self._register(request, self._answers(request, "NO_ACTION"), user=contractor)
 
-        self.assertEqual(request.stage_id, self.utford)
+        self.assertEqual(request.stage_id, self.done_stage)
         self.assertEqual(request.component_ids.outcome, "NO_ACTION")
         self.assertEqual(request.component_ids.outcome_user_id, contractor)
 
-    def test_contractor_is_refused_once_utford(self):
+    def test_contractor_is_refused_once_done(self):
         contractor = create_external_contractor_user(self.env)
         team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
         request = self._request(_link_vals(), maintenance_team_id=team.id)
@@ -232,7 +228,7 @@ class TestRegisterOutcomes(MarkDoneCase):
 
         self.assertFalse(request.component_ids.outcome)
 
-    def test_internal_user_is_refused_once_utford(self):
+    def test_internal_user_is_refused_once_done(self):
         request = self._request(_link_vals())
         self._register(request, self._answers(request, "REPAIRED"))
 
@@ -241,20 +237,20 @@ class TestRegisterOutcomes(MarkDoneCase):
 
         self.assertEqual(request.component_ids.outcome, "REPAIRED")
 
-    def test_arende_that_isnt_a_lagenhet_is_refused(self):
+    def test_request_that_isnt_an_apartment_is_refused(self):
         request = create_maintenance_request(self.env, space_caption="Tvättstuga")
 
         with self.assertRaises(UserError):
             self._register(request, [])
 
-    def test_inactive_arende_is_refused(self):
+    def test_archived_request_is_refused(self):
         request = self._request(_link_vals())
         request.with_user(self.internal_user).write({"archive": True})
 
         with self.assertRaises(UserError):
             self._register(request, self._answers(request))
 
-        self.assertNotEqual(request.stage_id, self.utford)
+        self.assertNotEqual(request.stage_id, self.done_stage)
 
     def test_line_breaks_in_a_note_are_kept_in_the_chatter(self):
         request = self._request(_link_vals())
@@ -274,17 +270,17 @@ class TestRegisterOutcomes(MarkDoneCase):
         request = self._request(
             _link_vals(), _link_vals("comp-borttagen", "Diskmaskin")
         )
-        frys = request.component_ids.filtered(lambda c: c.component_name == "Frys")
-        removed = request.component_ids - frys
+        fridge = request.component_ids.filtered(lambda c: c.component_name == "Frys")
+        removed = request.component_ids - fridge
 
         for outcomes in (
-            [{"id": frys.id, "outcome": "REPAIRED"}],
+            [{"id": fridge.id, "outcome": "REPAIRED"}],
             [
-                {"id": frys.id, "outcome": "REPAIRED"},
+                {"id": fridge.id, "outcome": "REPAIRED"},
                 {"id": removed.id, "outcome": ""},
             ],
             [
-                {"id": frys.id, "outcome": "REPAIRED"},
+                {"id": fridge.id, "outcome": "REPAIRED"},
                 {"id": removed.id, "outcome": False},
             ],
         ):
@@ -326,37 +322,31 @@ class TestRegisterOutcomes(MarkDoneCase):
 
     def test_changed_components_are_refused(self):
         request = self._request(_link_vals(), _link_vals("comp-spis", "Spis"))
-        frys, spis = request.component_ids.sorted("component_name")
+        stove = request.component_ids.filtered(lambda c: c.component_name == "Spis")
         answers = self._answers(request)
 
-        with self.subTest("a component removed since the flow opened"):
-            with self.assertRaises(UserError):
-                self._register(request, answers[:1], row_ids=[frys.id])
-
         with self.subTest("a component added since the flow opened"):
-            with self.assertRaises(UserError):
-                self._register(
-                    request, answers, row_ids=[frys.id, spis.id, spis.id + 1000]
-                )
+            with self.assertRaisesRegex(UserError, "har ändrats"):
+                self._register(request, answers[:1])
 
-        with self.subTest("an outcome for a component not on the ärende"):
-            with self.assertRaises(UserError):
+        with self.subTest("an answer for a component not on the ärende"):
+            with self.assertRaisesRegex(UserError, "har ändrats"):
                 self._register(
-                    request, answers + [{"id": spis.id + 1000, "outcome": "REPAIRED"}]
+                    request, answers + [{"id": stove.id + 1000, "outcome": "REPAIRED"}]
                 )
 
         self.assertFalse(request.component_ids.filtered("outcome"))
 
-    def test_arende_without_components_is_refused(self):
+    def test_request_without_components_is_refused(self):
         # It goes to Utförd from the status bar instead
         request = self._request()
 
         with self.assertRaises(UserError):
             self._register(request, [])
 
-        self.assertNotEqual(request.stage_id, self.utford)
+        self.assertNotEqual(request.stage_id, self.done_stage)
 
-    def test_user_without_access_to_arenden_is_refused(self):
+    def test_user_without_access_to_requests_is_refused(self):
         request = self._request(_link_vals())
         portal_user = new_test_user(
             self.env, login="portal_mark_done", groups="base.group_portal"
@@ -372,13 +362,13 @@ class TestOutcomeFields(MarkDoneCase):
 
     def test_outcome_that_doesnt_fit_the_category_type_is_refused(self):
         request = self._request(_link_vals(), _surface_vals())
-        frys = request.component_ids.filtered(lambda c: c.component_name == "Frys")
-        golv = request.component_ids - frys
+        fridge = request.component_ids.filtered(lambda c: c.component_name == "Frys")
+        floor = request.component_ids - fridge
 
         with self.assertRaises(ValidationError):
-            frys.with_user(self.internal_user).write({"outcome": "RENEWED"})
+            fridge.with_user(self.internal_user).write({"outcome": "RENEWED"})
         with self.assertRaises(ValidationError):
-            golv.with_user(self.internal_user).write({"outcome": "REPAIRED"})
+            floor.with_user(self.internal_user).write({"outcome": "REPAIRED"})
 
     def test_outcome_user_is_whoever_writes_the_outcome(self):
         other = create_internal_user(self.env)
@@ -464,12 +454,12 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertFalse(result["error"])
         self.assertFalse(result["contractor"])
-        golv, frys = request.component_ids
+        floor, fridge = request.component_ids
         self.assertEqual(
             result["components"],
             [
                 {
-                    "id": golv.id,
+                    "id": floor.id,
                     "name": "Golv",
                     "subtype_name": "Linoleum",
                     "space_name": "Kök",
@@ -483,7 +473,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
                     "outcome_note": "",
                 },
                 {
-                    "id": frys.id,
+                    "id": fridge.id,
                     "name": "Frys",
                     "subtype_name": "",
                     "space_name": "Badrum",
@@ -525,7 +515,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertIn("Ingen resurs är tilldelad", result["error"])
 
-    def test_explains_that_the_arende_is_already_utford(self):
+    def test_explains_that_the_request_is_already_done(self):
         request = self._request(_link_vals())
         self._move(request, "maintenance.stage_5")
 
@@ -533,7 +523,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertIn("redan", result["error"])
 
-    def test_explains_that_the_arende_is_inactive(self):
+    def test_explains_that_the_request_is_archived(self):
         request = self._request(_link_vals())
         request.with_user(self.internal_user).write({"archive": True})
 
@@ -541,7 +531,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertIn("inaktivt", result["error"])
 
-    def test_explains_that_the_user_cant_change_the_arende(self):
+    def test_explains_that_the_user_cant_change_the_request(self):
         request = self._request(_link_vals())
         readers = self.env["res.groups"].create({"name": "Läser ärenden"})
         self.env["ir.model.access"].create(
@@ -560,7 +550,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
         self.assertIn("behörighet", result["error"])
         self.assertEqual(result["components"], [])
 
-    def test_reregistering_a_reopened_arende_credits_only_changed_work(self):
+    def test_reregistering_a_reopened_request_credits_only_changed_work(self):
         other_user = create_internal_user(self.env)
         request = self._request(_link_vals(), _surface_vals())
         fridge = request.component_ids.filtered(lambda c: c.component_name == "Frys")
@@ -586,7 +576,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
         self.assertEqual(fridge.outcome_user_id, self.internal_user)
         self.assertEqual(floor.outcome_user_id, other_user)
 
-    def test_returns_the_stored_outcomes_of_a_reopened_arende(self):
+    def test_returns_the_stored_outcomes_of_a_reopened_request(self):
         request = self._request(_link_vals())
         self._register(request, self._answers(request, "REPLACED", "Ny frys"))
         self._move(request, "maintenance.stage_3")
@@ -599,21 +589,21 @@ class TestCheckCanMarkDone(MarkDoneCase):
             ("REPLACED", "Ny frys"),
         )
 
-    def test_explains_that_the_arende_has_no_components(self):
+    def test_explains_that_the_request_has_no_components(self):
         request = self._request()
 
         result = self._check(request)
 
         self.assertIn("inga valda komponenter", result["error"])
 
-    def test_explains_that_only_lagenhet_arenden_have_it(self):
+    def test_explains_that_only_apartment_requests_have_it(self):
         request = create_maintenance_request(self.env, space_caption="Tvättstuga")
 
         result = self._check(request)
 
         self.assertIn("lägenhet", result["error"])
 
-    def test_user_without_access_to_arenden_is_refused(self):
+    def test_user_without_access_to_requests_is_refused(self):
         request = self._request(_link_vals())
         portal_user = new_test_user(
             self.env, login="portal_check_mark_done", groups="base.group_portal"
@@ -625,7 +615,7 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
 @tagged("onecore")
 class TestCanMarkDone(MarkDoneCase):
-    def test_saved_lagenhet_arende_can_be_marked_done(self):
+    def test_saved_apartment_request_can_be_marked_done(self):
         request = self._request(_link_vals())
 
         self.assertTrue(request.can_mark_done)
@@ -656,24 +646,24 @@ class TestCanMarkDone(MarkDoneCase):
 
         self.assertTrue(in_form.can_mark_done)
 
-    def test_not_on_an_inactive_arende(self):
+    def test_not_on_an_archived_request(self):
         request = self._request(_link_vals())
 
         request.with_user(self.internal_user).write({"archive": True})
 
         self.assertFalse(request.can_mark_done)
 
-    def test_not_on_an_unsaved_arende(self):
+    def test_not_on_an_unsaved_request(self):
         record = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
 
         self.assertFalse(record.can_mark_done)
 
-    def test_not_on_an_arende_that_isnt_a_lagenhet(self):
+    def test_not_on_a_request_that_isnt_an_apartment(self):
         request = create_maintenance_request(self.env, space_caption="Tvättstuga")
 
         self.assertFalse(request.can_mark_done)
 
-    def test_not_in_utford_avslutad_or_atersand(self):
+    def test_not_in_done_closed_or_returned(self):
         for xml_id in (
             "maintenance.stage_5",
             "maintenance.stage_6",
@@ -688,34 +678,64 @@ class TestCanMarkDone(MarkDoneCase):
 
 
 @tagged("onecore")
-class TestMissingDoneStage(MarkDoneCase):
-    """Without the Utförd stage's xml id the button stays hidden and the flow
+class TestDoneStageLookup(MarkDoneCase):
+    """The Utförd stage is found by its xml id, or by its seeded name when the
+    xml id is missing. Without either, the button is hidden and the flow
     refuses with a message instead of raising."""
 
-    def setUp(self):
-        super().setUp()
-        self.request = self._request(_link_vals())
+    def _drop_done_stage_xml_id(self):
         self.env["ir.model.data"].search(
             [("module", "=", "maintenance"), ("name", "=", "stage_5")]
         ).unlink()
         self.env.registry.clear_cache()
         self.addCleanup(self.env.registry.clear_cache)
-        self.request.invalidate_recordset()
 
-    def test_button_is_hidden(self):
-        self.assertFalse(self.request.can_mark_done)
+    def test_a_missing_xml_id_falls_back_to_the_name(self):
+        request = self._request(_link_vals())
+        self._drop_done_stage_xml_id()
+        request.invalidate_recordset()
 
-    def test_check_explains_it(self):
-        result = self.request.with_user(self.internal_user).check_can_mark_done()
+        self.assertTrue(request.can_mark_done)
+        self._register(request, self._answers(request))
+        self.assertEqual(request.stage_id, self.done_stage)
+
+    def test_contractors_stay_locked_by_name_when_the_xml_id_is_missing(self):
+        contractor = create_external_contractor_user(self.env)
+        team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
+        request = self._request(_link_vals(), maintenance_team_id=team.id)
+        self._move(request, "maintenance.stage_5")
+        self._drop_done_stage_xml_id()
+
+        with self.assertRaisesRegex(UserError, "från Utförd"):
+            request.with_user(contractor).write(
+                {"stage_id": self.env.ref("maintenance.stage_3").id}
+            )
+
+    def _without_done_stage(self):
+        request = self._request(_link_vals())
+        self._drop_done_stage_xml_id()
+        self.done_stage.name = "Klart"
+        request.invalidate_recordset()
+        return request
+
+    def test_without_the_stage_the_button_is_hidden(self):
+        self.assertFalse(self._without_done_stage().can_mark_done)
+
+    def test_without_the_stage_the_check_explains_it(self):
+        request = self._without_done_stage()
+
+        result = request.with_user(self.internal_user).check_can_mark_done()
 
         self.assertIn("Utförd hittas inte", result["error"])
         self.assertEqual(result["components"], [])
 
-    def test_register_is_refused_with_a_message(self):
-        with self.assertRaises(UserError):
-            self._register(self.request, self._answers(self.request))
+    def test_without_the_stage_register_is_refused_with_a_message(self):
+        request = self._without_done_stage()
 
-        self.assertFalse(self.request.component_ids.filtered("outcome"))
+        with self.assertRaisesRegex(UserError, "Utförd hittas inte"):
+            self._register(request, self._answers(request))
+
+        self.assertFalse(request.component_ids.filtered("outcome"))
 
 
 @tagged("onecore")

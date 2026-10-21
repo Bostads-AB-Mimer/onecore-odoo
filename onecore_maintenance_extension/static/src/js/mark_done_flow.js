@@ -2,6 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { useDebounced } from "@web/core/utils/timing";
 import { browser } from "@web/core/browser/browser";
 import { user } from "@web/core/user";
 import { RPCError } from "@web/core/network/rpc";
@@ -48,14 +49,8 @@ function removeOldDrafts() {
 }
 
 /**
- * "Markera som utförd": one screen per component of the ärende to choose its
- * outcome and note, then a summary. Only for ärenden with components; the
- * others go to Utförd from the status bar. Spara stores the outcomes, posts a summary
- * to the chatter and moves the ärende to Utförd in one server call.
- *
- * The flow starts from the outcomes already stored on the components. Answers
- * are kept in the browser's localStorage until Spara succeeds, so a flow
- * closed halfway comes back on the same device.
+ * "Markera som utförd": a step per component (outcome and note), then a
+ * summary whose Spara registers the outcomes and moves the ärende to Utförd.
  */
 export class MarkDoneDialog extends Component {
     static template = "onecore_maintenance_extension.MarkDoneDialog";
@@ -74,8 +69,7 @@ export class MarkDoneDialog extends Component {
     };
 
     setup() {
-        // Not useService: its calls never settle once the dialog is closed,
-        // and a save that finishes after that must still clean up
+        // Not useService: a save must still settle after the dialog closes
         this.orm = this.env.services.orm;
         this.bodyRef = useRef("body");
         this.draftKey = `${DRAFT_PREFIX}${user.userId}:${this.props.resId}`;
@@ -87,9 +81,9 @@ export class MarkDoneDialog extends Component {
             error: "",
         });
         this.state.index = this.firstOpenStepIndex();
+        this.writeDraftSoon = useDebounced(this.writeDraft, 300, { execBeforeUnmount: true });
 
-        // Each step starts at the top on a phone. A block body: newer browsers
-        // return a promise from scrollTo, which Owl would call as a cleanup.
+        // Each step starts at the top. Block body: scrollTo can return a promise
         useEffect(
             () => {
                 this.bodyRef.el?.closest(".modal-body")?.scrollTo(0, 0);
@@ -98,11 +92,7 @@ export class MarkDoneDialog extends Component {
         );
     }
 
-    /**
-     * The steps: one per component, then the summary. Built on every render,
-     * so a step that depends on an answer can be added here. The final step
-     * has Spara.
-     */
+    /** A step per component, then the summary, which has Spara. */
     get steps() {
         const steps = this.props.components.map((component, position) => ({
             kind: "component",
@@ -163,7 +153,7 @@ export class MarkDoneDialog extends Component {
 
     setNote(component, note) {
         this.state.answers[component.id] = { ...this.answerFor(component), note };
-        this.writeDraft();
+        this.writeDraftSoon();
     }
 
     goTo(index) {
@@ -194,14 +184,12 @@ export class MarkDoneDialog extends Component {
             outcome: this.answerFor(component).outcome,
             note: this.answerFor(component).note || "",
         }));
-        const rowIds = components.map((component) => component.id);
         this.state.saving = true;
         this.state.error = "";
         try {
             await this.orm.call("maintenance.request", "action_register_outcomes", [
                 [resId],
                 outcomes,
-                rowIds,
             ]);
         } catch (error) {
             if (error instanceof RPCError && error.exceptionName?.startsWith("odoo.exceptions.")) {
@@ -221,9 +209,8 @@ export class MarkDoneDialog extends Component {
     }
 
     /**
-     * The server refused Spara. When the ärende can no longer be marked as
-     * utförd (e.g. it already is), the answers are dropped and the dialog
-     * closes; otherwise the message is shown and the answers stay.
+     * Spara was refused: drop the answers and close when the ärende can no
+     * longer be marked as utförd, otherwise show the message.
      */
     async refused(message) {
         let closed = false;
@@ -242,12 +229,8 @@ export class MarkDoneDialog extends Component {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Answers: the outcomes stored on the components, and the draft in
-    // localStorage, which wins for a component unless its stored outcome
-    // changed since the draft was written. Storage can be blocked or full:
-    // the flow then just runs without a draft.
-    // ------------------------------------------------------------------------
+    // Answers: the stored outcomes, overridden by a draft in localStorage for
+    // components whose stored outcome hasn't changed since the draft
 
     /** A component's stored outcome, as kept in the draft. */
     storedOf(component) {
@@ -324,6 +307,7 @@ export class MarkDoneDialog extends Component {
     }
 
     clearDraft() {
+        this.writeDraftSoon.cancel();
         try {
             browser.localStorage.removeItem(this.draftKey);
         } catch {
@@ -332,11 +316,7 @@ export class MarkDoneDialog extends Component {
     }
 }
 
-/**
- * The "Markera som utförd" button in the form header. Pending changes are
- * saved first, after asking, so the flow and the server see the same
- * components.
- */
+/** The "Markera som utförd" button in the form header. */
 export class MarkDoneButton extends Component {
     static template = "onecore_maintenance_extension.MarkDoneButton";
     static props = { ...standardWidgetProps };

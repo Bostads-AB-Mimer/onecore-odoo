@@ -423,8 +423,9 @@ class OneCoreMaintenanceRequest(
 
     @api.depends("space_caption", "stage_id", "archive", "component_ids")
     def _compute_can_mark_done(self):
-        done_stage = self._mark_done_stage()
-        closed_stages = self._mark_done_closed_stages()
+        stage_manager = MaintenanceStageManager(self.env)
+        done_stage = stage_manager.done_stage()
+        closed_stages = stage_manager.restricted_stages()
         for record in self:
             # _origin: in an onchange the record itself has no id yet
             record.can_mark_done = bool(
@@ -842,31 +843,17 @@ class OneCoreMaintenanceRequest(
     # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
     # ============================================================================
 
-    def _mark_done_stage(self):
-        """The Utförd stage by its fixed xml id, or an empty recordset when
-        the xml id is missing."""
-        return self.env.ref("maintenance.stage_5", raise_if_not_found=False) or self.env[
-            "maintenance.stage"
-        ]
-
-    def _mark_done_closed_stages(self):
-        """Utförd, Avslutad and Återsänd, by their fixed xml ids. A missing
-        xml id is skipped: this runs on every form read."""
-        stages = MaintenanceStageManager(self.env)._get_atersand_stage()
-        stages |= self._mark_done_stage()
-        stages |= self.env.ref("maintenance.stage_6", raise_if_not_found=False) or stages
-        return stages
-
     def _mark_done_refusal(self):
         """Why the ärende can't be marked as utförd from the button, or False."""
         self.ensure_one()
+        stage_manager = MaintenanceStageManager(self.env)
         if self.space_caption != "Lägenhet":
             return "Markera som utförd finns bara för ärenden på en lägenhet."
         if self.archive:
             return "Ärendet är inaktivt."
-        if not self._mark_done_stage():
+        if not stage_manager.done_stage():
             return "Statusen Utförd hittas inte. Kontakta en administratör."
-        if self.stage_id in self._mark_done_closed_stages():
+        if self.stage_id in stage_manager.restricted_stages():
             return f"Ärendet är redan {self.stage_id.name}."
         if not self.component_ids:
             return (
@@ -887,13 +874,9 @@ class OneCoreMaintenanceRequest(
         if not error:
             error = self._mark_done_refusal()
         if not error:
-            done_stage = self._mark_done_stage()
-            # The checks write() runs on the move to Utförd, without moving
+            # A dry run of the move to Utförd
             try:
-                ExternalContractorService(self.env).validate_stage_transition(
-                    self, done_stage.id
-                )
-                MaintenanceStageManager(self.env).handle_stage_change(self, done_stage.id)
+                self._check_stage_change(MaintenanceStageManager(self.env).done_stage().id)
             except UserError as refused:
                 error = refused.args[0]
         components = self.env["maintenance.request.component"] if error else self.component_ids
@@ -915,16 +898,16 @@ class OneCoreMaintenanceRequest(
             ],
         }
 
-    def action_register_outcomes(self, outcomes, row_ids):
+    def action_register_outcomes(self, outcomes):
         """Store an outcome on every component, post a summary to the chatter
         and move the ärende to Utförd, all in one transaction.
 
-        :param outcomes: [{"id": component id, "outcome": key, "note": text}]
-        :param row_ids: ids of the components the flow was opened with
+        :param outcomes: [{"id": component id, "outcome": key, "note": text}],
+            one per component on the ärende
         """
         self.ensure_one()
         self.check_access("write")
-        if not isinstance(outcomes, list) or not isinstance(row_ids, list):
+        if not isinstance(outcomes, list):
             raise UserError(
                 "Utfallen kunde inte läsas. Stäng och öppna Markera som utförd igen."
             )
@@ -938,16 +921,16 @@ class OneCoreMaintenanceRequest(
             for answer in outcomes
             if isinstance(answer, dict) and isinstance(answer.get("id"), int)
         }
-        row_ids = {row_id for row_id in row_ids if isinstance(row_id, int)}
-        if row_ids != set(components.ids) or not set(answers) <= set(components.ids):
+        if set(answers) != set(components.ids):
             raise UserError(
                 "Komponenterna på ärendet har ändrats sedan du började. Stäng och "
                 "öppna Markera som utförd igen."
             )
 
-        updates = []
+        # Components with the same outcome and note, written together
+        groups = {}
         for component in components:
-            answer = answers.get(component.id, {})
+            answer = answers[component.id]
             outcome = answer.get("outcome")
             if not outcome:
                 raise UserError(f"Välj ett utfall för {component._summary_name()}.")
@@ -958,21 +941,21 @@ class OneCoreMaintenanceRequest(
                     f"Utfallet går inte att välja för {component._summary_name()}."
                 )
             note = answer.get("note")
-            note = note.strip() if isinstance(note, str) else ""
-            # outcome_user_id is set by the component model
-            updates.append((component, {"outcome": outcome, "outcome_note": note or False}))
+            key = (outcome, (note.strip() if isinstance(note, str) else "") or False)
+            groups[key] = groups.get(key, components.browse()) | component
 
         # One unit: a refused move to Utförd also undoes the outcomes and the
         # note, for callers that catch the error too
         with self.env.cr.savepoint():
-            for component, values in updates:
-                component.write(values)
+            for (outcome, note), group in groups.items():
+                # outcome_user_id is set by the component model
+                group.write({"outcome": outcome, "outcome_note": note})
             self.message_post(
                 body=self._outcome_summary(components),
                 message_type="notification",
                 subtype_xmlid="mail.mt_note",
             )
-            self.write({"stage_id": self._mark_done_stage().id})
+            self.write({"stage_id": MaintenanceStageManager(self.env).done_stage().id})
         return True
 
     def _outcome_summary(self, components):
@@ -1379,6 +1362,13 @@ class OneCoreMaintenanceRequest(
         # overridden to suppress all automatic maintenance activity creation
         return maintenance_requests
 
+    def _check_stage_change(self, stage_id, vals=None):
+        """The checks a move to stage_id runs: the contractor's transition and
+        the stage manager's rules. Returns the field updates the move brings.
+        Called by write() and, as a dry run, before "Markera som utförd"."""
+        ExternalContractorService(self.env).validate_stage_transition(self, stage_id)
+        return MaintenanceStageManager(self.env).handle_stage_change(self, stage_id, vals)
+
     def write(self, vals):
         # Check if we're in the initial creation phase
         skip_tracking = self.env.context.get("creating_records")
@@ -1388,13 +1378,7 @@ class OneCoreMaintenanceRequest(
 
         # Handle stage transitions (always validate, even during creation)
         if "stage_id" in vals:
-            external_contractor_service.validate_stage_transition(
-                self, vals["stage_id"]
-            )
-            stage_updates = stage_manager.handle_stage_change(
-                self, vals["stage_id"], vals
-            )
-            vals.update(stage_updates)
+            vals.update(self._check_stage_change(vals["stage_id"], vals))
 
         # MIM-486: entering Återsänd clears the assigned resource and hands the
         # request back to the orderer's team. The team switch happens after
