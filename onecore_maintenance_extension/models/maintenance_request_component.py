@@ -53,7 +53,7 @@ class MaintenanceRequestComponent(models.Model):
     note = fields.Text("Anteckning")
 
     # Registered with "Markera som utförd". outcome_user_id is set by the
-    # server to whoever writes the outcome.
+    # server to whoever changes the outcome or its note.
     outcome = fields.Selection(OUTCOMES, string="Utfall")
     outcome_note = fields.Text("Vad som gjordes")
     outcome_user_id = fields.Many2one("res.users", string="Utfall registrerat av")
@@ -136,15 +136,21 @@ class MaintenanceRequestComponent(models.Model):
         self._check_contractor_may_change(requests)
         if self.env.su:
             return super().write(vals)
-        # outcome_user_id follows the outcome: set on the components whose
-        # outcome changes, kept where the same outcome is written again
+        # outcome_user_id follows the work: set on the components whose
+        # outcome or note changes, kept where both are written unchanged
         vals = {key: value for key, value in vals.items() if key != "outcome_user_id"}
-        changed = self.browse()
-        if "outcome" in vals:
-            changed = self.filtered(lambda c: c.outcome != (vals["outcome"] or False))
+        changed = self.filtered(lambda c: c._outcome_changes(vals))
         result = super().write(vals)
         changed._stamp_outcome_user()
         return result
+
+    def _outcome_changes(self, vals):
+        """Whether vals change this component's outcome or its note."""
+        self.ensure_one()
+        return any(
+            field in vals and (self[field] or False) != (vals[field] or False)
+            for field in ("outcome", "outcome_note")
+        )
 
     def unlink(self):
         self._check_contractor_may_change(self.maintenance_request_id)

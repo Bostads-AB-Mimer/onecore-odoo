@@ -394,18 +394,40 @@ class TestOutcomeFields(MarkDoneCase):
         component.write({"outcome": False})
         self.assertFalse(component.outcome_user_id)
 
-    def test_same_outcome_written_again_keeps_its_author(self):
-        other = create_internal_user(self.env)
+    def _registered_by_internal_user(self):
         request = self._request(_link_vals())
-        request.component_ids.with_user(self.internal_user).write({"outcome": "REPAIRED"})
-
-        request.component_ids.with_user(other).write(
-            {"outcome": "REPAIRED", "outcome_note": "Kontrollerad"}
+        request.component_ids.with_user(self.internal_user).write(
+            {"outcome": "REPAIRED", "outcome_note": "Bytt packning"}
         )
+        return request
+
+    def test_unchanged_outcome_and_note_keep_their_author(self):
+        other_user = create_internal_user(self.env)
+        request = self._registered_by_internal_user()
+
+        request.component_ids.with_user(other_user).write(
+            {"outcome": "REPAIRED", "outcome_note": "Bytt packning"}
+        )
+
         self.assertEqual(request.component_ids.outcome_user_id, self.internal_user)
 
-        request.component_ids.with_user(other).write({"outcome": "REPLACED"})
-        self.assertEqual(request.component_ids.outcome_user_id, other)
+    def test_a_new_note_on_the_same_outcome_moves_the_author(self):
+        other_user = create_internal_user(self.env)
+        request = self._registered_by_internal_user()
+
+        request.component_ids.with_user(other_user).write(
+            {"outcome": "REPAIRED", "outcome_note": "Bytt packning igen"}
+        )
+
+        self.assertEqual(request.component_ids.outcome_user_id, other_user)
+
+    def test_a_new_outcome_moves_the_author(self):
+        other_user = create_internal_user(self.env)
+        request = self._registered_by_internal_user()
+
+        request.component_ids.with_user(other_user).write({"outcome": "REPLACED"})
+
+        self.assertEqual(request.component_ids.outcome_user_id, other_user)
 
     def test_outcome_user_on_create_ignores_a_context_default(self):
         other = create_internal_user(self.env)
@@ -537,6 +559,32 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertIn("behörighet", result["error"])
         self.assertEqual(result["components"], [])
+
+    def test_reregistering_a_reopened_arende_credits_only_changed_work(self):
+        other_user = create_internal_user(self.env)
+        request = self._request(_link_vals(), _surface_vals())
+        fridge = request.component_ids.filtered(lambda c: c.component_name == "Frys")
+        floor = request.component_ids - fridge
+        self._register(
+            request,
+            [
+                {"id": fridge.id, "outcome": "REPAIRED", "note": "Första besöket"},
+                {"id": floor.id, "outcome": "RENEWED", "note": "Första besöket"},
+            ],
+        )
+        self._move(request, "maintenance.stage_3")
+
+        self._register(
+            request,
+            [
+                {"id": fridge.id, "outcome": fridge.outcome, "note": "Första besöket"},
+                {"id": floor.id, "outcome": "RENEWED", "note": "Andra besöket"},
+            ],
+            user=other_user,
+        )
+
+        self.assertEqual(fridge.outcome_user_id, self.internal_user)
+        self.assertEqual(floor.outcome_user_id, other_user)
 
     def test_returns_the_stored_outcomes_of_a_reopened_arende(self):
         request = self._request(_link_vals())
