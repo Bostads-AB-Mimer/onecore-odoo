@@ -5,8 +5,10 @@ import json
 import time
 
 from markupsafe import Markup
+from psycopg2.errors import UniqueViolation
 from odoo import Command, api, fields, models, _
 from odoo.exceptions import AccessError, UserError
+from odoo.tools import mute_logger
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
@@ -47,6 +49,30 @@ _logger = logging.getLogger(__name__)
 # every form read (web_save re-reads included). Worst-case staleness = TTL.
 PEST_CONTROL_CACHE_TTL = 300  # seconds
 _pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
+
+# Why OneCore component ids got no row on an ärende: the text for the log and
+# the chatter note, where {components} is e.g. "2 komponenter"
+UNLINKED_COMPONENT_REASONS = {
+    "no_rental_object": (
+        "no rental object",
+        "{components} kunde inte kopplas till ärendet eftersom det saknar hyresobjekt.",
+    ),
+    "onecore_down": (
+        "OneCore didn't return the rooms",
+        "{components} kunde inte kopplas till ärendet eftersom OneCore inte svarade. "
+        "Försök igen senare under Rum och komponenter.",
+    ),
+    "rooms_not_loaded": (
+        "not in the rooms that loaded; some rooms failed to load",
+        "{components} kunde inte kopplas till ärendet eftersom alla rum inte kunde "
+        "hämtas från OneCore. Försök igen senare under Rum och komponenter.",
+    ),
+    "not_found": (
+        "not found in OneCore",
+        "{components} hittades inte i OneCore och kunde inte kopplas till ärendet. "
+        "Välj rätt komponenter under Rum och komponenter.",
+    ),
+}
 
 
 class OneCoreMaintenanceRequest(
@@ -799,6 +825,102 @@ class OneCoreMaintenanceRequest(
         external_contractor_service = ExternalContractorService(self.env)
         return external_contractor_service.is_external_contractor()
 
+    def _link_onecore_components(self, component_ids):
+        """Add a component row for each OneCore component id not yet linked.
+
+        Rows get the same values as when the component is checked in the room
+        grid. Ids OneCore doesn't return for the rental object are skipped
+        with a note in the chatter; a later call tries them again. Never
+        raises because of OneCore. Runs as the calling user, so the
+        component rules apply as for a component_ids write.
+        """
+        self.ensure_one()
+        if not isinstance(component_ids, (list, tuple)):
+            _logger.warning(
+                "Ignoring onecore_component_ids %r on maintenance request %s: not a list",
+                component_ids,
+                self.id,
+            )
+            return
+
+        linked = set(self.component_ids.mapped("onecore_component_id"))
+        new_ids = []
+        for component_id in component_ids:
+            if (
+                isinstance(component_id, str)
+                and component_id
+                and component_id not in linked
+                and component_id not in new_ids
+            ):
+                new_ids.append(component_id)
+        if not new_ids:
+            return
+
+        # Read the rental property from the database: a many2one given as a
+        # string id (core sends one) is cached as empty on create
+        self.invalidate_recordset(["rental_property_id", "component_rental_id"])
+        rental_id = self.component_rental_id
+        if not rental_id:
+            self._log_unlinked_components(new_ids, "no_rental_object")
+            return
+
+        service = ComponentOneCoreService(self.env)
+        result = service.load_room_components(rental_id)
+        if not result.get("ok"):
+            self._log_unlinked_components(new_ids, "onecore_down")
+            return
+
+        vals_list, missing_ids = service.link_values(result, new_ids, rental_id)
+        if vals_list:
+            self._create_component_rows(
+                [{"maintenance_request_id": self.id, **vals} for vals in vals_list]
+            )
+        if missing_ids:
+            # A missing id may be in a room that failed to load
+            all_loaded = all(room.get("loaded") for room in result.get("rooms") or [])
+            self._log_unlinked_components(
+                missing_ids, "not_found" if all_loaded else "rooms_not_loaded"
+            )
+
+    def _create_component_rows(self, vals_list):
+        """Create component rows, skipping any a concurrent transaction has
+        just created for the same component (the unique constraint)."""
+        Component = self.env["maintenance.request.component"]
+        try:
+            with mute_logger("odoo.sql_db"), self.env.cr.savepoint():
+                Component.create(vals_list)
+            return
+        except UniqueViolation:
+            pass
+        # One at a time, so the rows not created elsewhere still are
+        for vals in vals_list:
+            try:
+                with mute_logger("odoo.sql_db"), self.env.cr.savepoint():
+                    Component.create(vals)
+            except UniqueViolation:
+                _logger.info(
+                    "OneCore component %s was already linked to maintenance request %s",
+                    vals["onecore_component_id"],
+                    self.id,
+                )
+
+    def _log_unlinked_components(self, component_ids, reason):
+        """Log component ids that got no row, with a note in the chatter.
+
+        reason is a key of UNLINKED_COMPONENT_REASONS.
+        """
+        log_text, note = UNLINKED_COMPONENT_REASONS[reason]
+        _logger.warning(
+            "Could not link OneCore components %s to maintenance request %s: %s",
+            component_ids,
+            self.id,
+            log_text,
+        )
+        count = len(component_ids)
+        components = "1 komponent" if count == 1 else f"{count} komponenter"
+        # Without notifications: the same ids may come back on every resubmit
+        self._message_log(body=note.format(components=components))
+
     @api.model
     def get_room_components(self, rental_id):
         """Rooms of a rental object and their components, for the room grid.
@@ -1137,11 +1259,14 @@ class OneCoreMaintenanceRequest(
         _logger.info(f"Creating maintenance requests: {vals_list}")
 
         images = []
+        # Not a field: OneCore component ids to add as rows after create
+        onecore_component_ids = []
         for vals in vals_list:
             if "images" in vals:
                 images.append(vals.pop("images"))
             else:
                 images.append([])
+            onecore_component_ids.append(vals.pop("onecore_component_ids", None))
 
             # if not vals.get("space_caption"):
             #     vals["space_caption"] = "Tvättstuga"
@@ -1204,11 +1329,18 @@ class OneCoreMaintenanceRequest(
                     }
                 )
 
+            if onecore_component_ids[idx] is not None:
+                request._link_onecore_components(onecore_component_ids[idx])
+
         # Note: The parent's create() method calls activity_update(), which we've
         # overridden to suppress all automatic maintenance activity creation
         return maintenance_requests
 
     def write(self, vals):
+        # Not a field: OneCore component ids to add as rows after the write.
+        # Popped first, before anything reads the keys of vals.
+        onecore_component_ids = vals.pop("onecore_component_ids", None)
+
         # Check if we're in the initial creation phase
         skip_tracking = self.env.context.get("creating_records")
 
@@ -1310,6 +1442,10 @@ class OneCoreMaintenanceRequest(
         if not skip_tracking:
             self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
+
+        if onecore_component_ids is not None:
+            for record in self:
+                record._link_onecore_components(onecore_component_ids)
 
         # MIM-486: hand returned requests back to the orderer's team. Resolved
         # here, after super().write(), so a write that changes owner_user_id

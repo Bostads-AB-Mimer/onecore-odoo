@@ -21,6 +21,7 @@ from .models.services import test_external_contractor_service
 from .models.services import test_component_ai_analysis_service
 from .models.services import test_component_hierarchy_service
 from .models.services import test_component_onecore_service
+from .models import test_component_intake
 from .security import test_basic_user
 from .security import test_external_contractor
 from .models import test_maintenance_component_wizard
