@@ -198,6 +198,11 @@ class TestRegisterOutcomes(MarkDoneCase):
             ([{"id": component.id, "outcome": ["REPAIRED"]}], [component.id]),
             ([{"id": component.id, "outcome": "REPAIRED"}], [[component.id]]),
             (["REPAIRED"], [component.id]),
+            (5, [component.id]),
+            (None, [component.id]),
+            ("REPAIRED", [component.id]),
+            ({"id": component.id, "outcome": "REPAIRED"}, [component.id]),
+            ([{"id": component.id, "outcome": "REPAIRED"}], 5),
         ):
             with self.subTest(outcomes=outcomes, row_ids=row_ids):
                 with self.assertRaises(UserError):
@@ -632,6 +637,37 @@ class TestCanMarkDone(MarkDoneCase):
                 self._move(request, xml_id)
 
                 self.assertFalse(request.can_mark_done)
+
+
+@tagged("onecore")
+class TestMissingDoneStage(MarkDoneCase):
+    """Without the Utförd stage's xml id the button stays hidden and the flow
+    refuses with a message instead of raising."""
+
+    def setUp(self):
+        super().setUp()
+        self.request = self._request(_link_vals())
+        self.env["ir.model.data"].search(
+            [("module", "=", "maintenance"), ("name", "=", "stage_5")]
+        ).unlink()
+        self.env.registry.clear_cache()
+        self.addCleanup(self.env.registry.clear_cache)
+        self.request.invalidate_recordset()
+
+    def test_button_is_hidden(self):
+        self.assertFalse(self.request.can_mark_done)
+
+    def test_check_explains_it(self):
+        result = self.request.with_user(self.internal_user).check_can_mark_done()
+
+        self.assertIn("Utförd hittas inte", result["error"])
+        self.assertEqual(result["components"], [])
+
+    def test_register_is_refused_with_a_message(self):
+        with self.assertRaises(UserError):
+            self._register(self.request, self._answers(self.request))
+
+        self.assertFalse(self.request.component_ids.filtered("outcome"))
 
 
 @tagged("onecore")

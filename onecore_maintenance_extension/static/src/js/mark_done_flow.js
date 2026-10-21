@@ -376,6 +376,10 @@ export class MarkDoneButton extends Component {
             return;
         }
         if (check.error) {
+            // Shows the ärende as it is now, e.g. already Utförd from elsewhere
+            if (await this.canReload(resId)) {
+                await this.reload(resId);
+            }
             this.dialog.add(AlertDialog, {
                 title: "Kan inte markera som utförd",
                 body: check.error,
@@ -415,11 +419,20 @@ export class MarkDoneButton extends Component {
         );
     }
 
+    /**
+     * Reloads the form and its chatter. Record.load() leaves the chatter as
+     * it was; only a model load tells it to fetch new messages.
+     */
+    async reload(resId) {
+        await this.props.record.load();
+        this.env.bus.trigger("MAIL:RELOAD-THREAD", { model: "maintenance.request", id: resId });
+    }
+
     async onSaved(resId) {
         this.notification.add("Ärendet är markerat som utfört.", { type: "success" });
         // Stage, read-only fields and this button follow from the new stage
         if (await this.canReload(resId)) {
-            await this.props.record.load();
+            await this.reload(resId);
         }
     }
 
@@ -428,7 +441,7 @@ export class MarkDoneButton extends Component {
         if (!(await this.canReload(resId))) {
             return false;
         }
-        await record.load();
+        await this.reload(resId);
         if (record.data.can_mark_done) {
             return false;
         }

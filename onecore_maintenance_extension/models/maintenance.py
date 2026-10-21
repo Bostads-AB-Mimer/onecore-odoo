@@ -423,11 +423,13 @@ class OneCoreMaintenanceRequest(
 
     @api.depends("space_caption", "stage_id", "archive", "component_ids")
     def _compute_can_mark_done(self):
+        done_stage = self._mark_done_stage()
         closed_stages = self._mark_done_closed_stages()
         for record in self:
             # _origin: in an onchange the record itself has no id yet
             record.can_mark_done = bool(
-                record._origin.id
+                done_stage
+                and record._origin.id
                 and record.space_caption == "Lägenhet"
                 and record.component_ids
                 and not record.archive
@@ -840,12 +842,19 @@ class OneCoreMaintenanceRequest(
     # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
     # ============================================================================
 
+    def _mark_done_stage(self):
+        """The Utförd stage by its fixed xml id, or an empty recordset when
+        the xml id is missing."""
+        return self.env.ref("maintenance.stage_5", raise_if_not_found=False) or self.env[
+            "maintenance.stage"
+        ]
+
     def _mark_done_closed_stages(self):
         """Utförd, Avslutad and Återsänd, by their fixed xml ids. A missing
         xml id is skipped: this runs on every form read."""
         stages = MaintenanceStageManager(self.env)._get_atersand_stage()
-        for xml_id in ("maintenance.stage_5", "maintenance.stage_6"):
-            stages |= self.env.ref(xml_id, raise_if_not_found=False) or stages
+        stages |= self._mark_done_stage()
+        stages |= self.env.ref("maintenance.stage_6", raise_if_not_found=False) or stages
         return stages
 
     def _mark_done_refusal(self):
@@ -855,6 +864,8 @@ class OneCoreMaintenanceRequest(
             return "Markera som utförd finns bara för ärenden på en lägenhet."
         if self.archive:
             return "Ärendet är inaktivt."
+        if not self._mark_done_stage():
+            return "Statusen Utförd hittas inte. Kontakta en administratör."
         if self.stage_id in self._mark_done_closed_stages():
             return f"Ärendet är redan {self.stage_id.name}."
         if not self.component_ids:
@@ -870,19 +881,19 @@ class OneCoreMaintenanceRequest(
         one can get and the outcome already stored."""
         self.ensure_one()
         self.check_access("read")
-        utford = self.env.ref("maintenance.stage_5")
         error = False
         if not self.has_access("write"):
             error = "Du har inte behörighet att ändra ärendet."
         if not error:
             error = self._mark_done_refusal()
         if not error:
+            done_stage = self._mark_done_stage()
             # The checks write() runs on the move to Utförd, without moving
             try:
                 ExternalContractorService(self.env).validate_stage_transition(
-                    self, utford.id
+                    self, done_stage.id
                 )
-                MaintenanceStageManager(self.env).handle_stage_change(self, utford.id)
+                MaintenanceStageManager(self.env).handle_stage_change(self, done_stage.id)
             except UserError as refused:
                 error = refused.args[0]
         components = self.env["maintenance.request.component"] if error else self.component_ids
@@ -913,6 +924,10 @@ class OneCoreMaintenanceRequest(
         """
         self.ensure_one()
         self.check_access("write")
+        if not isinstance(outcomes, list) or not isinstance(row_ids, list):
+            raise UserError(
+                "Utfallen kunde inte läsas. Stäng och öppna Markera som utförd igen."
+            )
         refusal = self._mark_done_refusal()
         if refusal:
             raise UserError(refusal)
@@ -920,10 +935,10 @@ class OneCoreMaintenanceRequest(
         components = self.component_ids
         answers = {
             answer["id"]: answer
-            for answer in outcomes or []
+            for answer in outcomes
             if isinstance(answer, dict) and isinstance(answer.get("id"), int)
         }
-        row_ids = {row_id for row_id in row_ids or [] if isinstance(row_id, int)}
+        row_ids = {row_id for row_id in row_ids if isinstance(row_id, int)}
         if row_ids != set(components.ids) or not set(answers) <= set(components.ids):
             raise UserError(
                 "Komponenterna på ärendet har ändrats sedan du började. Stäng och "
@@ -957,7 +972,7 @@ class OneCoreMaintenanceRequest(
                 message_type="notification",
                 subtype_xmlid="mail.mt_note",
             )
-            self.write({"stage_id": self.env.ref("maintenance.stage_5").id})
+            self.write({"stage_id": self._mark_done_stage().id})
         return True
 
     def _outcome_summary(self, components):
