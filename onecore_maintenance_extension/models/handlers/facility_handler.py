@@ -16,11 +16,12 @@ class FacilityHandler(RentalObjectBaseHandler):
             facility_option = self.env["maintenance.facility.option"].create(
                 {
                     "user_id": self.env.user.id,
+                    "facility_id": facility.get("id"),
                     "name": facility.get("name", "Namn saknas"),
                     "code": facility.get("code"),
                     "type_name": facility.get("type", {}).get("name"),
                     "type_code": facility.get("type", {}).get("code"),
-                    "area": str(facility.get("area", "")),
+                    "area": facility.get("areaSize"),
                     "building_code": facility.get("building", {}).get("code"),
                     "building_name": facility.get("building", {}).get("name"),
                     "property_code": facility.get("property", {}).get("code"),

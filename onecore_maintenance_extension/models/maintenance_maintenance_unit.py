@@ -10,6 +10,7 @@ class OnecoreMaintenanceMaintenanceUnitOption(models.Model):
     type = fields.Char("Utrymmestyp")
     code = fields.Char("Utrymmeskod", required=True)
     caption = fields.Char("Utrymme", required=True)
+    property_object_id = fields.Char("Objekt ID")
     property_option_id = fields.Many2one(
         "maintenance.property.option", string="Property Option"
     )
@@ -31,6 +32,7 @@ class OnecoreMaintenanceMaintenanceUnit(models.Model):
     type = fields.Char("Utrymmestyp")  # TODO vill vi nullable?
     caption = fields.Char("Utrymme", required=True)
     code = fields.Char("Utrymmeskod", required=True)
+    property_object_id = fields.Char("Objekt ID")
 
     maintenance_request_id = fields.Many2one(
         "maintenance.request", string="Maintenance Request", ondelete="cascade"

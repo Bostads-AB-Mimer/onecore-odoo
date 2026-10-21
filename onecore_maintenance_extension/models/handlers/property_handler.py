@@ -84,16 +84,8 @@ class PropertyHandler(BaseMaintenanceHandler):
                 )
 
             for maintenance_unit in maintenance_units:
-                self.env["maintenance.maintenance.unit.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "id": maintenance_unit["id"],
-                        "name": maintenance_unit["caption"],
-                        "caption": maintenance_unit["caption"],
-                        "type": maintenance_unit["type"],
-                        "code": maintenance_unit["code"],
-                        "property_option_id": property_option.id,
-                    }
+                self._create_maintenance_unit_option(
+                    maintenance_unit, property_option_id=property_option.id
                 )
 
     def update_form_options_from_lease_data(self, work_order_data):
@@ -141,16 +133,9 @@ class PropertyHandler(BaseMaintenanceHandler):
             self._create_tenant_options(lease["tenants"])
 
             for maintenance_unit in maintenance_units:
-                self.env["maintenance.maintenance.unit.option"].create(
-                    {
-                        "user_id": self.env.user.id,
-                        "id": maintenance_unit["id"],
-                        "name": maintenance_unit["caption"],
-                        "caption": maintenance_unit["caption"],
-                        "type": maintenance_unit["type"],
-                        "code": maintenance_unit["code"],
-                        "rental_property_option_id": rental_property_option.id,
-                    }
+                self._create_maintenance_unit_option(
+                    maintenance_unit,
+                    rental_property_option_id=rental_property_option.id,
                 )
 
     def _set_form_selections(self):

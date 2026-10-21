@@ -100,6 +100,32 @@ class BaseMaintenanceHandler:
 
         return self.env["maintenance.lease.option"].create(lease_data)
 
+    def _create_maintenance_unit_option(
+        self,
+        maintenance_unit,
+        property_option_id=None,
+        building_option_id=None,
+        rental_property_option_id=None,
+    ):
+        """Create a maintenance unit option record from a core maintenance unit."""
+        unit_data = {
+            "user_id": self.env.user.id,
+            "property_object_id": maintenance_unit.get("propertyObjectId"),
+            "name": maintenance_unit["caption"],
+            "caption": maintenance_unit["caption"],
+            "type": maintenance_unit["type"],
+            "code": maintenance_unit["code"],
+        }
+
+        if property_option_id:
+            unit_data["property_option_id"] = property_option_id
+        if building_option_id:
+            unit_data["building_option_id"] = building_option_id
+        if rental_property_option_id:
+            unit_data["rental_property_option_id"] = rental_property_option_id
+
+        return self.env["maintenance.maintenance.unit.option"].create(unit_data)
+
     def _create_tenant_options(self, tenants, lease_option_id=None):
         """Create tenant option records for a list of tenants.
 

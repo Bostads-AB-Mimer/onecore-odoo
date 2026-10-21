@@ -9,6 +9,7 @@ class OnecoreMaintenanceFacilityOption(models.Model):
     user_id = fields.Many2one(
         "res.users", "Användare", default=lambda self: self.env.user
     )
+    facility_id = fields.Char("Lokal ID")
     name = fields.Char("Namn", required=True)
     code = fields.Char("Kod")
     type_name = fields.Char("Lokaltyp")
@@ -27,6 +28,7 @@ class OnecoreMaintenanceFacility(models.Model):
     _unaccent = True
 
     rental_property_id = fields.Char(string="Hyresobjekt ID", store=True)
+    facility_id = fields.Char("Lokal ID")
     name = fields.Char("Namn", required=True)
     code = fields.Char("Kod")
     type_name = fields.Char("Lokaltyp")
