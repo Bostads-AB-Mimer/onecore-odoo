@@ -2,6 +2,8 @@
 
 from odoo import _, exceptions
 
+from .maintenance_workflow_service import MaintenanceStageManager
+
 
 class ExternalContractorService:
     """Service handling all external contractor-specific business logic."""
@@ -22,25 +24,22 @@ class ExternalContractorService:
             return  # Not applicable
         
         # Cannot move FROM these stages
-        if record.stage_id.name in ("Utförd", "Avslutad", "Återsänd"):
+        blocked = record.stage_id & self.restricted_stages()
+        if blocked:
             raise exceptions.UserError(
-                f"Du har inte behörighet att flytta detta ärende från {record.stage_id.name}"
+                f"Du har inte behörighet att flytta detta ärende från {blocked[:1].name}"
             )
 
-        # Cannot move TO restricted stages
-        restricted_stages = self.env["maintenance.stage"].search(
-            [("name", "=", "Avslutad")]
-        )
-        if new_stage_id in restricted_stages.ids:
+        # Cannot move TO Avslutad
+        if new_stage_id in MaintenanceStageManager(self.env).closed_stage().ids:
             raise exceptions.UserError(
                 "Du har inte behörighet att flytta detta ärende till Avslutad"
             )
-    
+
     def restricted_stages(self):
-        """Stages in which external contractors can no longer change a record."""
-        return self.env["maintenance.stage"].search(
-            [("name", "in", ["Utförd", "Avslutad", "Återsänd"])]
-        )
+        """Utförd, Avslutad and Återsänd: stages in which external contractors
+        can no longer change a record."""
+        return MaintenanceStageManager(self.env).restricted_stages()
 
     def get_restricted_status(self, record):
         """Check if record is in a restricted state for external contractors."""

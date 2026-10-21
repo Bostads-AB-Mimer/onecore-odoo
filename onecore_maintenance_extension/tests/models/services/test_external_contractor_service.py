@@ -2,6 +2,7 @@ from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import UserError
 
+from ....models.services import ExternalContractorService
 from ...utils.test_utils import (
     create_internal_user,
     create_external_contractor_user,
@@ -94,6 +95,19 @@ class TestExternalContractorService(StageTestMixin, TransactionCase):
                 {"stage_id": self.stage_vantar.id}
             )
         self.assertEqual(request.stage_id, self.stage_avslutad)
+
+    def test_validate_stage_transition_checks_every_record(self):
+        """A move of several requests is refused when one of them is in Utförd"""
+        open_request = create_maintenance_request(self.env, stage_id=self.stage_tilldelad.id)
+        done_request = create_maintenance_request(self.env, stage_id=self.stage_utford.id)
+        service = ExternalContractorService(self.env(user=self.external_user))
+
+        with self.assertRaisesRegex(
+            UserError, "Du har inte behörighet att flytta detta ärende från Utförd"
+        ):
+            service.validate_stage_transition(
+                open_request | done_request, self.stage_paborjad.id
+            )
 
     def test_validate_stage_transition_cannot_move_to_avslutad(self):
         """External contractors cannot move requests to 'Avslutad' stage"""

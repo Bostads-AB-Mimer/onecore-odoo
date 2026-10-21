@@ -15,7 +15,15 @@ class MaintenanceStageManager:
 
     PRIORITY_EXEMPT_STAGES = ("Väntar på handläggning", "Avslutad", "Återsänd")
 
+    DONE_STAGE_XML_ID = "maintenance.stage_5"
+    CLOSED_STAGE_XML_ID = "maintenance.stage_6"
     ATERSAND_STAGE_XML_ID = "onecore_maintenance_extension.stage_atersand"
+    # The seeded names, used when a database lacks the xml id
+    STAGE_NAMES = {
+        DONE_STAGE_XML_ID: "Utförd",
+        CLOSED_STAGE_XML_ID: "Avslutad",
+        ATERSAND_STAGE_XML_ID: "Återsänd",
+    }
     KUNDCENTER_TEAM_XML_ID = "onecore_maintenance_extension.7"
 
     def __init__(self, env):
@@ -122,15 +130,30 @@ class MaintenanceStageManager:
             [("name", "=", stage_name)], limit=1
         )
 
-    def _get_atersand_stage(self):
-        """Resolve the "Återsänd" stage by xml-id (name is translatable).
+    def get_stage(self, xml_id):
+        """The stage behind xml_id, or the stage with its seeded name when the
+        xml id is missing; an empty recordset when neither exists."""
+        stage = self.env.ref(xml_id, raise_if_not_found=False)
+        return stage or self._get_stage_by_name(self.STAGE_NAMES[xml_id])
 
-        Memoized per manager instance: an xml-id miss is not ormcached by
-        env.ref, so without this every call would re-query ir.model.data
-        plus the name fallback."""
+    def done_stage(self):
+        """The Utförd stage."""
+        return self.get_stage(self.DONE_STAGE_XML_ID)
+
+    def closed_stage(self):
+        """The Avslutad stage."""
+        return self.get_stage(self.CLOSED_STAGE_XML_ID)
+
+    def restricted_stages(self):
+        """Utförd, Avslutad and Återsänd: external contractors can't change an
+        ärende in them, and it can't be marked as utförd from them."""
+        return self.done_stage() | self.closed_stage() | self._get_atersand_stage()
+
+    def _get_atersand_stage(self):
+        """The Återsänd stage, memoized per manager instance: an xml-id miss
+        is not ormcached by env.ref."""
         if not hasattr(self, "_atersand_stage"):
-            stage = self.env.ref(self.ATERSAND_STAGE_XML_ID, raise_if_not_found=False)
-            self._atersand_stage = stage or self._get_stage_by_name("Återsänd")
+            self._atersand_stage = self.get_stage(self.ATERSAND_STAGE_XML_ID)
         return self._atersand_stage
 
     def is_atersand_stage(self, stage_id):
