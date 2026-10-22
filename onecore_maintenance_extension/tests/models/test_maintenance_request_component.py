@@ -380,9 +380,30 @@ class TestRequestComponentAccess(TransactionCase):
         # Still readable
         self.assertEqual(link.component_name, "Frys")
 
-    def test_contractor_saves_components_and_utford_in_one_write(self):
-        # The status bar saves pending changes and the new stage together,
-        # here a removed component
+    def test_contractor_adds_a_component_and_moves_to_utford_in_one_write(self):
+        # The status bar saves pending changes and the new stage together
+        request = self._request_with_link(self.contractor_team)
+        request.component_ids.write({"outcome": "REPAIRED"})
+        request.with_user(self.internal_user).write({"user_id": self.internal_user.id})
+        as_contractor = self.env["maintenance.request"].browse(request.id).with_user(
+            self.contractor
+        )
+
+        as_contractor.write(
+            {
+                "stage_id": self.env.ref("maintenance.stage_5").id,
+                "component_ids": [
+                    Command.create(_link_vals("comp-spis", "Spis", outcome="NO_ACTION"))
+                ],
+            }
+        )
+
+        self.assertEqual(request.stage_id, self.env.ref("maintenance.stage_5"))
+        self.assertEqual(
+            sorted(request.component_ids.mapped("component_name")), ["Frys", "Spis"]
+        )
+
+    def test_contractor_removes_a_component_and_moves_to_utford_in_one_write(self):
         request = self._request_with_link(self.contractor_team)
         request.with_user(self.internal_user).write({"user_id": self.internal_user.id})
         as_contractor = self.env["maintenance.request"].browse(request.id).with_user(

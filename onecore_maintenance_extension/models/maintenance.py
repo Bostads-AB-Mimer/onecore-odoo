@@ -843,47 +843,48 @@ class OneCoreMaintenanceRequest(
     # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
     # ============================================================================
 
-    def _check_component_outcomes(self, stage, new=False):
+    def _check_component_outcomes(self, stage, stage_manager, vals=None, new=False):
         """Refuse moving the ärenden to Utförd or Avslutad while a component
         has no outcome. Only Lägenhet ärenden that aren't archived are
-        checked, as only they have "Markera som utförd". Moves from the same
-        stage or from Utförd pass, and so do moves to Avslutad from Väntar på
-        handläggning or Återsänd. A new ärende has no stage it comes from."""
-        utford = self.env.ref("maintenance.stage_5", raise_if_not_found=False)
-        avslutad = self.env.ref("maintenance.stage_6", raise_if_not_found=False)
-        if stage not in (utford, avslutad):
+        checked, with the values in vals over the stored ones. These pass: a
+        write that keeps the stage, Utförd → Avslutad, and Avslutad with no
+        resource. With new, the ärenden were just created in stage."""
+        vals = vals or {}
+        done = stage_manager.done_stage()
+        closed = stage_manager.closed_stage()
+        if not stage or stage not in done | closed:
             return
-        # The stages a move may come from without outcomes
-        unchecked = stage | (utford or stage)
-        if stage == avslutad:
-            waiting = self.env.ref("maintenance.stage_0", raise_if_not_found=False)
-            unchecked |= (waiting or stage) | MaintenanceStageManager(
-                self.env
-            )._get_atersand_stage()
         for record in self:
-            if record.space_caption != "Lägenhet" or record.archive:
+            if vals.get("space_caption", record.space_caption) != "Lägenhet":
                 continue
-            if not new and record.stage_id in unchecked:
+            if vals.get("archive", record.archive):
+                continue
+            if not new and record.stage_id == stage:
+                continue
+            if stage == closed and (
+                record.stage_id == done or not vals.get("user_id", record.user_id)
+            ):
                 continue
             # sudo: every row counts, also one a record rule hides
             missing = record.sudo().component_ids.filtered(lambda c: not c.outcome)
             if not missing:
                 continue
-            # A new ärende's id is rolled back with the refusal, so it isn't named
             if new:
-                refusal = (
-                    f"Ett nytt ärende kan inte sparas som {stage.name} när en "
-                    "komponent saknar utfall. Spara det i en annan status och "
-                    'använd sedan knappen "Markera som utförd".'
-                )
+                prefix, verb = "", "sparas som"
+                step = "Spara det i en annan status och använd sedan knappen"
             else:
-                refusal = (
-                    f"{WORK_ORDER_PREFIX}{record.id}: Alla komponenter behöver "
-                    "ett utfall innan ärendet kan flyttas till "
-                    f'{stage.name}. Använd knappen "Markera som utförd".'
+                prefix, verb = f"{WORK_ORDER_PREFIX}{record.id}: ", "flyttas till"
+                step = (
+                    "Flytta det först till en pågående status och använd sedan knappen"
+                    if record.stage_id in stage_manager.restricted_stages()
+                    else "Använd knappen"
                 )
             names = ", ".join(component._summary_name() for component in missing)
-            raise UserError(f"{refusal}\n\nSaknar utfall: {names}.")
+            raise UserError(
+                f"{prefix}Alla komponenter behöver ett utfall innan ärendet kan "
+                f'{verb} {stage.name}. {step} "Markera som utförd".\n\n'
+                f"Saknar utfall: {names}."
+            )
 
     def _mark_done_refusal(self):
         """Why the ärende can't be marked as utförd from the button, or False."""
@@ -1366,11 +1367,6 @@ class OneCoreMaintenanceRequest(
             OneCoreMaintenanceRequest, self.with_context(creating_records=True)
         ).create(vals_list)
 
-        # A new ärende in Utförd or Avslutad needs an outcome on every
-        # component, also when the stage comes from a context default
-        for request in maintenance_requests:
-            request._check_component_outcomes(request.stage_id, new=True)
-
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
@@ -1394,6 +1390,10 @@ class OneCoreMaintenanceRequest(
             management_area_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
+
+            # A new ärende in Utförd or Avslutad needs an outcome on every
+            # component, checked before the creation SMS
+            request._check_component_outcomes(request.stage_id, stage_manager, new=True)
 
             request._send_creation_sms()
 
@@ -1504,7 +1504,7 @@ class OneCoreMaintenanceRequest(
         # ones saved just above
         if "stage_id" in vals:
             self._check_component_outcomes(
-                self.env["maintenance.stage"].browse(vals["stage_id"])
+                self.env["maintenance.stage"].browse(vals["stage_id"]), stage_manager, vals
             )
 
         # Note: activity_update() is overridden to suppress automatic activities
