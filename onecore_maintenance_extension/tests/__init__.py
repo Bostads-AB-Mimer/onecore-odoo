@@ -37,6 +37,7 @@ from .models import test_maintenance_district
 from .models import test_maintenance_time_report_wizard
 from .models import test_maintenance_request_component
 from .models import test_mark_done
+from .models import test_component_outcome_guard
 from .models.services import test_management_area_service
 from . import test_stage_hook
 from . import test_component_button_hidden
