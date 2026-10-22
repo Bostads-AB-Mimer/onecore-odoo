@@ -9,11 +9,15 @@
     "categories, automations), built on the vendored OCA helpdesk modules. "
     "Separate from the property work orders in onecore_maintenance_extension.",
     "depends": [
+        "base_automation",
         "helpdesk_mgmt",
         "helpdesk_ticket_partner_response",
         "helpdesk_ticket_close_inactive",
     ],
-    "data": [],
+    "data": [
+        "data/helpdesk_it_team_data.xml",
+        "data/helpdesk_p1_alarm_data.xml",
+    ],
     "installable": True,
     "auto_install": False,
     "license": "LGPL-3",

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="mail_template_p1_alarm" model="mail.template">
+            <field name="name">IT-ärende: P1-larm till teamet</field>
+            <field name="model_id" ref="helpdesk_mgmt.model_helpdesk_ticket"/>
+            <field name="subject">P1: {{ object.number }} – {{ object.name }}</field>
+            <field name="use_default_to" eval="False"/>
+            <field name="partner_to">{{ ','.join(str(partner_id) for partner_id in object.team_id.user_ids.partner_id.ids) }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html" type="html">
+<div>
+    <p>Ärendet <strong t-out="object.number or ''"/> har fått prioritet P1 (akut).</p>
+    <p>
+        <strong>Rubrik:</strong> <t t-out="object.name or ''"/><br/>
+        <strong>Beställare:</strong> <t t-out="object.partner_name or object.partner_email or ''"/><br/>
+        <strong>Team:</strong> <t t-out="object.team_id.name or ''"/>
+    </p>
+    <p><a t-attf-href="{{ object.get_base_url() }}/mail/view?model=helpdesk.ticket&amp;res_id={{ object.id }}">Öppna ärendet</a></p>
+</div>
+            </field>
+        </record>
+
+        <!-- Mails every member of the ticket's team when the priority is set to P1 -->
+        <record id="automation_p1_alarm" model="base.automation">
+            <field name="name">IT-ärende: P1-larm till teamet</field>
+            <field name="model_id" ref="helpdesk_mgmt.model_helpdesk_ticket"/>
+            <field name="trigger">on_priority_set</field>
+            <field name="trg_selection_field_id" ref="helpdesk_mgmt.selection__helpdesk_ticket__priority__3"/>
+        </record>
+        <record id="action_p1_alarm" model="ir.actions.server">
+            <field name="name">Mejla P1-larm till teamet</field>
+            <field name="model_id" ref="helpdesk_mgmt.model_helpdesk_ticket"/>
+            <field name="base_automation_id" ref="automation_p1_alarm"/>
+            <field name="state">mail_post</field>
+            <field name="template_id" ref="mail_template_p1_alarm"/>
+            <field name="mail_post_method">email</field>
+        </record>
+    </data>
+</odoo>
