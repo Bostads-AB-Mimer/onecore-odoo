@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="maintenance_close_request_decline_wizard_form" model="ir.ui.view">
+            <field name="name">maintenance.close.request.decline.wizard.form</field>
+            <field name="model">maintenance.close.request.decline.wizard</field>
+            <field name="arch" type="xml">
+                <form string="Avslå begäran om avslut">
+                    <sheet>
+                        <field name="request_id" invisible="1" />
+                        <p class="text-muted">Orsaken visas för hyresgästen på Mina sidor.</p>
+                        <group>
+                            <field name="reason"
+                                placeholder="Till exempel: Vi väntar på reservdelar och återkommer när de har kommit." />
+                        </group>
+                    </sheet>
+                    <footer>
+                        <button name="action_confirm" type="object" string="Avslå"
+                            class="btn-primary" data-hotkey="q" />
+                        <button string="Avbryt" class="btn-secondary" special="cancel"
+                            data-hotkey="x" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+    </data>
+</odoo>

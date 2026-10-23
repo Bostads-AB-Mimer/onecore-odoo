@@ -134,6 +134,41 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
         self.assertEqual(request.performed_date, performed_date)
 
+    def test_performed_date_set_to_closing_time_when_closed_without_utford(self):
+        """Closed without passing Utförd: the work counts as performed when
+        the request is closed, so "Utfört datum" covers it."""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+        self.assertFalse(request.performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertTrue(request.closed_date)
+        self.assertEqual(request.performed_date, request.closed_date)
+
+    def test_closing_several_requests_dates_only_the_undated(self):
+        """One write closing a performed and an unperformed request: the
+        first keeps its date, the second gets the closing time."""
+        performed_at = datetime(2026, 9, 1, 12, 0, 0)
+        performed = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        performed.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        performed.sudo().write({"performed_date": performed_at})
+        started = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        started.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+
+        (performed | started).with_user(self.internal_user).write(
+            {"stage_id": self.stage_avslutad.id}
+        )
+
+        self.assertEqual(performed.performed_date, performed_at)
+        self.assertTrue(started.closed_date)
+        self.assertEqual(started.performed_date, started.closed_date)
+
     def test_closed_date_cleared_when_moving_back_from_avslutad(self):
         """Moving from 'Avslutad' to any other stage should clear closed_date"""
         request = create_maintenance_request(

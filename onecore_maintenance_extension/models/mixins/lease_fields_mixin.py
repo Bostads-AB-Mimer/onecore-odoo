@@ -12,3 +12,5 @@ class LeaseFieldsMixin(models.AbstractModel):
     contract_date = fields.Date("Kontraktsdatum", related="lease_id.contract_date", depends=["lease_id"])
     lease_start_date = fields.Date("Kontrakt Startdatum", related="lease_id.lease_start_date", depends=["lease_id"])
     lease_end_date = fields.Date("Kontrakt Slutdatum", related="lease_id.lease_end_date", depends=["lease_id"])
+    lease_status_label = fields.Char("Kontraktsstatus", related="lease_id.lease_status_label", depends=["lease_id"])
+    last_debit_date = fields.Date("Sista debiteringsdatum", related="lease_id.last_debit_date", depends=["lease_id"])

@@ -2,14 +2,17 @@
 and the "Tilldela resursgrupp" button.
 
 Covers the create() snapshot, the button action (notifications, contractor
-guard), the team seed and the cron record.
+guard), the system parameter that shows the button, the team seed and the cron
+record.
 """
 from unittest.mock import patch
 
+from lxml import etree
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
+from ...models.services.management_area_service import ASSIGN_DISTRICT_TEAM_PARAM
 from ..utils.test_utils import (
     create_external_contractor_user,
     create_internal_user,
@@ -47,15 +50,17 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         )
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             request = create_maintenance_request(
                 self.env,
                 space_caption="Lägenhet",
                 rental_property_id=rental_property.id,
             )
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
 
-        fetch.assert_called_once_with("2201", timeout=5)
+        # MIM-1997: the rental id is sent, not the property code — a split
+        # property has buildings in different kvv areas.
+        fetch.assert_called_once_with(rental_id="705-022-04-0201", timeout=5)
         self.assertEqual(request.cost_center_name, "Distrikt Väst")
         self.assertEqual(request.cost_center_code, "61140")
         self.assertEqual(request.kvv_area_code, "61141")
@@ -77,7 +82,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
                 cost_center_code="61140",
                 cost_center_name="Distrikt Väst",
             )
-            MockApi.return_value.fetch_kvv_area_for_property.assert_not_called()
+            MockApi.return_value.fetch_kvv_area_for_location.assert_not_called()
         self.assertEqual(request.cost_center_name, "Distrikt Väst")
 
     def test_create_without_onecore_leaves_fields_empty(self):
@@ -94,7 +99,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         self._configure_onecore()
         option = create_rental_property_option(self.env, estate_code="2201")
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             form = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
             form.rental_property_option_id = option
             form._onchange_management_area_preview()
@@ -103,12 +108,15 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
 
     def test_preview_and_create_share_one_api_call(self):
         self._configure_onecore()
-        option = create_rental_property_option(self.env, estate_code="2201")
+        # Same rental id on the option and the snapshot -> same cache key
+        option = create_rental_property_option(
+            self.env, rental_id="705-022-04-0201", estate_code="2201"
+        )
         rental_property = create_rental_property(
             self.env, rental_property_id="705-022-04-0201", estate_code="2201"
         )
         with patch(CORE_API_PATH) as MockApi:
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
             fetch.return_value = kvv_payload()
             form = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
             form.rental_property_option_id = option
@@ -254,7 +262,7 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 cc_code="61199", cc_name="Distrikt Okänt"
             )
             action = self._click_assign(request)
@@ -278,6 +286,35 @@ class TestMaintenanceDistrict(ManagementAreaTestMixin, TransactionCase):
         with self.assertRaises(UserError):
             request.with_user(contractor).action_assign_district_team()
         self.assertEqual(request.maintenance_team_id, contractor_team)
+
+    # ------------------------------------------------------------------
+    # Rollout switch
+    # ------------------------------------------------------------------
+    def test_button_is_off_until_the_parameter_is_set(self):
+        """Off when the parameter is missing, so prod keeps the button hidden
+        until the district groups are activated. Read as a plain internal
+        user: system parameters are admin-only."""
+        request = self._apartment_request().with_user(self.internal_user)
+        Param = self.env["ir.config_parameter"].sudo()
+        for value, expected in ((False, False), ("0", False), ("1", True), ("True", True)):
+            with self.subTest(value=value):
+                # set_param(key, False) removes the parameter.
+                Param.set_param(ASSIGN_DISTRICT_TEAM_PARAM, value)
+                request.invalidate_recordset(["assign_district_team_enabled"])
+                self.assertEqual(request.assign_district_team_enabled, expected)
+
+    def test_form_button_is_hidden_by_the_switch(self):
+        """The button must be in the form, not commented out again, and
+        hidden by the switch, or prod shows it before the districts start."""
+        arch = etree.fromstring(
+            self.env["maintenance.request"]
+            .with_user(self.internal_user)
+            .get_view(view_type="form")["arch"]
+        )
+
+        buttons = arch.xpath("//button[@name='action_assign_district_team']")
+        self.assertEqual(len(buttons), 1)
+        self.assertIn("not assign_district_team_enabled", buttons[0].get("invisible"))
 
     # ------------------------------------------------------------------
     # Seed data / cron / refactor

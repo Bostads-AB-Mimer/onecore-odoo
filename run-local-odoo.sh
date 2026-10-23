@@ -31,12 +31,10 @@ else
     MODULES=$DEFAULT_MODULES
 fi
 
-# Convert comma-separated list to space-separated for -u arguments
-MODULE_ARGS=""
-IFS=',' read -ra MODULE_ARRAY <<< "$MODULES"
-for module in "${MODULE_ARRAY[@]}"; do
-    MODULE_ARGS="$MODULE_ARGS -u $module"
-done
+# Odoo's -u/--update is a comma-list option, NOT an accumulating one: passing
+# it repeatedly makes the last occurrence win and silently skips every other
+# module. Hand it the whole list in one flag instead.
+MODULE_ARGS="-u $MODULES"
 
 
 # Run Odoo with the specified parameters
