@@ -251,6 +251,10 @@ class FieldChangeTracker:
         # gets a chatter note
         "ordering_department",
         "ordering_backfilled_at",
+        # MIM-1965: logged in the body of Odoo's own "Status förändrad"
+        # tracking message instead (maintenance.request._message_track), so a
+        # stage change gives one message showing "Status: gammal → ny"
+        "stage_id",
     }
 
     def __init__(self, env):
@@ -296,6 +300,17 @@ class FieldChangeTracker:
                     message_type="notification",
                     subtype_xmlid="mail.mt_note",
                 )
+
+    def format_stage_change(self, record, old_stage):
+        """Format a stage change on record as "Status: old → new" (MIM-1965).
+
+        Returns None when the displayed stage name did not change. The label
+        is hardcoded: ONECore closes ärenden over RPC without a lang, which
+        would otherwise store the untranslated "Stage" in the body."""
+        field_obj = record._fields["stage_id"]
+        return self._format_many2one_change(
+            field_obj, old_stage, record.stage_id.id, "Status"
+        )
 
     def _should_skip_field_change(self, field_obj, old_value, new_value):
         """Check if field change should be skipped."""

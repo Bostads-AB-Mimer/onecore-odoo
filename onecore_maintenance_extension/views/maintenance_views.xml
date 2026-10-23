@@ -432,10 +432,10 @@
                                         <field name="has_elevator"
                                             invisible="not has_elevator or space_caption != 'Lägenhet'"
                                             string="Hiss" />
-                                        <field name="estate_code" invisible="1"
-                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="estate_code" invisible="not estate_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -474,11 +474,11 @@
                                             string="Byggnadskod" />
                                         <field name="building_name" invisible="not building_name"
                                             string="Tillhör byggnad" />
-                                        <field name="property_code" invisible="not property_code"
-                                            string="Fastighetsnummer" />
                                         <field name="property_designation"
                                             invisible="not property_designation"
                                             string="Tillhör fastighet" />
+                                        <field name="property_code" invisible="not property_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -499,6 +499,8 @@
                                         <field name="property_designation"
                                             string="Fastighetsbeteckning"
                                             invisible="not property_designation" />
+                                        <field name="property_code" string="Fastighetsnummer"
+                                            invisible="not property_code" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -569,15 +571,18 @@
                                         <field name="building_renovation_year"
                                             string="Renoveringsår"
                                             invisible="not building_renovation_year" />
-                                        <field name="estate_code" invisible="1"
-                                            string="Fastighetsnummer" />
                                         <field name="estate" invisible="not estate"
                                             string="Tillhör fastighet" />
+                                        <field name="estate_code" invisible="not estate_code"
+                                            string="Fastighetsnummer" />
                                         <!-- Building-code searches have no rental property:
                                              the property comes from the building itself -->
                                         <field name="building_property_name"
                                             invisible="estate or not building_property_name"
                                             string="Tillhör fastighet" />
+                                        <field name="building_property_code"
+                                            invisible="estate or not building_property_code"
+                                            string="Fastighetsnummer" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -607,6 +612,9 @@
                                             invisible="not parking_space_number" />
                                         <field name="parking_space_property_name" string="Fastighet"
                                             invisible="not parking_space_property_name" />
+                                        <field name="parking_space_property_code"
+                                            string="Fastighetsnummer"
+                                            invisible="not parking_space_property_code" />
                                         <field name="cost_center_display" invisible="not cost_center_display"
                                             string="Tillhör distrikt" />
                                         <field name="kvv_area_display" invisible="not kvv_area_display"
@@ -988,13 +996,13 @@
                                         <field
                                             name="assign_district_team_enabled" invisible="1" />
                                     </group>
-                                    <button name="open_time_report"
+                                    <button name="open_time_report_wizard"
                                         type="object"
-                                        string="Öppna tidrapport"
-                                        icon="fa-clock-o"
+                                        string="Rapportera tid"
+                                        icon="fa-calendar-plus-o"
                                         class="btn btn-secondary mt-2 mb-2 me-2"
-                                        help="Öppna tidrapporteringssystem"
-                                        invisible="user_is_external_contractor" />
+                                        help="Rapportera tid direkt från ärendet"
+                                        invisible="user_is_external_contractor or not id" />
                                     <button name="open_component_wizard"
                                         type="object"
                                         string="Uppdatera/lägg till Komponent"
@@ -1062,8 +1070,12 @@
 
                 <!-- Column add is hidden for everyone. Column edit/delete are also
                      stripped globally by onecore_web_extension/static/src/js/kanban_header_patch.js;
-                     group_delete here is defense in depth should that patch ever be removed. -->
+                     group_delete here is defense in depth should that patch ever be removed.
+                     Columns (stages) cannot be reordered by drag and drop. js_class keeps
+                     each browser's folded/unfolded columns in localStorage. -->
                 <xpath expr="//kanban" position="attributes">
+                    <attribute name="js_class">onecore_maintenance_request_kanban</attribute>
+                    <attribute name="groups_draggable">false</attribute>
                     <attribute name="limit">30</attribute>
                     <attribute name="group_create">false</attribute>
                     <attribute name="group_delete">false</attribute>
@@ -1138,6 +1150,10 @@
                         <field name="cost_center_display" string="Distrikt" optional="show" />
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
+                        <field name="create_date" string="Skapad Datum" options="{'show_time': false}" optional="hide" />
+                        <field name="owner_user_id" string="Skapad av" optional="hide" />
+                        <field name="lease_start_date" string="Kontrakt startdatum" optional="hide" />
+                        <field name="lease_end_date" string="Kontrakt slutdatum" optional="hide" />
                         <field name="start_date" optional="hide" />
                         <field name="schedule_date" options="{'show_time': false}" optional="hide" />
                         <field name="due_date" optional="show" />

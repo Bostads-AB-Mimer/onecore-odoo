@@ -9,3 +9,4 @@ from .management_area_service import ManagementAreaService
 from .direct_lookup_service import DirectLookupService
 from .onecore_flag_sync_service import OneCoreFlagSyncService
 from .ordering_department_service import OrderingDepartmentService
+from .time_report_service import TimeReportService

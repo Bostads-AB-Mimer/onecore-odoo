@@ -1,0 +1,40 @@
+<odoo>
+    <!-- Grey out Uninstall for ONECore modules and the modules they depend on -->
+    <record id="module_form_onecore_uninstall_protected" model="ir.ui.view">
+        <field name="name">ir.module.module.form.onecore.uninstall.protected</field>
+        <field name="model">ir.module.module</field>
+        <field name="inherit_id" ref="base.module_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='button_uninstall_wizard']" position="attributes">
+                <attribute name="invisible">state != 'installed' or onecore_uninstall_protected</attribute>
+            </xpath>
+            <xpath expr="//button[@name='button_uninstall_wizard']" position="after">
+                <field name="onecore_uninstall_protected" invisible="1" />
+                <button string="Uninstall" class="btn btn-secondary me-1" disabled="1"
+                    invisible="state != 'installed' or not onecore_uninstall_protected"
+                    groups="base.group_system"
+                    title="Krävs av ONECore och kan inte avinstalleras" />
+            </xpath>
+        </field>
+    </record>
+
+    <record id="module_view_kanban_onecore_uninstall_protected" model="ir.ui.view">
+        <field name="name">ir.module.module.kanban.onecore.uninstall.protected</field>
+        <field name="model">ir.module.module</field>
+        <field name="inherit_id" ref="base.module_view_kanban" />
+        <field name="arch" type="xml">
+            <xpath expr="/kanban/field[@name='state']" position="after">
+                <field name="onecore_uninstall_protected" />
+            </xpath>
+            <xpath expr="//a[@name='button_uninstall_wizard']" position="replace">
+                <a t-if="installed and !record.onecore_uninstall_protected.raw_value"
+                    name="button_uninstall_wizard" type="object" role="menuitem"
+                    class="dropdown-item" groups="base.group_system">Uninstall…</a>
+                <a t-if="installed and record.onecore_uninstall_protected.raw_value"
+                    role="menuitem" class="dropdown-item disabled" aria-disabled="true"
+                    title="Krävs av ONECore och kan inte avinstalleras"
+                    groups="base.group_system">Uninstall…</a>
+            </xpath>
+        </field>
+    </record>
+</odoo>

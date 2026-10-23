@@ -21,6 +21,7 @@
         "views/backfill_wizard_view.xml",
         "views/close_request_decline_wizard_view.xml",
         "views/res_users_view.xml",
+        "views/maintenance_time_report_wizard_views.xml",
         # Load initial Data
         "data/maintenance.team.csv",
         "data/maintenance.request.category.csv",

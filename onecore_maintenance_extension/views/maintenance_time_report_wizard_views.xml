@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="maintenance_time_report_wizard_form" model="ir.ui.view">
+            <field name="name">maintenance.time.report.wizard.form</field>
+            <field name="model">maintenance.time.report.wizard</field>
+            <field name="arch" type="xml">
+                <form string="Tidsrapportering">
+                    <field name="maintenance_request_id" invisible="1" />
+                    <field name="step" invisible="1" />
+                    <field name="cost_center_code" invisible="1" force_save="1" />
+                    <field name="api_configured" invisible="1" />
+
+                    <field name="app_user_missing" invisible="1" />
+                    <div class="alert alert-danger" role="alert" invisible="not user_check_message">
+                        <field name="user_check_message" readonly="1" />
+                        <div class="mt-2">
+                            <button name="action_open_time_report_app" type="object"
+                                string="Logga in på apps.mimer.nu" icon="fa-external-link"
+                                class="btn-secondary me-2" invisible="not app_user_missing" />
+                            <button name="action_recheck_user" type="object"
+                                string="Kontrollera igen" icon="fa-refresh"
+                                class="btn-secondary" />
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning" role="alert" invisible="api_configured">
+                        Tidsrapporteringen är inte konfigurerad (systemparametern
+                        time_report_api_url saknas). Tid kan inte skickas. Kontakta en administratör.
+                    </div>
+
+                    <field name="property_missing" invisible="1" />
+                    <field name="property_option_ids" invisible="1" />
+
+                    <div class="alert alert-info" role="alert"
+                        invisible="not property_missing or property_code">
+                        Ärendet saknar fastighet. Sök fram fastigheten som tiden ska rapporteras på.
+                    </div>
+
+                    <group invisible="not property_missing or step != 'date'">
+                        <field name="property_search"
+                            placeholder="Ange fastighetsnamn (minst 3 tecken)" />
+                        <field name="property_option_id"
+                            invisible="not property_option_ids"
+                            options="{'no_create_edit': True, 'no_create': True, 'no_open': True}" />
+                    </group>
+
+                    <group>
+                        <field name="property_option_id" readonly="1"
+                            invisible="not property_missing or step == 'date'"
+                            options="{'no_open': True}" />
+                        <field name="property_code" force_save="1" invisible="not property_code" />
+                        <field name="work_order_id" />
+                        <field name="date_for_work" readonly="1" invisible="step == 'date'" />
+                        <field name="weekday_label" invisible="step == 'date'" />
+                        <field name="hours_spent" string="Antal timmar" readonly="1"
+                            invisible="step != 'job_type'" />
+                    </group>
+
+                    <!-- Steg 1: datum -->
+                    <group invisible="step != 'date'">
+                        <field name="date_for_work" options="{'max_date': 'today'}" />
+                        <div class="o_row" colspan="2" invisible="user_check_message">
+                            <button name="action_today" type="object" string="Idag"
+                                class="btn-secondary" />
+                            <button name="action_yesterday" type="object" string="Igår"
+                                class="btn-secondary" />
+                        </div>
+                    </group>
+
+                    <!-- Steg 2: antal timmar -->
+                    <group invisible="step != 'hours'">
+                        <field name="hours_spent" />
+                    </group>
+
+                    <!-- Steg 3: typ av jobb -->
+                    <group invisible="step != 'job_type'">
+                        <field name="job_type" widget="radio" />
+                    </group>
+
+                    <footer>
+                        <button name="action_confirm_date" type="object" string="Nästa"
+                            class="btn-primary" invisible="step != 'date' or user_check_message" />
+                        <button name="action_confirm_hours" type="object" string="Nästa"
+                            class="btn-primary" invisible="step != 'hours' or user_check_message" />
+                        <button name="action_submit" type="object" string="Rapportera tid"
+                            class="btn-primary" invisible="step != 'job_type' or user_check_message" />
+                        <button name="action_back" type="object" string="Tillbaka"
+                            class="btn-secondary" invisible="step == 'date'" />
+                        <button name="action_open_time_report_app" type="object"
+                            string="Visa inrapporterad tid" icon="fa-external-link"
+                            class="btn-link" />
+                        <button string="Avbryt" class="btn-secondary" special="cancel" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+    </data>
+</odoo>

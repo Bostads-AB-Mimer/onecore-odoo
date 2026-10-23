@@ -18,3 +18,4 @@ from . import maintenance_component_wizard
 from . import maintenance_component_line
 from . import backfill_wizard
 from . import close_request_decline_wizard
+from . import maintenance_time_report_wizard

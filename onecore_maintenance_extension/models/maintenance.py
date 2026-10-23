@@ -7,13 +7,14 @@ from datetime import timedelta
 from markupsafe import Markup
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError, ValidationError
-from odoo.tools import SQL
+from odoo.tools import SQL, is_html_empty
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
 from .utils.helpers import close_request_reason_html
 from .utils.priority import priority_days_from, priority_label_for
+from .maintenance_time_report_wizard import WORK_ORDER_PREFIX
 from .services import (
     FieldChangeTracker,
     RecordManagementService,
@@ -1359,23 +1360,62 @@ class OneCoreMaintenanceRequest(
 
     def _web_read_group_format(self, groupby, aggregates, groups):
         result = super()._web_read_group_format(groupby, aggregates, groups)
-        # MIM-486: the Återsänd kanban column is folded only while it is empty.
         # web_read_group folds groups based on the __fold flag stamped here.
-        if groupby and groupby[0] == "stage_id":
-            atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
-            if atersand:
-                for dict_group in result:
-                    # The m2o groupby value is (id, display_name) or False
-                    value = dict_group.get("stage_id")
-                    if (
-                        value
-                        and value[0] == atersand.id
-                        and "__fold" in dict_group
-                        and "__count" in dict_group
-                    ):
-                        dict_group["__fold"] = not dict_group["__count"]
-                        break
+        if not (groupby and groupby[0] == "stage_id"):
+            return result
+        atersand = MaintenanceStageManager(self.env)._get_atersand_stage()
+
+        if "onecore_kanban_fold" in self.env.context:
+            # Desktop kanban (onecore_maintenance_request_kanban, which always
+            # sends the key): every stage is unfolded by default except
+            # Återsänd, regardless of maintenance.stage.fold — that field is
+            # shared by all users. Each browser's own choices arrive as
+            # {"<stage_id>": bool} from localStorage.
+            overrides = self._kanban_fold_overrides()
+            for dict_group in result:
+                # The m2o groupby value is (id, display_name) or False
+                value = dict_group.get("stage_id")
+                if value and "__fold" in dict_group:
+                    stage_id = value[0]
+                    dict_group["__fold"] = overrides.get(
+                        stage_id, bool(atersand) and stage_id == atersand.id
+                    )
+            return result
+
+        # Everything else grouped by stage (notably the onecore_ui mobile
+        # view, which never loads a folded group's records on tap): MIM-486,
+        # the Återsänd group is folded only while it is empty.
+        if atersand:
+            for dict_group in result:
+                value = dict_group.get("stage_id")
+                if (
+                    value
+                    and value[0] == atersand.id
+                    and "__fold" in dict_group
+                    and "__count" in dict_group
+                ):
+                    dict_group["__fold"] = not dict_group["__count"]
+                    break
         return result
+
+    def _kanban_fold_overrides(self):
+        """Per-browser fold choices from context, as {stage_id: bool}.
+
+        The value comes straight from the client's localStorage, so anything
+        malformed is ignored rather than raised on.
+        """
+        raw = self.env.context.get("onecore_kanban_fold")
+        if not isinstance(raw, dict):
+            return {}
+        overrides = {}
+        for key, folded in raw.items():
+            if not isinstance(folded, bool):
+                continue
+            try:
+                overrides[int(key)] = folded
+            except (TypeError, ValueError):
+                continue
+        return overrides
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -1614,6 +1654,40 @@ class OneCoreMaintenanceRequest(
         team = stage_manager.resolve_return_team(self)
         return team.name if team else False
 
+    def _message_track(self, fields_iter, initial_values_dict):
+        """MIM-1965: write "Status: gammal → ny" into the body of the native
+        "Status förändrad" tracking message.
+
+        Without a body that message is just the subtype description, and when
+        its tracking values are not rendered the chatter shows a status update
+        with no information about what changed. The initial stage comes from
+        Odoo's tracking snapshot, so several writes in one transaction log the
+        overall change. A body set via _track_set_log_message wins."""
+        bodies = self.env.cr.precommit.data.setdefault(
+            f"mail.tracking.message.{self._name}", {}
+        )
+        change_tracker = FieldChangeTracker(self.env)
+        for record in self.exists():
+            initial_values = initial_values_dict.get(record.id) or {}
+            if "stage_id" not in initial_values or record.id in bodies:
+                continue
+            change_text = change_tracker.format_stage_change(
+                record, initial_values["stage_id"]
+            )
+            if change_text:
+                bodies[record.id] = Markup("<div>%s</div>") % Markup(change_text)
+        return super()._message_track(fields_iter, initial_values_dict)
+
+    def _track_filter_for_display(self, tracking_values):
+        """MIM-1965: hide the stage tracking value when the message body
+        already shows the stage change, so it is not displayed twice. Older
+        tracking messages without a body keep their tracking value."""
+        tracking_values = super()._track_filter_for_display(tracking_values)
+        return tracking_values.filtered(
+            lambda tracking: tracking.field_id.name != "stage_id"
+            or is_html_empty(tracking.mail_message_id.body)
+        )
+
     def _track_loan_product_changes(self, vals):
         """Track loan product changes for existing records."""
         loan_product_messages = {}
@@ -1679,27 +1753,24 @@ class OneCoreMaintenanceRequest(
     # INTEGRATION METHODS
     # ============================================================================
 
-    def open_time_report(self):
+    def open_time_report_wizard(self):
         self.ensure_one()
-        # Property code of the request's location, whatever the space type
-        estate_code = ManagementAreaService.get_property_code(self)
-
-        base_url = self.env["ir.config_parameter"].get_param(
-            "time_report_base_url",
-            "https://apps.mimer.nu/version-test/tidsrapportering/",
+        if ExternalContractorService(self.env).is_external_contractor():
+            # The view hides the button; this guards RPC callers.
+            raise AccessError(
+                "Tidsrapportering är inte tillgänglig för externa entreprenörer."
+            )
+        property_code = ManagementAreaService.get_property_code(self)
+        wizard = self.env["maintenance.time.report.wizard"].create(
+            {
+                "maintenance_request_id": self.id,
+                "property_code": property_code,
+                "property_missing": not property_code,
+                "cost_center_code": self.cost_center_code,
+                "work_order_id": f"{WORK_ORDER_PREFIX}{self.id}",
+            }
         )
-
-        url = base_url
-        params = {"od": self.id}
-        if estate_code:
-            params["p"] = estate_code
-        url = f"{base_url}?{urllib.parse.urlencode(params)}"
-
-        return {
-            "type": "ir.actions.act_url",
-            "url": url,
-            "target": "self",
-        }
+        return wizard._reopen()
 
     def activity_update(self):
         """Override to completely suppress automatic maintenance activity creation.
