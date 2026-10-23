@@ -146,8 +146,8 @@ class MaintenanceTimeReportWizard(models.TransientModel):
         self.property_code = self.property_option_id.code or False
         self.cost_center_code = False
         if self.property_code:
-            _ok, values = ManagementAreaService(self.env).fetch_for_property(
-                self.property_code
+            _ok, values = ManagementAreaService(self.env).fetch_for_location(
+                ("property_code", self.property_code)
             )
             self.cost_center_code = (values or {}).get("cost_center_code") or False
 

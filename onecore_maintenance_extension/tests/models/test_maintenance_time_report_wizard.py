@@ -332,7 +332,7 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
 
     def _search_property(self, wizard, core_api, properties, district=None):
         core_api.return_value.fetch_properties.return_value = properties
-        core_api.return_value.fetch_kvv_area_for_property.return_value = district
+        core_api.return_value.fetch_kvv_area_for_location.return_value = district
         wizard.property_search = "MINKEN"
         result = wizard._onchange_property_search()
         wizard._onchange_property_option_id()
