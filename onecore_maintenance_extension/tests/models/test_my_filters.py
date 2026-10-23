@@ -396,7 +396,7 @@ FAVORITES = (
     "filter_ordered_by_my_department_at_others",
     "filter_in_my_district_ordered_by_others",
     "filter_my_kvv_areas",
-    "filter_my_active_orders_by_category",
+    "filter_my_active_orders_by_team",
 )
 # "Avdelning", not "distrikt", on the first one: the favorite is shared with
 # Kundcenter and the other departments that are not a district.
@@ -404,7 +404,7 @@ FAVORITE_NAMES = {
     "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra – alla",
     "filter_in_my_district_ordered_by_others": "I mitt distrikt, beställt av andra",
     "filter_my_kvv_areas": "Mina kvartersvärdsområden",
-    "filter_my_active_orders_by_category": "Beställt av min avdelning hos andra – aktiva per kategori",
+    "filter_my_active_orders_by_team": "Beställt av min avdelning hos andra – aktiva per resursgrupp",
 }
 
 
@@ -527,10 +527,10 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         for user in (self.kundcenter_user, self.blank_user):
             self.assertEqual(self._run(favorite, user), self.env["maintenance.request"])
 
-    def test_my_active_orders_by_category(self):
+    def test_my_active_orders_by_team(self):
         """What my department ordered from others and is still open:
         own_here and done sit with my own group, so only own_elsewhere."""
-        favorite = self._favorite("filter_my_active_orders_by_category")
+        favorite = self._favorite("filter_my_active_orders_by_team")
 
         self.assertEqual(self._run(favorite, self.district_user), self.own_elsewhere)
         self.assertEqual(self._run(favorite, self.kundcenter_user), self.other_here)
@@ -538,18 +538,18 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
             self._run(favorite, self.blank_user), self.env["maintenance.request"]
         )
 
-    def test_my_active_orders_by_category_excludes_closed(self):
-        favorite = self._favorite("filter_my_active_orders_by_category")
+    def test_my_active_orders_by_team_excludes_closed(self):
+        favorite = self._favorite("filter_my_active_orders_by_team")
         Request = self.env["maintenance.request"]
         closed = Request.browse(self.own_elsewhere.id).with_user(self.district_user)
         closed.write({"stage_id": self.env.ref("maintenance.stage_6").id})
 
         self.assertEqual(self._run(favorite, self.district_user), Request)
 
-    def test_my_active_orders_by_category_excludes_performed(self):
+    def test_my_active_orders_by_team_excludes_performed(self):
         """Utförd at another group is still a placed order, but no longer
         an active one: only is_performed leaves it out."""
-        favorite = self._favorite("filter_my_active_orders_by_category")
+        favorite = self._favorite("filter_my_active_orders_by_team")
         Request = self.env["maintenance.request"]
         performed = Request.browse(self.own_elsewhere.id).with_user(self.district_user)
         performed.write({"user_id": self.district_user.id})
@@ -558,19 +558,18 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
 
         self.assertEqual(self._run(favorite, self.district_user), Request)
 
-    def test_my_active_orders_by_category_groups_by_request_category(self):
-        """The favorite's group-by is our ärendekategori, not the stock
-        equipment category: two orders of different kinds land in two
-        groups."""
-        favorite = self._favorite("filter_my_active_orders_by_category")
+    def test_my_active_orders_by_team_groups_by_resource_group(self):
+        """Orders that sit with two different resource groups land in two
+        groups, one per group doing the work."""
+        favorite = self._favorite("filter_my_active_orders_by_team")
+        appliance_team = create_maintenance_team(
+            self.env, name="Vitvarugruppen (test)"
+        )
         second = create_maintenance_request(
             self.env(user=self.district_user),
-            maintenance_team_id=self.ost_team.id,
+            maintenance_team_id=appliance_team.id,
             cost_center_code="61120",
             kvv_area_code="61121",
-            maintenance_request_category_id=self.env.ref(
-                "onecore_maintenance_extension.category_2"
-            ).id,
         )
         requests = self.own_elsewhere | second
 
@@ -585,8 +584,8 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         )
 
         self.assertEqual(
-            {(category.name, count) for category, _stage, count in groups},
-            {("Vitvara", 1), ("Tvättstuga", 1)},
+            {(team, count) for team, _stage, count in groups},
+            {(self.ost_team, 1), (appliance_team, 1)},
         )
 
     # ------------------------------------------------------------------
@@ -689,6 +688,20 @@ class TestMyFiltersSearchView(MyFiltersFixture, TransactionCase):
 
         self.assertEqual(set(defaults), {"in_my_district", "active"})
         self.assertTrue(set(defaults) <= names, names)
+
+    def test_group_by_resource_group_and_request_category(self):
+        """Gruppera efter offers the resource group, and its category
+        option groups on our request category, not stock's equipment
+        category_id."""
+        group_bys = {
+            safe_eval(node.get("context"))["group_by"]
+            for node in self._search_arch().iter("filter")
+            if "group_by" in (node.get("context") or "")
+        }
+
+        self.assertIn("maintenance_team_id", group_bys)
+        self.assertIn("maintenance_request_category_id", group_bys)
+        self.assertNotIn("category_id", group_bys)
 
     def test_group_by_estate_works_for_a_plain_user(self):
         """estate is related and not stored; grouping must still work for a

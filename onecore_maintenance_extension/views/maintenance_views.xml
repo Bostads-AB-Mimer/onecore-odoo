@@ -171,8 +171,12 @@
                         <group>
                             <filter string='Tilldelad till' name="assigned" domain="[]"
                                 context="{'group_by': 'user_id'}" />
-                            <filter string='Kategori' name="category" domain="[]"
-                                context="{'group_by' : 'category_id'}" />
+                            <filter string='Resursgrupp' name="group_team" domain="[]"
+                                context="{'group_by': 'maintenance_team_id'}" />
+                            <!-- Our request category, not stock's equipment
+                                 category_id. -->
+                            <filter string='Ärendekategori' name="category" domain="[]"
+                                context="{'group_by': 'maintenance_request_category_id'}" />
                             <filter string='Steg' name="stages" domain="[]"
                                 context="{'group_by' : 'stage_id'}" />
                             <filter string='Skapad av' name='created_by' domain="[]"

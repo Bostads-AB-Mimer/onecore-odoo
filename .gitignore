@@ -37,8 +37,7 @@ odoo.log
 filestore/
 
 # Claude Code
-CLAUDE.md
-**/CLAUDE.md
+CLAUDE.local.md
 .claude/settings.local.json
 .claude/*
 
