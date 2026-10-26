@@ -340,24 +340,31 @@ class OneCoreMaintenanceRequest(
     # (maintenance_team_id). A department (the orderer's AD unit), not a
     # resource group: a resource group is a work queue, the department is the
     # organisational unit the business wants to follow up on. Stamped by
-    # OrderingDepartmentService on the write path only — create and the
-    # backfill cron — and deliberately never derived on read:
+    # OrderingDepartmentService on the write path only — create, the backfill
+    # cron, and a move to another resource group (pass_on) — and
+    # deliberately never derived on read:
     #   1. Deriving at read time rewrites history: "ordered by Distrikt Öst in
     #      March" must not become another answer in May because the person
     #      changed department.
     #   2. Mina sidor-ärenden arrive over XML-RPC with a technical integration
-    #      user as create_uid, which has no department. Those resolve to
-    #      Kundcenter from creation_origin instead.
+    #      user as create_uid, which has no department. Those resolve from
+    #      creation_origin to a system parameter instead.
+    owner_user_id = fields.Many2one(
+        string="Beställare",
+        help="Den som beställde ärendet: den som skapade det, eller den som "
+        "senast skickade det vidare till en annan resursgrupp.",
+    )
     ordering_department = fields.Char(
-        "Beställande avdelning",
+        "Beställande enhet",
         readonly=True,
         # The backfill cron's filter column and the group-by key behind
         # MIM-1975/1976/1977.
         index=True,
-        help="Avdelningen (enligt AD) som beställde ärendet, registrerad när "
-        "ärendet skapades. Ärenden från Mina sidor registreras på Kundcenter. "
-        "Skiljer sig från Resursgrupp, som är den grupp ärendet ligger hos "
-        "just nu.",
+        help="Enheten (enligt AD) som beställde ärendet. Sätts när ärendet "
+        "skapas och byts när någon skickar ärendet vidare till en annan "
+        "resursgrupp (inte Kundcenter, som bara fördelar). Ärenden från Mina "
+        "sidor registreras på Mina sidor. Skiljer sig från Resursgrupp, som är "
+        "den grupp ärendet ligger hos just nu.",
     )
     ordering_backfilled_at = fields.Datetime(
         "Beställare härledd i efterhand",
@@ -1445,9 +1452,22 @@ class OneCoreMaintenanceRequest(
             "facility_option_id",
             "staircase_option_id",
         }
+        # The onchange copies an option's id into the request's own link to
+        # the location (FormFieldService). That id is not a record of the
+        # linked model, and create_related_records builds the real record
+        # from the option, so a link sent together with its option is dropped.
+        _link_for_option = {
+            "property_option_id": "property_id",
+            "building_option_id": "building_id",
+            "staircase_option_id": "staircase_id",
+        }
         option_vals_list = []
         for vals in vals_list:
-            option_vals_list.append({f: vals.pop(f, False) for f in _option_fields})
+            option_vals = {f: vals.pop(f, False) for f in _option_fields}
+            for option_field, link_field in _link_for_option.items():
+                if option_vals[option_field]:
+                    vals.pop(link_field, None)
+            option_vals_list.append(option_vals)
 
         # Create maintenance requests
         # Note: activity_update() is overridden to suppress automatic activities
@@ -1578,6 +1598,15 @@ class OneCoreMaintenanceRequest(
                 if record.master_key != new_master_key:
                     master_key_changed_ids.append(record.id)
 
+        # Moving a request to another resource group makes the mover its
+        # orderer (OrderingDepartmentService.pass_on). Not for a write that
+        # enters Återsänd; the handback's own team write below runs under
+        # sudo() and passes_on() skips the superuser. The team before the
+        # write tells a move from a resend of the same team.
+        team_before = {}
+        if "maintenance_team_id" in vals and not entering_atersand:
+            team_before = {record.id: record.maintenance_team_id for record in self}
+
         # Only track changes if not in creation phase
         change_tracker = FieldChangeTracker(self.env)
         changes_by_record = (
@@ -1615,6 +1644,11 @@ class OneCoreMaintenanceRequest(
         if not skip_tracking:
             self._post_loan_product_messages(loan_product_messages)
             change_tracker.post_change_notifications(self, changes_by_record)
+
+        if team_before:
+            OrderingDepartmentService(self.env).pass_on(
+                self.filtered(lambda r: r.maintenance_team_id != team_before[r.id])
+            )
 
         # MIM-486: hand returned requests back to the orderer's team. Resolved
         # here, after super().write(), so a write that changes owner_user_id

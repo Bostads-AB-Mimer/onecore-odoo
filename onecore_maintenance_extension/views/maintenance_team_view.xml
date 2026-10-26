@@ -141,7 +141,7 @@
                     <div class="col-6" t-if="record.ordered_active_count.raw_value + record.ordered_performed_count.raw_value + record.ordered_new_info_count.raw_value > 0">
                         <div class="small text-uppercase text-muted fw-bold mb-2">Bevakning av beställningar
                             <widget name="mimer_help_tooltip"
-                               text="Det er avdelning har beställt som en annan grupp eller entreprenör har nu.&#10;&#10;Aktiva: inte klart än, även om mottagaren inte har börjat.&#10;Utförda: mottagaren är klar, kontrollera och avsluta.&#10;Ny kundinfo: kunden har hört av sig om ärendet.&#10;&#10;Det som ligger hos er själva syns under Att göra."/>
+                               text="Det er enhet har beställt som en annan grupp eller entreprenör har nu.&#10;&#10;Aktiva: inte klart än, även om mottagaren inte har börjat.&#10;Utförda: mottagaren är klar, kontrollera och avsluta.&#10;Ny kundinfo: kunden har hört av sig om ärendet.&#10;&#10;Det som ligger hos er själva syns under Att göra."/>
                         </div>
                         <a t-if="record.ordered_active_count.raw_value > 0"
                            name="action_open_ordered_requests" type="object"

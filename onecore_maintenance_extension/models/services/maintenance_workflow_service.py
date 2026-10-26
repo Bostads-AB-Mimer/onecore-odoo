@@ -312,6 +312,26 @@ class FieldChangeTracker:
             field_obj, old_stage, record.stage_id.id, "Status"
         )
 
+    def format_orderer_change(self, old_owner, old_department, new_owner, new_department):
+        """Format a change of orderer as "Beställare: old → new", each side as
+        "Name (Department)", in the layout of the other change lines. Names
+        are escaped. Returns None when nothing shown changed."""
+        old_display = self._orderer_display(old_owner, old_department)
+        new_display = self._orderer_display(new_owner, new_department)
+        if old_display == new_display:
+            return None
+        return Markup(
+            "<strong>Beställare:</strong> <span style='color: #999; "
+            "text-decoration: line-through;'>%s</span> → %s"
+        ) % (old_display, new_display)
+
+    @staticmethod
+    def _orderer_display(owner, department):
+        name = owner.sudo().name if owner else False
+        if name and department:
+            return f"{name} ({department})"
+        return name or department or "Inte valt"
+
     def _should_skip_field_change(self, field_obj, old_value, new_value):
         """Check if field change should be skipped."""
         if isinstance(field_obj, fields.Many2one):

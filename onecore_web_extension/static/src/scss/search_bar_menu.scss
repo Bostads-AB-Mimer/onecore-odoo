@@ -1,0 +1,17 @@
+// Favorite names in full: a long name wraps instead of being cut off, so
+// favorites that differ only at the end ("… – alla", "… – aktiva") can be
+// told apart. Stock truncates them to one line (text-truncate).
+.o_search_bar_menu .o_favorite_menu .o_favorite_item,
+.o_search_bar_menu .o_favorite_menu .o_favorite_item .text-truncate {
+    white-space: normal;
+}
+
+// Favorites first in the search menu when its columns stack, below
+// Bootstrap's lg breakpoint (the menu is flex-lg-nowrap from there up), so
+// they are not below the long filter list. Desktop keeps stock order.
+@media (max-width: 991.98px) {
+    .o_search_bar_menu .o_favorite_menu {
+        order: -1;
+        margin-bottom: 1.5rem;
+    }
+}
