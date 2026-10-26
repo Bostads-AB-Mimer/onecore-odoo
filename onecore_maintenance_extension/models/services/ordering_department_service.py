@@ -16,30 +16,42 @@ Stamped at create and never recomputed on read:
   Distrikt Öst in March" must not become a different answer in May because
   somebody changed department.
 * Mina sidor-ärenden are created over XML-RPC with a technical integration
-  user as ``create_uid``, which has no department. Those are stamped with
-  Kundcenter from ``creation_origin`` instead: Kundcenter receives,
-  categorises and distributes the tenant inflow, so in business terms they
-  are the orderer.
+  user as ``create_uid``, which has no department. Those are stamped from
+  ``creation_origin`` with the value of a system parameter instead ("Mina
+  sidor" in prod): a tenant ordered them, and Kundcenter only distributes them.
 
-Write path only: create() and the backfill cron. The read path stays free of
-work (MIM-1869).
+Kundcenter distributes requests without ordering them. A request a member of
+Kundcenter creates is stamped "Förmedlat av Kundcenter", except in the
+categories Kundcenter orders in (keys), and Kundcenter's moves never make it
+the orderer. Whoever else passes a request on to another resource group
+becomes its orderer (pass_on).
+
+Write path only: create(), the backfill cron and pass_on(). The read path
+stays free of work.
 """
 
 import logging
 
+from markupsafe import Markup
 from odoo import fields
 
 from ..constants import MIMER_NU_ORIGIN
+from .external_contractor_service import ExternalContractorService
+from .maintenance_workflow_service import FieldChangeTracker, MaintenanceStageManager
 
 _logger = logging.getLogger(__name__)
 
 # ir.config_parameter key for the department stamped on Mina sidor requests.
-# A parameter, not a constant: it has to match how AD spells the Kundcenter
-# unit once the business has cleaned up the duplicates
-# ("Kundcenter"/"Kundcenterenheten"), and following that must not take a
-# release.
+# The default matches no AD unit, so no resource group's members order them.
+# A parameter, so changing it does not take a release.
 MIMER_NU_DEPARTMENT_PARAM = "onecore_maintenance_extension.mimer_nu_ordering_department"
-MIMER_NU_DEPARTMENT_DEFAULT = "Kundcenter"
+MIMER_NU_DEPARTMENT_DEFAULT = "Mina sidor"
+
+# Stamped on requests a member of Kundcenter creates outside the categories
+# Kundcenter orders in (maintenance.request.category.kundcenter_orders):
+# Kundcenter passes those on without ordering them. Matches no AD unit, so no
+# resource group's members order them.
+KUNDCENTER_MEDIATED_DEPARTMENT = "Förmedlat av Kundcenter"
 
 
 def clean_department(value):
@@ -59,10 +71,34 @@ class OrderingDepartmentService:
 
     def __init__(self, env):
         self.env = env
+        self._kundcenter_ids = None
 
     # ------------------------------------------------------------------
     # Resolution
     # ------------------------------------------------------------------
+    def kundcenter_member_ids(self):
+        """Ids of Kundcenter's members, looked up once per service."""
+        if self._kundcenter_ids is None:
+            team = MaintenanceStageManager(self.env).kundcenter_team()
+            self._kundcenter_ids = set(team.member_ids.ids) if team else set()
+        return self._kundcenter_ids
+
+    @staticmethod
+    def ordered_by_tenant(request):
+        """A Mina sidor request nobody has passed on: its orderer is still the
+        integration user who created it, standing in for the tenant."""
+        return request.creation_origin == MIMER_NU_ORIGIN and (
+            not request.owner_user_id or request.owner_user_id == request.create_uid
+        )
+
+    def mediated_by_kundcenter(self, request):
+        """Created by a member of Kundcenter in a category Kundcenter does not
+        order in: Kundcenter passes the request on without ordering it."""
+        orderer = request.owner_user_id or request.create_uid
+        return (
+            orderer.id in self.kundcenter_member_ids()
+            and not request.maintenance_request_category_id.kundcenter_orders
+        )
     def mimer_nu_department(self):
         """The department stamped on tenant (Mina sidor) requests."""
         value = (
@@ -82,12 +118,13 @@ class OrderingDepartmentService:
 
     def resolve_ordering_department(self, request):
         """The department that ordered ``request``, or False."""
-        if request.creation_origin == MIMER_NU_ORIGIN:
-            # A tenant ordered this. create_uid is the technical integration
-            # user, whose own AD unit (if any) says nothing about who ordered.
+        if self.ordered_by_tenant(request):
+            # create_uid is the technical integration user, whose own AD unit
+            # (if any) says nothing about who ordered.
             return self.mimer_nu_department()
-        orderer = request.owner_user_id or request.create_uid
-        return self.department_of(orderer)
+        if self.mediated_by_kundcenter(request):
+            return KUNDCENTER_MEDIATED_DEPARTMENT
+        return self.department_of(request.owner_user_id or request.create_uid)
 
     # ------------------------------------------------------------------
     # create()
@@ -118,6 +155,89 @@ class OrderingDepartmentService:
         # blocked by record rules when the stamp is written.
         request.sudo().write({"ordering_department": department})
         return True
+
+    # ------------------------------------------------------------------
+    # Passing a request on to another resource group
+    # ------------------------------------------------------------------
+    def passes_on(self):
+        """Whether moving a request to another resource group makes the
+        current user its orderer.
+
+        Not the superuser: crons run as it, and the Återsänd handback writes
+        the team under sudo(). Not external contractors, and not members of
+        Kundcenter, who distribute requests without ordering them. Not
+        someone in no resource group: Återsänd hands a request back to its
+        orderer's first resource group, so theirs would land at Kundcenter
+        instead of where it came from.
+        """
+        return self._passes_on(MaintenanceStageManager(self.env).kundcenter_team())
+
+    def _passes_on(self, kundcenter):
+        user = self.env.user
+        if self.env.is_superuser() or not user._is_internal():
+            return False
+        if ExternalContractorService(self.env).is_external_contractor():
+            return False
+        if kundcenter and user in kundcenter.member_ids:
+            return False
+        return bool(MaintenanceStageManager(self.env).resolve_orderer_team(user))
+
+    def pass_on(self, requests):
+        """Make the current user the orderer of ``requests``, which they have
+        just moved to another resource group.
+
+        Left alone: archived (cancelled) and closed requests, a request sent
+        to Kundcenter, and a request moved into a group the user is a member
+        of. Those are not passed on: Kundcenter only distributes, and taking
+        a request into your own group is not ordering it from someone else.
+
+        The department becomes the user's AD unit. Without one it is left
+        empty, and unstamped, for the backfill to fill in once the user's unit
+        arrives at their next SSO login. Each change is logged on the request.
+        """
+        if not requests:
+            return
+        kundcenter = MaintenanceStageManager(self.env).kundcenter_team()
+        if not self._passes_on(kundcenter):
+            return
+        user = self.env.user
+        department = self.department_of(user)
+        changed = requests.filtered(
+            lambda request: not request.archive
+            and not request.stage_id.done
+            and request.maintenance_team_id
+            and request.maintenance_team_id != kundcenter
+            and user not in request.maintenance_team_id.sudo().member_ids
+            and (
+                request.owner_user_id != user
+                or request.ordering_department != department
+            )
+        )
+        if not changed:
+            return
+        before = {
+            request.id: (request.owner_user_id, request.ordering_department)
+            for request in changed
+        }
+        vals = {
+            "owner_user_id": user.id,
+            "ordering_department": department,
+            "ordering_backfilled_at": False,
+        }
+        # sudo: the orderer is set by the server, not through the user's own
+        # access to the field. No change note: the log line below is it.
+        changed.sudo().with_context(skip_change_tracking=True).write(vals)
+
+        tracker = FieldChangeTracker(self.env)
+        bodies = {}
+        for request in changed:
+            line = tracker.format_orderer_change(
+                *before[request.id], request.owner_user_id, request.ordering_department
+            )
+            if line:
+                bodies[request.id] = Markup("<div>%s</div>") % line
+        if bodies:
+            changed.browse(list(bodies))._message_log_batch(bodies=bodies)
 
     # ------------------------------------------------------------------
     # Backfill (cron) — ordering fields only, never team/resource/stage
@@ -176,8 +296,12 @@ class OrderingDepartmentService:
         groups = {}  # department (or False when given up) -> request ids
         pending = 0
         for record in records:
-            if record.creation_origin == MIMER_NU_ORIGIN:
+            # Same order as resolve_ordering_department, with the users'
+            # departments read once for the batch.
+            if self.ordered_by_tenant(record):
                 department = mimer_nu
+            elif self.mediated_by_kundcenter(record):
+                department = KUNDCENTER_MEDIATED_DEPARTMENT
             else:
                 orderer = record.owner_user_id or record.create_uid
                 department = user_departments.get(orderer.id) if orderer else False

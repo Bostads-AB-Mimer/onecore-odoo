@@ -15,15 +15,29 @@
          list, "Mitt distrikt" and the resource-group cards.
 
          noupdate: users may rename or tweak them; a release must not undo
-         that. archive = False on all of them: clicking a favorite drops the
-         "Alla ärenden" facet, and archived requests must not surface. -->
+         that, so a release that changes one does it in a migration.
+         archive = False on all of them: clicking a favorite drops the
+         "Alla ärenden" facet, and archived requests must not surface.
+         "Enhet" is the orderer's AD unit (ordering_department). -->
     <data noupdate="1">
-        <!-- What my department ordered that sits with someone else,
-             per stage, so the orderer can follow up. "Avdelning", not
-             "distrikt": the favorite is shared with Kundcenter, Vitvaror and
-             the rest, who are departments but no district. -->
+        <!-- What I ordered that sits with someone else, per stage: whoever
+             created the request or last passed it on to another resource
+             group is its orderer (owner_user_id). -->
+        <record id="filter_my_orders" model="ir.filters">
+            <field name="name">Mina beställningar</field>
+            <field name="model_id">maintenance.request</field>
+            <field name="user_ids" eval="False" />
+            <field name="is_default" eval="False" />
+            <field name="domain">[('owner_user_id', '=', uid), ('at_my_teams', '=', False), ('archive', '=', False)]</field>
+            <field name="context">{'group_by': ['stage_id']}</field>
+            <field name="sort">["address", "due_date"]</field>
+        </record>
+
+        <!-- What my unit ordered that sits with someone else, per stage, so
+             the orderer can follow up. Every status, Utförd and Avslutad
+             too. -->
         <record id="filter_ordered_by_my_department_at_others" model="ir.filters">
-            <field name="name">Beställt av min avdelning hos andra – alla</field>
+            <field name="name">Beställt av min enhet hos andra – alla</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
             <field name="is_default" eval="False" />
@@ -37,7 +51,7 @@
              distrikt → kvartersvärdsområde → fastighet. Grouped on the kvv
              code, not the name: names are not unique in OneCore. -->
         <record id="filter_in_my_district_ordered_by_others" model="ir.filters">
-            <field name="name">I mitt distrikt, beställt av andra</field>
+            <field name="name">Beställt av andra på min enhet</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
             <field name="is_default" eval="False" />
@@ -50,7 +64,7 @@
              colleague's area too" is the user typing a kvv-area code facet
              on top; no code for that. -->
         <record id="filter_my_kvv_areas" model="ir.filters">
-            <field name="name">Mina kvartersvärdsområden</field>
+            <field name="name">Mina inkomna ärenden</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
             <field name="is_default" eval="False" />
@@ -59,19 +73,19 @@
             <field name="sort">[]</field>
         </record>
 
-        <!-- What my department ordered from other resource groups and is
-             still being worked on, per resource group (the team or
-             contractor doing the work) and then per stage. "Aktiv" =
-             neither Utförd nor Avslutad; a request still in my own group's
-             queue is not a placed order and is left out: the same "hos
-             andra" cut as the favorite above. -->
+        <!-- What my unit ordered from other resource groups and is still
+             being worked on, per stage. "Aktiv" = neither Utförd nor
+             Avslutad; a request still in my own group's queue is not a
+             placed order and is left out: the same "hos andra" cut as the
+             favorite above. The xml-id keeps its old name, from when it was
+             grouped per resource group. -->
         <record id="filter_my_active_orders_by_team" model="ir.filters">
-            <field name="name">Beställt av min avdelning hos andra – aktiva per resursgrupp</field>
+            <field name="name">Beställt av min enhet hos andra – aktiva</field>
             <field name="model_id">maintenance.request</field>
             <field name="user_ids" eval="False" />
             <field name="is_default" eval="False" />
             <field name="domain">[('ordered_by_my_department', '=', True), ('at_my_teams', '=', False), ('stage_id.done', '=', False), ('is_performed', '=', False), ('archive', '=', False)]</field>
-            <field name="context">{'group_by': ['maintenance_team_id', 'stage_id']}</field>
+            <field name="context">{'group_by': ['stage_id']}</field>
             <field name="sort">[]</field>
         </record>
     </data>

@@ -99,14 +99,51 @@ class TestOrderingDepartmentService(TransactionCase):
 
         self.assertFalse(request.ordering_department)
 
-    def test_create_stamps_mimer_nu_requests_with_kundcenter(self):
-        """Tenant reports have no department. Kundcenter receives, categorises
-        and distributes them, so in business terms they are the orderer."""
+    def _kundcenter_user(self, **kwargs):
+        user = create_internal_user(self.env, **kwargs)
+        self.env.ref("onecore_maintenance_extension.7").member_ids = [(4, user.id)]
+        return user
+
+    def test_create_by_kundcenter_is_mediated(self):
+        """Kundcenter passes on what it creates without ordering it."""
+        kundcenter_user = self._kundcenter_user(ad_office_location="Kundcenterenheten")
+
+        request = create_maintenance_request(self.env(user=kundcenter_user))
+
+        self.assertEqual(request.ordering_department, "Förmedlat av Kundcenter")
+
+    def test_create_by_kundcenter_in_a_category_it_orders_in(self):
+        """Keys: there Kundcenter is the orderer."""
+        kundcenter_user = self._kundcenter_user(ad_office_location="Kundcenterenheten")
+        keys = self.env["maintenance.request.category"].create(
+            {"name": "Key order (test)", "kundcenter_orders": True}
+        )
+
+        request = create_maintenance_request(
+            self.env(user=kundcenter_user), maintenance_request_category_id=keys.id
+        )
+
+        self.assertEqual(request.ordering_department, "Kundcenterenheten")
+
+    def test_backfill_marks_kundcenter_requests_mediated_before_their_login(self):
+        """Membership decides, not the AD unit, so a request created by
+        Kundcenter is not left waiting for its creator's next login."""
+        kundcenter_user = self._kundcenter_user(oauth_uid="keycloak-sub-kc")
+        request = create_maintenance_request(self.env(user=kundcenter_user))
+        self._clear_ordering(request)
+
+        self._backfill()
+
+        self.assertEqual(request.ordering_department, "Förmedlat av Kundcenter")
+
+    def test_create_stamps_mimer_nu_requests_with_mina_sidor(self):
+        """Tenant reports have no department. A tenant ordered them;
+        Kundcenter only distributes them, so they are not Kundcenter's."""
         request = create_maintenance_request(
             self.env(user=self.blank_user), creation_origin="mimer-nu"
         )
 
-        self.assertEqual(request.ordering_department, "Kundcenter")
+        self.assertEqual(request.ordering_department, "Mina sidor")
         self.assertFalse(request.ordering_backfilled_at)
 
     def test_create_from_mimer_nu_ignores_the_integration_users_own_department(self):
@@ -122,11 +159,11 @@ class TestOrderingDepartmentService(TransactionCase):
         )
 
         self.assertEqual(request.create_uid, integration_user)
-        self.assertEqual(request.ordering_department, "Kundcenter")
+        self.assertEqual(request.ordering_department, "Mina sidor")
 
     def test_mimer_nu_department_follows_the_system_parameter(self):
-        """The AD spelling of the Kundcenter unit is the business's to decide;
-        following it must not take a release."""
+        """What Mina sidor requests are stamped with is the business's to
+        decide; changing it must not take a release."""
         self.env["ir.config_parameter"].sudo().set_param(
             MIMER_NU_DEPARTMENT_PARAM, " Kundcenterenheten "
         )
@@ -198,7 +235,7 @@ class TestOrderingDepartmentService(TransactionCase):
         self.assertGreaterEqual(first, 1)
         self.assertEqual(second, 0)
 
-    def test_backfill_resolves_mimer_nu_to_kundcenter(self):
+    def test_backfill_resolves_mimer_nu_to_mina_sidor(self):
         integration_user = create_internal_user(
             self.env, ad_office_location="IT-enheten"
         )
@@ -209,7 +246,7 @@ class TestOrderingDepartmentService(TransactionCase):
 
         self._backfill()
 
-        self.assertEqual(request.ordering_department, "Kundcenter")
+        self.assertEqual(request.ordering_department, "Mina sidor")
 
     def test_backfill_gives_up_on_an_orderer_who_can_never_get_a_value(self):
         """No OAuth link (service accounts, contractors): nothing will ever

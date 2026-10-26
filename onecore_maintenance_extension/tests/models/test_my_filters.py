@@ -393,18 +393,20 @@ class TestMyFilters(MyFiltersFixture, TransactionCase):
 
 
 FAVORITES = (
+    "filter_my_orders",
     "filter_ordered_by_my_department_at_others",
     "filter_in_my_district_ordered_by_others",
     "filter_my_kvv_areas",
     "filter_my_active_orders_by_team",
 )
-# "Avdelning", not "distrikt", on the first one: the favorite is shared with
-# Kundcenter and the other departments that are not a district.
+# The names the business settled on. "Enhet", not "distrikt": the favorites
+# are shared with Kundcenter and the other units that are not a district.
 FAVORITE_NAMES = {
-    "filter_ordered_by_my_department_at_others": "Beställt av min avdelning hos andra – alla",
-    "filter_in_my_district_ordered_by_others": "I mitt distrikt, beställt av andra",
-    "filter_my_kvv_areas": "Mina kvartersvärdsområden",
-    "filter_my_active_orders_by_team": "Beställt av min avdelning hos andra – aktiva per resursgrupp",
+    "filter_my_orders": "Mina beställningar",
+    "filter_ordered_by_my_department_at_others": "Beställt av min enhet hos andra – alla",
+    "filter_in_my_district_ordered_by_others": "Beställt av andra på min enhet",
+    "filter_my_kvv_areas": "Mina inkomna ärenden",
+    "filter_my_active_orders_by_team": "Beställt av min enhet hos andra – aktiva",
 }
 
 
@@ -428,7 +430,9 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         its group-by and its sort — as ``user``, limited to this test's
         requests. Returns the matching records."""
         Request = self.env["maintenance.request"].with_user(user)
-        domain = safe_eval(favorite.domain) + [("id", "in", self.all_requests.ids)]
+        domain = safe_eval(favorite.domain, {"uid": user.id}) + [
+            ("id", "in", self.all_requests.ids)
+        ]
         group_by = safe_eval(favorite.context).get("group_by", [])
         order = ", ".join(json.loads(favorite.sort)) or None
         Request._read_group(domain, groupby=group_by, aggregates=["__count"])
@@ -558,12 +562,12 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
 
         self.assertEqual(self._run(favorite, self.district_user), Request)
 
-    def test_my_active_orders_by_team_groups_by_resource_group(self):
-        """Orders that sit with two different resource groups land in two
-        groups, one per group doing the work."""
+    def test_my_active_orders_group_by_status(self):
+        """Orders that sit with two different resource groups in the same
+        stage land in one group: the favorite is per status."""
         favorite = self._favorite("filter_my_active_orders_by_team")
         appliance_team = create_maintenance_team(
-            self.env, name="Vitvarugruppen (test)"
+            self.env, name="Appliance team (test)"
         )
         second = create_maintenance_request(
             self.env(user=self.district_user),
@@ -584,8 +588,30 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
         )
 
         self.assertEqual(
-            {(team, count) for team, _stage, count in groups},
-            {(self.ost_team, 1), (appliance_team, 1)},
+            {(stage, count) for stage, count in groups},
+            {(self.own_elsewhere.stage_id, 2)},
+        )
+
+    def test_my_orders(self):
+        """What I ordered that sits with someone else: own_here and done sit
+        with my own group. A user in no group ordered everything elsewhere."""
+        favorite = self._favorite("filter_my_orders")
+
+        self.assertEqual(self._run(favorite, self.district_user), self.own_elsewhere)
+        self.assertEqual(self._run(favorite, self.kundcenter_user), self.other_here)
+        self.assertEqual(self._run(favorite, self.blank_user), self.blank)
+
+    def test_my_orders_follow_the_orderer(self):
+        """The orderer (Beställare), not the creator: an ärende that someone
+        else has since passed on is theirs."""
+        favorite = self._favorite("filter_my_orders")
+        self.own_elsewhere.sudo().write({"owner_user_id": self.kundcenter_user.id})
+
+        self.assertEqual(
+            self._run(favorite, self.district_user), self.env["maintenance.request"]
+        )
+        self.assertEqual(
+            self._run(favorite, self.kundcenter_user), self.other_here | self.own_elsewhere
         )
 
     # ------------------------------------------------------------------
@@ -610,6 +636,7 @@ class TestShippedFavorites(MyFiltersFixture, TransactionCase):
 
 
 MY_FILTER_NAMES = (
+    "ordered_by_me",
     "ordered_by_my_department",
     "ordered_by_others",
     "in_my_district",
@@ -653,7 +680,16 @@ class TestMyFiltersSearchView(MyFiltersFixture, TransactionCase):
                     self._search(user, safe_eval(domain, {"uid": user.id}))
 
     def test_per_user_filters_answer_as_the_fields_do(self):
-        domains = {name: safe_eval(d) for name, d in self._filter_domains().items()}
+        domains = {
+            name: safe_eval(d, {"uid": self.district_user.id})
+            for name, d in self._filter_domains().items()
+        }
+
+        self.assertMatches(
+            self.district_user,
+            domains["ordered_by_me"],
+            self.own_here | self.own_elsewhere | self.done,
+        )
 
         self.assertMatches(
             self.district_user,

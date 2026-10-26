@@ -55,3 +55,6 @@ from .migrations import test_performed_date_migration
 from .models import test_close_request
 from .models import test_my_filters
 from .models import test_status_filters
+from .models import test_create_location_links
+from .models import test_pass_on_orderer
+from .migrations import test_migration_19_0_1_0_14

@@ -27,10 +27,10 @@ class SearchFieldsMixin(models.AbstractModel):
     # ('f', '=', False) and ('f', '!=', True) to ('f', 'not in', [True]) before
     # the search method runs, so favorites can negate any of them.
     ordered_by_my_department = fields.Boolean(
-        "Beställt av min avdelning",
+        "Beställt av min enhet",
         store=False,
         search="_search_ordered_by_my_department",
-        help="Ärenden vars beställande avdelning är min avdelning enligt AD.",
+        help="Ärenden vars beställande enhet är min enhet enligt AD.",
     )
     in_my_district = fields.Boolean(
         "I mitt distrikt",

@@ -26,7 +26,7 @@
                              orderer's AD department), as opposed to who it
                              sits with. Stored at create, so the facet answers
                              the same thing in May as it did in March -->
-                        <field string="Beställande avdelning" name="ordering_department" />
+                        <field string="Beställande enhet" name="ordering_department" />
                         <field string="Distrikt" name="cost_center_name" />
                         <field string="Distriktkod" name="cost_center_code" />
                         <field string="Kvartersvärdsområde (kod)" name="kvv_area_code" />
@@ -159,7 +159,9 @@
                              The shipped favorites (data/ir_filters.xml) and the
                              "Mitt distrikt" menu (search_default_in_my_district)
                              build on these names. -->
-                        <filter string="Beställt av min avdelning" name="ordered_by_my_department"
+                        <filter string="Beställt av mig" name="ordered_by_me"
+                            domain="[('owner_user_id', '=', uid)]" />
+                        <filter string="Beställt av min enhet" name="ordered_by_my_department"
                             domain="[('ordered_by_my_department', '=', True)]" />
                         <filter string="Beställt av andra" name="ordered_by_others"
                             domain="[('ordered_by_my_department', '=', False)]" />
@@ -179,7 +181,7 @@
                                 context="{'group_by': 'maintenance_request_category_id'}" />
                             <filter string='Steg' name="stages" domain="[]"
                                 context="{'group_by' : 'stage_id'}" />
-                            <filter string='Skapad av' name='created_by' domain="[]"
+                            <filter string='Beställare' name='created_by' domain="[]"
                                 context="{'group_by': 'owner_user_id'}" />
                             <!-- Group on the stored OneCore codes/names; kvv-area captions
                                  are not unique in OneCore, so the code is the grouping key -->
@@ -192,7 +194,7 @@
                                  Odoo joins it, no stored copy needed. -->
                             <filter string='Fastighet' name='estate' domain="[]"
                                 context="{'group_by': 'estate'}" />
-                            <filter string='Beställande avdelning' name='ordering_department'
+                            <filter string='Beställande enhet' name='ordering_department'
                                 domain="[]"
                                 context="{'group_by': 'ordering_department'}" />
                             <!-- Group on the label, not priority_days: priority_days is 0
@@ -370,9 +372,12 @@
                                     <!-- MIM-1840: the remove-object trash reads rental_property_id
                                          (parking_space_id / facility_id are already in this view) -->
                                     <field name="rental_property_id" invisible="1" />
-                                    <!-- MIM-2056: the add object/tenant pens read these -->
-                                    <field name="building_id" invisible="1" />
-                                    <field name="property_id" invisible="1" />
+                                    <!-- The add object/tenant pens read these. Readonly, so
+                                         saving a new ärende does not send them: the onchange
+                                         fills them with search-option ids, and create()
+                                         builds the real records from the options. -->
+                                    <field name="building_id" invisible="1" readonly="1" />
+                                    <field name="property_id" invisible="1" readonly="1" />
                                     <group col="1"
                                         invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
@@ -927,7 +932,7 @@
                                             name="maintenance_team_id" nolabel="1"
                                             options="{'no_create': True, 'no_open': True}"
                                             readonly="user_is_external_contractor" />
-                                        <!-- MIM-1970: "Beställande avdelning" is
+                                        <!-- "Beställande enhet" is
                                              deliberately not shown here. It is a
                                              follow-up facet (search view, list
                                              column), not something the handler
@@ -1151,7 +1156,7 @@
                         <field name="kvv_area_display" string="Kvartersvärdsområde" optional="hide" />
                         <field name="kvv_area_responsible" string="Kvartersvärd" optional="hide" />
                         <field name="create_date" string="Skapad Datum" options="{'show_time': false}" optional="hide" />
-                        <field name="owner_user_id" string="Skapad av" optional="hide" />
+                        <field name="owner_user_id" string="Beställare" optional="hide" />
                         <field name="lease_start_date" string="Kontrakt startdatum" optional="hide" />
                         <field name="lease_end_date" string="Kontrakt slutdatum" optional="hide" />
                         <field name="start_date" optional="hide" />
