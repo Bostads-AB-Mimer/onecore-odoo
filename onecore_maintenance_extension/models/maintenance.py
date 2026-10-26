@@ -2,16 +2,18 @@ import urllib.parse
 import uuid
 import logging
 import json
-import time
+from datetime import timedelta
 
 from markupsafe import Markup
 from odoo import api, fields, models, _
-from odoo.tools import is_html_empty
-from odoo.exceptions import AccessError, UserError
+from odoo.exceptions import AccessError, UserError, ValidationError
+from odoo.tools import SQL, is_html_empty
 
 from ...onecore_api import core_api
 from .handlers import HandlerFactory, BaseMaintenanceHandler
 from .utils import validators
+from .utils.helpers import close_request_reason_html
+from .utils.priority import priority_days_from, priority_label_for
 from .maintenance_time_report_wizard import WORK_ORDER_PREFIX
 from .services import (
     FieldChangeTracker,
@@ -20,13 +22,21 @@ from .services import (
     ExternalContractorService,
     MaintenanceStageManager,
     ManagementAreaService,
+    OneCoreFlagSyncService,
+    OrderingDepartmentService,
 )
 from .constants import (
     SORTED_SPACES,
     SEARCH_TYPES,
-    PRIORITY_OPTIONS,
+    PRIORITY_PRESETS,
+    PRIORITY_CUSTOM,
+    PRIORITY_MAX_WEEKS,
     CREATION_ORIGINS,
     FORM_STATES,
+    CUSTOMER_MESSAGE_TYPE,
+    RECEIPT_TO_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+    CLOSE_REQUEST_CONFLICT_PREFIX,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -43,11 +53,6 @@ from .mixins import (
 
 _logger = logging.getLogger(__name__)
 
-# Per-worker cache so the pest control badge doesn't trigger a OneCore call on
-# every form read (web_save re-reads included). Worst-case staleness = TTL.
-PEST_CONTROL_CACHE_TTL = 300  # seconds
-_pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
-
 
 class OneCoreMaintenanceRequest(
     SearchFieldsMixin,
@@ -63,7 +68,12 @@ class OneCoreMaintenanceRequest(
     models.Model,
 ):
     _inherit = "maintenance.request"
-    _order = "recently_added_tenant desc, request_date desc"
+    # A tenant's close request first — the only signal that asks for a
+    # decision rather than an acknowledgement (MIM-2036) — then customer
+    # messages, "ska sorteras högst upp i kanban vyn". _order takes stored
+    # columns only, hence the stored booleans rather than their non-stored
+    # has_unread_* mirrors.
+    _order = "close_request_pending desc, customer_message_unread desc, recently_added_tenant desc, request_date desc"
     _unaccent = True
 
     # ============================================================================
@@ -85,9 +95,9 @@ class OneCoreMaintenanceRequest(
         store=True,
     )
     start_date = fields.Date("Startdatum", store=True)
-    performed_date = fields.Datetime("Utförd datum", store=True, readonly=True)
-    closed_date = fields.Datetime("Avslutad datum", store=True, readonly=True)
-    returned_date = fields.Datetime("Återsänd datum", store=True, readonly=True)
+    performed_date = fields.Datetime("Utfört datum", store=True, readonly=True)
+    closed_date = fields.Datetime("Avslutat datum", store=True, readonly=True)
+    returned_date = fields.Datetime("Återsänt datum", store=True, readonly=True)
     hidden_from_my_pages = fields.Boolean(
         "Dold från Mimer.nu", store=True, default=False
     )
@@ -114,9 +124,31 @@ class OneCoreMaintenanceRequest(
     master_key = fields.Boolean("Huvudnyckel", store=True)
 
     priority_expanded = fields.Selection(
-        PRIORITY_OPTIONS,
+        PRIORITY_PRESETS,
         string="Prioritet",
         store=True,
+    )
+    priority_weeks = fields.Integer(
+        "Antal veckor",
+        store=True,
+        help="Antal veckor till förfallodatum. Används endast när prioritet är"
+        " 'Antal veckor'.",
+    )
+    # The day count is the arithmetic priority_expanded used to carry itself.
+    # It is 0 both for Akut and for an ärende with no priority at all, because
+    # fields.Integer cannot hold NULL (odoo/orm/fields_numeric.py:32). Ask
+    # priority_expanded, never this, whether a priority is set.
+    priority_days = fields.Integer(
+        "Prioritet (dagar)",
+        compute="_compute_priority_days",
+        store=True,
+        readonly=True,
+    )
+    priority_label = fields.Char(
+        "Prioritet",
+        compute="_compute_priority_label",
+        store=True,
+        readonly=True,
     )
     due_date = fields.Date(
         "Förfallodatum",
@@ -156,11 +188,6 @@ class OneCoreMaintenanceRequest(
         compute="_compute_schedule_date_after_due_date",
         store=False,
     )
-    new_mimer_notification = fields.Boolean(
-        string="New Mimer Message",
-        compute="_compute_new_mimer_notification",
-        store=False,
-    )
     supplier_dialog_ack_at = fields.Datetime(
         string="Mimer har bekräftat att de läst meddelandet",
         help="Senaste tidpunkt en Mimer-handläggare kvitterade entreprenörens noteringar.",
@@ -192,11 +219,67 @@ class OneCoreMaintenanceRequest(
         compute="_compute_has_unread_master_key_change",
         store=False,
     )
-    # Form-view only. Adding this to tree/kanban would fire one API call per row.
+    customer_message_ack_at = fields.Datetime(
+        string="Meddelande från kund kvitterat",
+        help="Senaste tidpunkt någon kvitterade ett meddelande från kund. "
+        "Delas av alla användare — Mimer-handläggare och externa "
+        "entreprenörer — som har tillgång till ärendet (MIM-1960).",
+    )
+    has_unread_new_customer_info = fields.Boolean(
+        string="Okvitterad ny kund",
+        compute="_compute_has_unread_new_customer_info",
+        store=False,
+    )
+    last_customer_message_at = fields.Datetime(
+        string="Senaste meddelande från kund",
+        help="Sätts automatiskt när ett meddelande från kund kommer in via "
+        "Mina sidor. Driver sorteringen i kanbanvyn.",
+    )
+    # Stored, so _order can promote requests with an outstanding customer
+    # message — a non-stored computed field cannot be ordered on. Shared
+    # across audiences (MIM-1960): one boolean, not one per side.
+    customer_message_unread = fields.Boolean(
+        string="Okvitterat kundmeddelande",
+        compute="_compute_customer_message_unread",
+        store=True,
+    )
+    has_unread_customer_message = fields.Boolean(
+        string="Okvitterat meddelande från kund",
+        compute="_compute_has_unread_customer_message",
+        store=False,
+    )
+    # MIM-2036 — "Hyresgäst vill avsluta". Two timestamps rather than a flag,
+    # the same shape as last_customer_message_at / customer_message_ack_at: a
+    # new request after a decline re-raises the signal simply by being newer
+    # than the last resolution, with nothing to reset.
+    close_requested_at = fields.Datetime(
+        string="Avslut begärt av hyresgäst",
+        readonly=True,
+        copy=False,
+        help="Sätts när hyresgästen ber om att få ärendet avslutat via Mina sidor.",
+    )
+    close_request_resolved_at = fields.Datetime(
+        string="Begäran om avslut hanterad",
+        readonly=True,
+        copy=False,
+        help="Sätts när begäran avslås, när ärendet avslutas på begäran eller när "
+        "ärendet flyttas till Avslutad på annat sätt.",
+    )
+    # Stored, so _order can promote it and the kanban/mobile cards can read it
+    # without a compute per card.
+    close_request_pending = fields.Boolean(
+        string="Hyresgäst vill avsluta",
+        compute="_compute_close_request_pending",
+        store=True,
+    )
+    # Stored snapshot written only by OneCoreFlagSyncService (create path +
+    # cron). Computing it per record would fire one OneCore call per kanban
+    # card, which is why it used to be form-only (MIM-1959).
     requires_pest_control = fields.Boolean(
         string="Spärr skadedjur",
-        compute="_compute_requires_pest_control",
-        store=False,
+        store=True,
+        readonly=True,
+        default=False,
     )
     floor_plan_image_url = fields.Char(
         store=False, readonly=True, compute="_compute_floor_plan"
@@ -219,6 +302,11 @@ class OneCoreMaintenanceRequest(
     cost_center_name = fields.Char("Distrikt (namn)", readonly=True)
     cost_center_display = fields.Char(
         "Tillhör distrikt", compute="_compute_cost_center_display"
+    )
+    # Shows "Tilldela resursgrupp" in the form; see ASSIGN_DISTRICT_TEAM_PARAM.
+    assign_district_team_enabled = fields.Boolean(
+        "Tilldela resursgrupp påslagen",
+        compute="_compute_assign_district_team_enabled",
     )
     district_manager = fields.Char(
         "Distriktschef",
@@ -243,6 +331,43 @@ class OneCoreMaintenanceRequest(
         help="Senaste lyckade uppslag av distrikt/kvartersvärdsområde i OneCore "
         "(även när fastigheten saknar koppling). Tomt = aldrig uppslaget eller "
         "misslyckat — backfill-jobbet försöker igen.",
+    )
+
+    # ============================================================================
+    # ORDERING DEPARTMENT — beställande avdelning (MIM-1970, MIM-2011)
+    # ============================================================================
+    # Who ordered the request, as opposed to who it currently sits with
+    # (maintenance_team_id). A department (the orderer's AD unit), not a
+    # resource group: a resource group is a work queue, the department is the
+    # organisational unit the business wants to follow up on. Stamped by
+    # OrderingDepartmentService on the write path only — create and the
+    # backfill cron — and deliberately never derived on read:
+    #   1. Deriving at read time rewrites history: "ordered by Distrikt Öst in
+    #      March" must not become another answer in May because the person
+    #      changed department.
+    #   2. Mina sidor-ärenden arrive over XML-RPC with a technical integration
+    #      user as create_uid, which has no department. Those resolve to
+    #      Kundcenter from creation_origin instead.
+    ordering_department = fields.Char(
+        "Beställande avdelning",
+        readonly=True,
+        # The backfill cron's filter column and the group-by key behind
+        # MIM-1975/1976/1977.
+        index=True,
+        help="Avdelningen (enligt AD) som beställde ärendet, registrerad när "
+        "ärendet skapades. Ärenden från Mina sidor registreras på Kundcenter. "
+        "Skiljer sig från Resursgrupp, som är den grupp ärendet ligger hos "
+        "just nu.",
+    )
+    ordering_backfilled_at = fields.Datetime(
+        "Beställare härledd i efterhand",
+        readonly=True,
+        help="Satt av backfill-jobbet. Är det ifyllt tillsammans med en "
+        "beställande avdelning är avdelningen en gissning, härledd ur vem som "
+        "skapade ärendet och vilken avdelning den personen har idag — inte "
+        "registrerad när ärendet skapades. Är det ifyllt utan avdelning har "
+        "jobbet tittat på ärendet men skaparen saknar avdelning. Tomt = "
+        "ärendet stämplades vid create och är alltså ingen gissning.",
     )
 
     # ============================================================================
@@ -290,6 +415,11 @@ class OneCoreMaintenanceRequest(
                 record.cost_center_display = (
                     record.cost_center_code or record.cost_center_name or False
                 )
+
+    def _compute_assign_district_team_enabled(self):
+        enabled = ManagementAreaService(self.env).assign_team_enabled()
+        for record in self:
+            record.assign_district_team_enabled = enabled
 
     @api.depends("cost_center_code")
     def _compute_district_manager(self):
@@ -401,74 +531,6 @@ class OneCoreMaintenanceRequest(
         for record in self:
             record_service.handle_empty_tenant_logic(record)
 
-    @api.depends("rental_property_id", "rental_property_option_id")
-    def _compute_requires_pest_control(self):
-        api = None
-        for record in self:
-            rental_id = None
-            if record.rental_property_id:
-                rental_id = record.rental_property_id.rental_property_id
-            elif record.rental_property_option_id:
-                rental_id = record.rental_property_option_id.name
-
-            if not rental_id:
-                record.requires_pest_control = False
-                continue
-
-            cached = _pest_control_cache.get(rental_id)
-            if cached and time.monotonic() < cached[0]:
-                record.requires_pest_control = cached[1]
-                continue
-
-            try:
-                if api is None:
-                    api = record.get_core_api()
-                data = api.fetch_residence(rental_id, timeout=5)
-                blocks = (data or {}).get("propertyObject", {}).get("rentalBlocks") or []
-                value = any(
-                    (b or {}).get("blockReason") == "SKADEDJUR" for b in blocks
-                )
-                _pest_control_cache[rental_id] = (
-                    time.monotonic() + PEST_CONTROL_CACHE_TTL,
-                    value,
-                )
-                record.requires_pest_control = value
-            except Exception as err:
-                _logger.warning(
-                    "Could not fetch pest control status for rental_id %s: %s",
-                    rental_id,
-                    err,
-                )
-                record.requires_pest_control = False
-
-    @api.depends(
-        "message_ids.notification_ids.is_read",
-        "message_ids.notification_ids.notification_type",
-    )
-    def _compute_new_mimer_notification(self):
-        # Batched: one mail.notification search for the whole recordset.
-        # The previous per-record loop fired ~2 queries per card and
-        # dominated the kanban web_read_group cost.
-        if not self:
-            return
-        notifications = self.env["mail.notification"].search(
-            [
-                ("mail_message_id.model", "=", "maintenance.request"),
-                ("mail_message_id.res_id", "in", self.ids),
-                ("res_partner_id", "=", self.env.user.partner_id.id),
-                ("is_read", "!=", True),
-                ("notification_type", "=", "inbox"),
-                (
-                    "mail_message_id.author_id.user_ids.login",
-                    "=",
-                    "odoo@mimer.nu",
-                ),
-            ]
-        )
-        flagged_ids = set(notifications.mail_message_id.mapped("res_id"))
-        for record in self:
-            record.new_mimer_notification = record.id in flagged_ids
-
     @api.depends(
         "message_ids.date",
         "message_ids.author_id",
@@ -520,6 +582,24 @@ class OneCoreMaintenanceRequest(
         for record in self:
             if record.id in unread_res_ids:
                 record[indicator_field] = True
+
+    def message_post(self, **kwargs):
+        message = super().message_post(**kwargs)
+        # Stored so _order can promote the request — a per-user computed field
+        # cannot be ordered on. sudo() because the poster is the work-order
+        # service's integration account, which need not hold write access on
+        # every field of the request.
+        if message.message_type == CUSTOMER_MESSAGE_TYPE:
+            # Only ever advance the anchor. A from_tenant message can in
+            # principle be posted with a backdated date (an import, a replay);
+            # assigning unconditionally would then move the anchor below an
+            # existing acknowledgement and silently swallow a newer, genuinely
+            # unread message.
+            if not self.last_customer_message_at or (
+                message.date > self.last_customer_message_at
+            ):
+                self.sudo().write({"last_customer_message_at": message.date})
+        return message
 
     def _get_allowed_message_params(self):
         # Let the chatter composer flag a log note as "inform the opposite
@@ -627,6 +707,54 @@ class OneCoreMaintenanceRequest(
                 not ack_at or record.master_key_changed_at > ack_at
             )
 
+    @api.depends("recently_added_tenant")
+    def _compute_has_unread_new_customer_info(self):
+        # "Ny kund" (badge label; field/method names keep the older "new
+        # customer info" wording, MIM-1953) means exactly what it says: the
+        # tenant was back-filled from the OneCore API onto a request that had
+        # none. Tenant messages moved to has_unread_customer_message
+        # (MIM-1960).
+        #
+        # Shown to both audiences. It started as a Mimer-only data-quality
+        # flag, but a newly attached tenant is equally actionable for an
+        # external contractor — it is who they can now contact about the
+        # ärende, and they already read the tenant's details on the same form.
+        # No depends_context("uid"): the value is one shared fact, so keying
+        # the compute cache per user would only fragment it (same reasoning as
+        # customer_message_unread).
+        for record in self:
+            record.has_unread_new_customer_info = record.recently_added_tenant
+
+    @api.depends("last_customer_message_at", "customer_message_ack_at")
+    def _compute_customer_message_unread(self):
+        # Stored, so no depends_context: one shared fact, not one per
+        # audience (MIM-1960) — the first acknowledger from either side
+        # silences it for everyone.
+        for record in self:
+            latest = record.last_customer_message_at
+            ack = record.customer_message_ack_at
+            record.customer_message_unread = bool(latest) and (not ack or latest > ack)
+
+    @api.depends("customer_message_unread")
+    def _compute_has_unread_customer_message(self):
+        # Non-stored mirror of the stored boolean — kept as a separate field
+        # (rather than having views/JS read customer_message_unread directly)
+        # so the name views and JS already use needs no changes.
+        for record in self:
+            record.has_unread_customer_message = record.customer_message_unread
+
+    @api.depends("close_requested_at", "close_request_resolved_at")
+    def _compute_close_request_pending(self):
+        # One shared fact, like customer_message_unread — no depends_context.
+        # request_close_from_tenant keeps a new request strictly after the last
+        # resolution, so equal timestamps here always mean "resolved".
+        for record in self:
+            requested = record.close_requested_at
+            resolved = record.close_request_resolved_at
+            record.close_request_pending = bool(requested) and (
+                not resolved or requested > resolved
+            )
+
     def action_acknowledge_dialog(self):
         """Mark the log-note dialog read for the acking user's whole side.
 
@@ -650,6 +778,58 @@ class OneCoreMaintenanceRequest(
         self.env["mail.message"].invalidate_model(["is_dialog_unread_for_side"])
         return True
 
+    def action_acknowledge_customer_message(self):
+        """Mark the tenant's Mina-sidor message read for everyone (MIM-1960).
+
+        One shared timestamp: the first person to acknowledge — from either
+        Mimer or an external contractor's side — silences the status for
+        both. The no-op guard below is what stops a second acknowledger: by
+        the time anyone else clicks, has_unread_customer_message is already
+        False, so reaching the write below means the acking user is first,
+        and posting the receipt unconditionally there is correct — no
+        "other side" guard is needed any more.
+        """
+        self.ensure_one()
+        if not self.has_unread_customer_message:
+            return True
+        now = fields.Datetime.now()
+        is_external = ExternalContractorService(self.env).is_external_contractor()
+        self.customer_message_ack_at = now
+        self._post_customer_message_receipt(is_external)
+        # Non-stored computed field — writing the stored ack does not invalidate
+        # it automatically, so force a recompute for the chatter button and the
+        # kanban chip.
+        self.invalidate_recordset(["has_unread_customer_message"])
+        return True
+
+    def _post_customer_message_receipt(self, is_external):
+        """Confirm to the tenant that their message was read.
+
+        Lands in the Odoo händelselogg immediately, and on Mina sidor once
+        receipt_to_tenant is allowlisted in the work-order service's
+        MESSAGE_DOMAIN — that is a read filter, so earlier receipts appear
+        retroactively.
+
+        Posted as the acking user, so the audit log records who acknowledged.
+
+        The body names the organisation because Mina sidor used to show only
+        the first word of the sender. MIM-2040 replaces that sender with
+        "Mimer" or "Mimers Leverantör - <resursgrupp>" and mina-sidor stops
+        truncating it, so once the whole chain is released the tenant sees the
+        organisation twice — beside the message and inside it. Harmless, but
+        the prefix has stopped earning its place; dropping it is a change to
+        tenant-facing copy and belongs with whoever owns that wording.
+        """
+        self.ensure_one()
+        sender = "Mimer"
+        if is_external and self.maintenance_team_id:
+            sender = self.maintenance_team_id.name
+        return self.message_post(
+            body=f"{sender} har mottagit ditt meddelande",
+            message_type=RECEIPT_TO_TENANT_MESSAGE_TYPE,
+            subtype_xmlid="mail.mt_note",
+        )
+
     def action_acknowledge_master_key_change(self):
         """Mark the master-key change read for every viewer of the request.
 
@@ -664,6 +844,135 @@ class OneCoreMaintenanceRequest(
         # and the kanban chip re-evaluate immediately.
         self.invalidate_recordset(["has_unread_master_key_change"])
         return True
+
+    def action_acknowledge_new_customer_info(self):
+        """Clear the "Ny kund" flag for everyone on the request.
+
+        There is no timestamp: the signal *is* recently_added_tenant, so
+        clearing the flag is the acknowledgement. Shared and first-click-wins
+        across both audiences, the same rule as
+        action_acknowledge_customer_message — the first person to click, Mimer
+        handler or external contractor, silences it for everyone, and the
+        `if` below makes the second clicker a no-op.
+
+        Note the side effect a contractor's click now has: recently_added_tenant
+        also drives _order (see _order at the top of this model), so clearing it
+        drops the ärende back down Mimer's kanban as well. That is accepted —
+        one shared signal means one shared dismissal. Unlike the
+        customer-message ack, nothing is posted to the tenant here, so a second
+        click cannot produce a duplicate receipt.
+        """
+        self.ensure_one()
+        if self.recently_added_tenant:
+            self.recently_added_tenant = False
+        self.invalidate_recordset(["has_unread_new_customer_info"])
+        return True
+
+    # ============================================================================
+    # CLOSE REQUEST FROM TENANT (MIM-2036)
+    # ============================================================================
+    # The tenant only asks; an Odoo user decides — action_accept_close_request
+    # or the decline wizard — and any move to Avslutad also resolves the
+    # request (MaintenanceStageManager.handle_stage_change).
+
+    def _lock_for_close_request(self):
+        """Row-lock the request, then drop its cached values.
+
+        A blocking FOR UPDATE, deliberately not lock_for_update(): that uses
+        SKIP LOCKED and raises LockError, a UserError without
+        CLOSE_REQUEST_CONFLICT_PREFIX, which the work-order service would turn
+        into a 500. Here the second of two concurrent callers waits; under
+        REPEATABLE READ it then fails with a serialization error once the first
+        commits, Odoo's RPC layer retries it (odoo/service/model.py retrying),
+        and the retry reads the committed request and is refused as
+        already_pending.
+        """
+        self.ensure_one()
+        self.env.cr.execute(
+            SQL(
+                "SELECT id FROM %s WHERE id = %s FOR UPDATE",
+                SQL.identifier(self._table),
+                self.id,
+            )
+        )
+        self.invalidate_recordset()
+
+    def _raise_close_request_conflict(self, code):
+        # A code, not Swedish: the work-order service parses it into a 409 and
+        # no Odoo user ever reads it.
+        raise UserError(f"{CLOSE_REQUEST_CONFLICT_PREFIX}{code}")
+
+    def request_close_from_tenant(self, reason=None):
+        """The tenant asks for the case to be closed.
+
+        Called over XML-RPC by onecore's work-order service, as its
+        integration account, on the tenant's behalf. Refused — see
+        _raise_close_request_conflict — when the case is already Avslutad,
+        hidden from Mimer.nu, or already has a pending request.
+        """
+        self.ensure_one()
+        self._lock_for_close_request()
+        if self.stage_id.name == "Avslutad":
+            self._raise_close_request_conflict("closed")
+        if self.hidden_from_my_pages:
+            self._raise_close_request_conflict("hidden")
+        if self.close_request_pending:
+            self._raise_close_request_conflict("already_pending")
+
+        # Neutral wording, so the same body reads right in the chatter and on
+        # Mina sidor.
+        body = Markup("Begäran om att avsluta ärendet")
+        reason_html = close_request_reason_html(reason)
+        if reason_html:
+            body += Markup("<br/>Orsak: ") + reason_html
+        self.message_post(
+            body=body,
+            message_type=CLOSE_REQUEST_FROM_TENANT_MESSAGE_TYPE,
+            subtype_xmlid="mail.mt_note",
+        )
+
+        requested_at = fields.Datetime.now()
+        resolved_at = self.close_request_resolved_at
+        if resolved_at and requested_at <= resolved_at:
+            # Datetime has second resolution and pending needs the request
+            # strictly after the last resolution; asking again within the
+            # second of a decline would otherwise read as already resolved.
+            requested_at = resolved_at + timedelta(seconds=1)
+        # sudo(): same as message_post's last_customer_message_at write — the
+        # integration account need not hold write access on every field.
+        self.sudo().write({"close_requested_at": requested_at})
+        return True
+
+    def action_accept_close_request(self):
+        """Close the case on the tenant's request ("Avsluta ärendet").
+
+        Writes the stage as the acting user, so the workflow and the
+        contractor rules in write() run unchanged: an external contractor may
+        never move a case to Avslutad and is refused there, which is why the
+        chatter only offers them Avslå. The resolution is not written here —
+        the transition itself stamps it, in the same write.
+        """
+        self.ensure_one()
+        if not self.close_request_pending:
+            raise UserError(_("Begäran om avslut är redan hanterad."))
+        closed_stage = MaintenanceStageManager(self.env)._get_stage_by_name("Avslutad")
+        self.write({"stage_id": closed_stage.id})
+        return True
+
+    def action_decline_close_request(self):
+        """Open the Avslå dialog. Contractors may decline as well as Mimer."""
+        self.ensure_one()
+        if not self.close_request_pending:
+            raise UserError(_("Begäran om avslut är redan hanterad."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Avslå begäran om avslut"),
+            "res_model": "maintenance.close.request.decline.wizard",
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "new",
+            "context": {"default_request_id": self.id},
+        }
 
     def _send_creation_sms(self):
         """Send SMS notification when maintenance request is created."""
@@ -723,15 +1032,56 @@ class OneCoreMaintenanceRequest(
         for record in self:
             record.user_is_external_contractor = is_external
 
-    @api.depends("request_date", "start_date", "priority_expanded")
+    @api.depends("priority_expanded", "priority_weeks")
+    def _compute_priority_days(self):
+        for record in self:
+            record.priority_days = priority_days_from(
+                record.priority_expanded, record.priority_weeks
+            )
+
+    @api.depends("priority_expanded", "priority_days")
+    def _compute_priority_label(self):
+        for record in self:
+            # Char IS nullable, so this is the one derived field that can say
+            # "no priority" — hence the guard, which asks priority_expanded.
+            record.priority_label = (
+                priority_label_for(record.priority_days)
+                if record._has_priority_days()
+                else False
+            )
+
+    @api.constrains("priority_expanded", "priority_weeks")
+    def _check_priority_weeks(self):
+        for record in self:
+            if record.priority_expanded != PRIORITY_CUSTOM:
+                continue
+            if not 1 <= record.priority_weeks <= PRIORITY_MAX_WEEKS:
+                raise ValidationError(
+                    _("Antal veckor måste vara mellan 1 och %s.") % PRIORITY_MAX_WEEKS
+                )
+
+    @api.depends("request_date", "start_date", "priority_expanded", "priority_days")
     def _compute_due_date(self):
         for record in self:
             base_date = record.start_date if record.start_date else record.request_date
 
-            if base_date and record.priority_expanded:
-                record.due_date = fields.Date.add(
-                    base_date, days=int(record.priority_expanded)
-                )
+            # The guard asks priority_expanded, as before: it is the nullable
+            # field, and it is truthy for Akut because "0" is a non-empty
+            # string. priority_days only supplies the number.
+            if base_date and record._has_priority_days():
+                record.due_date = fields.Date.add(base_date, days=record.priority_days)
+
+    def _has_priority_days(self):
+        """Whether priority_days is a real day count (Akut's 0 included).
+
+        False with no priority, and also while 'Antal veckor' is picked but the
+        number not typed yet — the constraint blocks saving that, but onchange
+        still recomputes, and a 0 there must not read as Akut.
+        """
+        self.ensure_one()
+        if self.priority_expanded == PRIORITY_CUSTOM:
+            return bool(self.priority_weeks)
+        return bool(self.priority_expanded)
 
     def _inverse_due_date(self):
         # Presence of this inverse lets the stored computed field retain
@@ -1108,6 +1458,8 @@ class OneCoreMaintenanceRequest(
         create_service = RecordManagementService(self.env)
         stage_manager = MaintenanceStageManager(self.env)
         management_area_service = ManagementAreaService(self.env)
+        flag_sync_service = OneCoreFlagSyncService(self.env)
+        ordering_department_service = OrderingDepartmentService(self.env)
 
         for idx, request in enumerate(maintenance_requests):
             vals = {**vals_list[idx], **option_vals_list[idx]}
@@ -1124,8 +1476,16 @@ class OneCoreMaintenanceRequest(
             create_service.setup_team_assignment(request)
             # Snapshot distrikt / kvartersvärdsområde from OneCore. Best
             # effort (never blocks creation); skipped when the caller already
-            # stamped the fields (core does for mimer.nu requests).
+            # stamped the fields. Core sends no codes for mimer.nu requests,
+            # so those are looked up here too.
             management_area_service.populate(request)
+            # Spärr skadedjur, from the same TTL-cached set the cron refreshes.
+            # Without this a case opened on a blocked flat shows no warning
+            # until the next cron run (MIM-1959).
+            flag_sync_service.populate_pest_control(request)
+            # MIM-1970: record who ordered the request while we still know.
+            # Skipped when the caller stamped the field itself.
+            ordering_department_service.populate(request)
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
@@ -1144,8 +1504,12 @@ class OneCoreMaintenanceRequest(
         return maintenance_requests
 
     def write(self, vals):
-        # Check if we're in the initial creation phase
-        skip_tracking = self.env.context.get("creating_records")
+        # Check if we're in the initial creation phase, or if the caller writes a
+        # group of fields as one logical change and posts its own summary note
+        # (the backfill wizard) — one message_post per write is slow and noisy.
+        skip_tracking = self.env.context.get("creating_records") or self.env.context.get(
+            "skip_change_tracking"
+        )
 
         stage_manager = MaintenanceStageManager(self.env)
         external_contractor_service = ExternalContractorService(self.env)
@@ -1159,6 +1523,13 @@ class OneCoreMaintenanceRequest(
                 self, vals["stage_id"], vals
             )
             vals.update(stage_updates)
+
+        # Closing a mixed recordset: handle_stage_change dates only a recordset
+        # with no Utfört datum at all, so the undated part is dated after the
+        # write, with the closing time (see handle_stage_change).
+        undated_on_close_ids = []
+        if "stage_id" in vals and vals.get("closed_date") and "performed_date" not in vals:
+            undated_on_close_ids = [record.id for record in self if not record.performed_date]
 
         # MIM-486: entering Återsänd clears the assigned resource and hands the
         # request back to the orderer's team. The team switch happens after
@@ -1237,6 +1608,9 @@ class OneCoreMaintenanceRequest(
                 {"master_key_changed_at": fields.Datetime.now()}
             )
 
+        if undated_on_close_ids:
+            self.browse(undated_on_close_ids).write({"performed_date": vals["closed_date"]})
+
         # Post loan product messages first, then other change notifications
         if not skip_tracking:
             self._post_loan_product_messages(loan_product_messages)
@@ -1261,6 +1635,24 @@ class OneCoreMaintenanceRequest(
                 )
 
         return result
+
+    def preview_atersand_team(self, target_stage_id):
+        """Team name a move to `target_stage_id` would resolve to via
+        resolve_return_team(), or False if that stage isn't Återsänd.
+
+        Read-only mirror of the routing done in write() when actually
+        entering Återsänd — used by the statusbar confirmation dialog so the
+        user sees the real destination *before* the click commits anything.
+        A plain statusbar click never changes Ägare in the same action, so
+        resolving on the current record matches what write() will do for the
+        click being confirmed.
+        """
+        self.ensure_one()
+        stage_manager = MaintenanceStageManager(self.env)
+        if not stage_manager.is_atersand_stage(target_stage_id):
+            return False
+        team = stage_manager.resolve_return_team(self)
+        return team.name if team else False
 
     def _message_track(self, fields_iter, initial_values_dict):
         """MIM-1965: write "Status: gammal → ny" into the body of the native
@@ -1471,6 +1863,50 @@ class OneCoreMaintenanceRequest(
             "context": {"dialog_size": "extra-large"},
         }
 
+    def open_backfill_rental_object_wizard(self):
+        return self._open_backfill_wizard("rental_object")
+
+    def open_backfill_tenant_wizard(self):
+        return self._open_backfill_wizard("tenant")
+
+    def _open_backfill_wizard(self, kind):
+        self.ensure_one()
+        wizard = self.env["maintenance.backfill.wizard"].create(
+            {"maintenance_request_id": self.id, "lookup_kind": kind}
+        )
+        # The wizard owns its dialog title/window (it re-renders itself on search).
+        return wizard.action_window()
+
+    # MIM-1840: remove the rental object / the tenant + contract.
+    def action_remove_rental_object(self):
+        self.ensure_one()
+        self._ensure_can_edit_object_or_tenant()
+        RecordManagementService(self.env).remove_rental_object(self)
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def action_remove_tenant(self):
+        self.ensure_one()
+        self._ensure_can_edit_object_or_tenant()
+        RecordManagementService(self.env).remove_tenant(self)
+        return {"type": "ir.actions.client", "tag": "soft_reload"}
+
+    def _ensure_can_edit_object_or_tenant(self):
+        """Guard the destructive removals server-side.
+
+        The trash buttons already carry the same ``groups`` and
+        ``user_is_external_contractor`` gating as the MIM-1841 pens, but that only
+        *hides* the control — a crafted RPC call reaches the method anyway, and
+        the method unlinks permanent records. So the rule is enforced here too,
+        in one place, rather than trusted to the view.
+        """
+        if (
+            not self.env.user.has_group("maintenance.group_equipment_manager")
+            or ExternalContractorService(self.env).is_external_contractor()
+        ):
+            raise AccessError(
+                _("Du har inte behörighet att ändra hyresobjekt eller hyresgäst.")
+            )
+
     # ============================================================================
     # DISTRIKT / RESURSGRUPP
     # ============================================================================
@@ -1535,3 +1971,45 @@ class OneCoreMaintenanceRequest(
         The batch is large because the cost is the cost-center trees, fetched
         once per run, not per request."""
         return ManagementAreaService(self.env).backfill_batch(limit=limit)
+
+    @api.model
+    def _cron_sync_pest_control(self):
+        """Refresh "Spärr skadedjur" on every open request.
+
+        Two fixed OneCore calls per run regardless of case volume - flat API
+        cost, so the interval can be short, though the run itself is still one
+        wide SELECT over all open requests: a spärr added after the case was
+        created has to reach the case (MIM-1959).
+        """
+        return OneCoreFlagSyncService(self.env).sync_pest_control()
+
+    @api.model
+    def _cron_sync_special_attention(self):
+        """Refresh "Viktig kundinfo" on the tenants of every open request.
+
+        Hourly rather than quarter-hourly: specialAttention is a hand-set flag
+        in Xpand that changes very rarely, and this run costs one call per 200
+        distinct contact codes.
+        """
+        return OneCoreFlagSyncService(self.env).sync_special_attention()
+
+    @api.model
+    def _cron_sync_lease_status(self):
+        """Refresh kontraktsstatus and sista debiteringsdatum on every open
+        request's lease (MIM-1954).
+
+        Hourly, like special attention: a contract's status changes about as
+        often as that flag does, and a run costs one call per 500 distinct
+        lease ids rather than one per open request.
+        """
+        return OneCoreFlagSyncService(self.env).sync_lease_status()
+
+    @api.model
+    def _cron_backfill_ordering_department(self, limit=5000):
+        """Scheduled action (hourly): stamp "Beställande avdelning" on
+        requests that have none, from the orderer's AD department today.
+
+        One-off in practice: the domain is self-consuming, so once the backlog
+        is stamped this is a query that returns nothing. Writes only the
+        ordering_* fields — never Resursgrupp, Resurs or Steg."""
+        return OrderingDepartmentService(self.env).backfill_batch(limit=limit)

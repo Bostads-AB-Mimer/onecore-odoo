@@ -36,6 +36,20 @@ patch(Message.prototype, {
   get canPin() {
     return this.message.can_pin;
   },
+  // The avatar and the user card belong to the integration account, not to
+  // the tenant who wrote a from_tenant message (MIM-2040).
+  get authorAvatarUrl() {
+    if (this.message.isFromTenant) {
+      return this.store.DEFAULT_AVATAR;
+    }
+    return super.authorAvatarUrl;
+  },
+  hasAuthorClickable() {
+    if (this.message.isFromTenant) {
+      return false;
+    }
+    return super.hasAuthorClickable();
+  },
   async togglePin() {
     const result = await this.env.services.orm.call(
       "mail.message",
@@ -67,6 +81,13 @@ patch(Message.prototype, {
         return " (via mejl)";
       case "tenant_mail_and_sms":
         return " (via sms och mejl)";
+      case "tenant_my_pages":
+      case "from_tenant":
+      case "close_request_from_tenant":
+      // MIM-2036: the decline reason goes to the tenant, so it must not read
+      // as an internal note in the history.
+      case "close_request_declined":
+        return " (via Mina sidor)";
       case "failed_tenant_sms":
         return " (sms misslyckades)";
       case "failed_tenant_mail":

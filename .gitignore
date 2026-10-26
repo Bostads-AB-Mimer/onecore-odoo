@@ -37,7 +37,15 @@ odoo.log
 filestore/
 
 # Claude Code
-CLAUDE.md
-**/CLAUDE.md
+CLAUDE.local.md
 .claude/settings.local.json
 .claude/*
+
+# Local AI e2e testing files
+.playwright-cli
+
+# Local AI planning / dev files (save docs/superpowers however for tracking plans)
+.superpowers
+
+# Local backups
+.db_backups

@@ -1,10 +1,28 @@
 from odoo import http
+from odoo.exceptions import AccessError
 from odoo.http import request
 from odoo.addons.mail.tools.discuss import Store
 from odoo.addons.mail.controllers.thread import ThreadController
 
+from ..models.mail_message import TENANT_AUTHORED_MESSAGE_TYPES
+
 
 class OneCoreThreadController(ThreadController):
+    @http.route()
+    def mail_message_post(self, thread_model, thread_id, post_data, context=None, **kwargs):
+        # MIM-2040 (extra): from_tenant (and MIM-2036's close request) is what
+        # work-order writes on a tenant's behalf, and the chatter shows the
+        # request's tenant as its sender. The
+        # composer may pass message_type through (that is how tenant_* types
+        # are posted), so refuse this one here. /web/dataset/call_kw can still
+        # call message_post directly; closing that would mean identifying the
+        # integration user, which is deliberately avoided.
+        if post_data.get("message_type") in TENANT_AUTHORED_MESSAGE_TYPES:
+            raise AccessError("Meddelanden från hyresgäst kan bara komma från Mina sidor.")
+        return super().mail_message_post(
+            thread_model, thread_id, post_data, context=context, **kwargs
+        )
+
     @http.route(
         "/mail/thread/pinned_messages", methods=["POST"], type="jsonrpc", auth="user"
     )
@@ -17,6 +35,49 @@ class OneCoreThreadController(ThreadController):
         thread = self._get_thread_with_access(thread_model, thread_id, mode="read")
         messages = request.env["mail.message"]._fetch_pinned_messages(thread)
         return {
+            "data": Store().add(messages).get_result(),
+            "messages": messages.ids,
+        }
+
+    @http.route(
+        "/onecore/mail/thread/messages", methods=["POST"], type="jsonrpc", auth="user"
+    )
+    def onecore_mail_thread_messages(
+        self, thread_model, thread_id, fetch_params=None, onecore_log_category=None
+    ):
+        # The händelselogg filter (MIM-1956) needs the category to reach
+        # _message_fetch, but there is no clean OWL hook that adds a key INSIDE
+        # fetch_params, and Thread.rpcParams cannot be used — it is also spread
+        # into /mail/message/update_content, where an unknown kwarg raises. So
+        # the category travels top-level to this route, which otherwise mirrors
+        # base /mail/thread/messages (mail/controllers/thread.py) exactly: same
+        # access check, same set_message_done, same Store serialization. Keep it
+        # in step with base on Odoo upgrades.
+        thread = self._get_thread_with_access(thread_model, thread_id, mode="read")
+        MailMessage = request.env["mail.message"]
+        res = MailMessage._message_fetch(
+            domain=None,
+            thread=thread,
+            # onecore_log_category comes straight from the browser, so it is
+            # validated against the field's selection here rather than letting
+            # _onecore_log_category_domain's ValueError become a 500 plus a
+            # traceback. Unknown values are dropped -> unfiltered log.
+            onecore_log_category=MailMessage._onecore_sanitize_log_category(
+                onecore_log_category
+            ),
+            **(fetch_params or {}),
+        )
+        messages = res.pop("messages")
+        if not request.env.user._is_public():
+            # Marks only the FETCHED subset as read, so under an active filter
+            # the needs-action counter drops by the messages of that category
+            # only. Base /mail/thread/messages has the same property with
+            # pagination (it only ever marks the current 30), so this is a
+            # difference in degree, not in kind — noted so nobody debugs a
+            # stubborn unread counter cold.
+            messages.set_message_done()
+        return {
+            **res,
             "data": Store().add(messages).get_result(),
             "messages": messages.ids,
         }

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="onecore_mail_extension.Message" t-inherit="mail.Message" t-inherit-mode="extension">
+        <!-- MIM-2040: mark a Mina sidor message as the tenant's even when it
+             carries a name, so it cannot pass for a message from Mimer -->
+        <xpath expr="//span[hasclass('o-mail-Message-author')]" position="after">
+            <span t-if="message.showsTenantBadge"
+                  class="o-mimer-tenant-badge badge rounded-pill text-bg-info me-1">Hyresgäst</span>
+        </xpath>
         <!-- Add "(via sms)" / "(via mejl)" indicator in message header -->
         <xpath expr="//div[hasclass('o-mail-Message-header')]//small" position="inside">
             <span t-if="!isSendFailure()" t-esc="getSentAsString()" />

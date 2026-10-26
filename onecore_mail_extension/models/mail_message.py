@@ -1,11 +1,90 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
+from odoo.fields import Domain
 
 import logging
 import requests
 from ...onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
+
+# ============================================================================
+# HÄNDELSELOGG CATEGORIES (MIM-1956)
+# ============================================================================
+# Categories for the chatter log filter. Derived, never stored, so the rules
+# apply retroactively to every existing message and cannot go stale.
+LOG_CATEGORY_EVENT = "event"
+LOG_CATEGORY_INTERNAL_NOTE = "internal_note"
+LOG_CATEGORY_COMMUNICATION = "communication"
+
+# ============================================================================
+# SENDER SHOWN TO THE TENANT (MIM-2040)
+# ============================================================================
+# Message types the tenant sees on Mina sidor and that we send — i.e. the
+# work-order service's MESSAGE_DOMAIN minus from_tenant, which the tenant wrote
+# themselves. The failed_*/partial variants are absent on purpose: they are
+# never the type a caller asks for, only what create() rewrites a tenant_mail
+# or tenant_sms into once a send fails, and by then the sender is already
+# captured.
+TENANT_FACING_MESSAGE_TYPES = frozenset(
+    {
+        "receipt_to_tenant",
+        "tenant_sms",
+        "tenant_mail",
+        "tenant_mail_and_sms",
+        "tenant_my_pages",
+        # MIM-2036 — staff's answer to a tenant's close request. A contractor
+        # may give it, and the tenant must see which supplier did.
+        "close_request_declined",
+    }
+)
+# Not wrapped in _(): this is stored data read by a tenant on Mimer.nu, not UI
+# for the Odoo user writing it, so it must not follow the author's language.
+TENANT_AUTHOR_MIMER = "Mimer"
+TENANT_AUTHOR_CONTRACTOR = "Mimers Leverantör"
+# The resource-group half of the label has the same requirement, but
+# maintenance.team.name is translate=True — a jsonb column resolved in whatever
+# language the reader happens to have. Left unpinned, the write path resolves
+# it in the posting user's language while the 19.0.1.0.2 backfill, whose env
+# carries no lang at all, resolves it as en_US — so one tenant's history would
+# carry both spellings of a resource group that was ever renamed. Both sides
+# go through tenant_author_lang() instead.
+TENANT_AUTHOR_LANG = "sv_SE"
+
+# ============================================================================
+# SENDER SHOWN TO ODOO USERS ON MINA SIDOR MESSAGES (MIM-2040, extra)
+# ============================================================================
+# work-order posts what a tenant writes on Mina sidor through its XML-RPC
+# login, so author_id on these messages is an integration account — which one
+# is configuration (ODOO__USERNAME) and differs between setups. They are
+# therefore recognised by their type, never by who posted them: only the
+# work-order service writes this type. Any future integration that relays
+# tenant messages must post them with it too.
+FROM_TENANT_MESSAGE_TYPE = "from_tenant"
+# Every type posted on the tenant's behalf, shown in the chatter with the
+# tenant as sender. MIM-2036's close request is the tenant's own words too, so
+# a handläggare must read it as the tenant's, not the integration account's.
+TENANT_AUTHORED_MESSAGE_TYPES = frozenset(
+    {FROM_TENANT_MESSAGE_TYPE, "close_request_from_tenant"}
+)
+
+
+def tenant_author_lang(env):
+    """The one language the resource-group name is read in, write and backfill.
+
+    sv_SE where it is installed: that is the language Mimer's users see and
+    rename a resource group in, and Odoo's write path updates only the acting
+    language, so the Swedish value is the live one. en_US otherwise — env.lang
+    raises on a language that is not installed, and en_US always exists. Same
+    conditional as _update_maintenance_stages in
+    onecore_maintenance_extension/hooks.
+
+    Which of the two is chosen matters far less than that both sides choose the
+    same one for a given database.
+    """
+    if env["res.lang"]._get_data(code=TENANT_AUTHOR_LANG):
+        return TENANT_AUTHOR_LANG
+    return "en_US"
 
 
 class OneCoreMailMessage(models.Model):
@@ -39,6 +118,31 @@ class OneCoreMailMessage(models.Model):
         string="Får fästa",
         compute="_compute_can_pin",
         store=False,
+    )
+    # MIM-2040 — the sender Mina sidor shows beside an outbound message, read by
+    # the work-order service alongside the message body. Stored rather than
+    # computed on read: it is written once, from who the author was and which
+    # resource group the request belonged to at that moment, so reassigning a
+    # request later cannot rewrite what the tenant was told at the time. Empty
+    # on everything the tenant does not see, and on from_tenant.
+    onecore_tenant_author_name = fields.Char(
+        string="Avsändare mot hyresgäst",
+        copy=False,
+        help="Namnet hyresgästen ser på Mina sidor: Mimer, eller "
+        "'Mimers Leverantör - <resursgrupp>' när en extern entreprenör "
+        "svarar. Sätts när meddelandet skapas och ändras aldrig.",
+    )
+    # MIM-2040 (extra) — who wrote a Mina sidor message, for Odoo users. Only
+    # set on TENANT_AUTHORED_MESSAGE_TYPES, where author_id is the integration
+    # account rather than the tenant. A snapshot of the request's tenant at write time, so
+    # replacing or removing the tenant later cannot rewrite who wrote it. It
+    # names the request's tenant, not necessarily the person logged in on
+    # Mina sidor — nothing upstream says who that was.
+    onecore_from_tenant_name = fields.Char(
+        string="Skrivet av hyresgäst",
+        copy=False,
+        help="Hyresgästen på ärendet när meddelandet skrevs på Mina sidor. "
+        "Visas som avsändare i chattern i stället för integrationsanvändaren.",
     )
 
     @api.depends(
@@ -98,6 +202,8 @@ class OneCoreMailMessage(models.Model):
             "is_dialog_unread_for_side",
             "pinned_by_name",
             "can_pin",
+            "onecore_log_category",
+            "onecore_from_tenant_name",
         ]
 
     @api.model
@@ -137,9 +243,19 @@ class OneCoreMailMessage(models.Model):
             "pinned_by_name": self.pinned_by_name,
         }
 
+    # MIM-1956 — adding a type here has a side effect on the händelselogg
+    # filter: anything that is neither "comment" nor "notification" is
+    # classified as Kommunikation (see _onecore_log_category_for), i.e. it
+    # shows up in the filter handläggare read as the tenant conversation.
+    # Decide whether that is right, then add the type to EXPECTED_CATEGORIES at
+    # the bottom of this file — the test suite fails until you do.
     message_type = fields.Selection(
         selection_add=[
             ("from_tenant", "From tenant"),
+            # MIM-1960 — our confirmation that a Mina-sidor message was read.
+            # Deliberately NOT prefixed tenant_: create() treats every tenant_*
+            # type as an outbound SMS/email dispatch, and this must stay silent.
+            ("receipt_to_tenant", "Kvittens till hyresgäst"),
             ("tenant_sms", "Sent to tenant by SMS"),
             ("tenant_mail", "Sent to tenant by email"),
             ("tenant_mail_and_sms", "Sent to tenant by email and SMS"),
@@ -157,9 +273,16 @@ class OneCoreMailMessage(models.Model):
                 "tenant_mail_failed_and_sms_ok",
                 "Sent to tenant by email and SMS, but sending email failed",
             ),
+            ("tenant_my_pages", "Published to tenant on Mina sidor"),
+            # MIM-2036 — the tenant asks for the case to be closed, and staff's
+            # "no". Deliberately NOT prefixed tenant_ (same reason as
+            # receipt_to_tenant): create() would dispatch them as SMS/e-post.
+            ("close_request_from_tenant", "Begäran om avslut från hyresgäst"),
+            ("close_request_declined", "Begäran om avslut avslagen"),
         ],
         ondelete={
             "from_tenant": "set default",
+            "receipt_to_tenant": "set default",
             "tenant_sms": "set default",
             "tenant_mail": "set default",
             "tenant_mail_and_sms": "set default",
@@ -168,6 +291,9 @@ class OneCoreMailMessage(models.Model):
             "failed_tenant_mail_and_sms": "set default",
             "tenant_mail_ok_and_sms_failed": "set default",
             "tenant_mail_failed_and_sms_ok": "set default",
+            "tenant_my_pages": "set default",
+            "close_request_from_tenant": "set default",
+            "close_request_declined": "set default",
         },
     )
 
@@ -182,6 +308,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "to": to_email,
@@ -190,6 +317,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -211,6 +339,7 @@ class OneCoreMailMessage(models.Model):
         team_name=None,
         contact_code=None,
         triggered_by_user=None,
+        work_order_code=None,
     ):
         data = {
             "phoneNumber": phone_number,
@@ -218,6 +347,7 @@ class OneCoreMailMessage(models.Model):
             "externalContractorName": team_name,
             "contactCode": contact_code,
             "triggeredByUser": triggered_by_user,
+            "workOrderCode": work_order_code,
         }
 
         try:
@@ -232,13 +362,144 @@ class OneCoreMailMessage(models.Model):
             _logger.error(f"An error occurred: {err}")
         return None
 
+    def _log_my_pages_message(
+        self, work_order_code, contact_code, text, triggered_by_user=None
+    ):
+        """Record a Mina sidor publication in OneCore's communication log.
+
+        Best-effort by design: the tenant can already see the message (it exists
+        in Odoo with the tenant_my_pages type), so a logging failure must NOT
+        change message_type the way a failed SMS/e-post send does — that would
+        retract a delivered message. Failures are logged for monitoring only.
+        """
+        payload = {
+            "workOrderCode": work_order_code,
+            "contactCode": contact_code,
+            "text": text,
+            "triggeredByUser": triggered_by_user,
+        }
+        try:
+            response = self.get_core_api().request(
+                "POST", "/work-orders/log-my-pages-message", json=payload
+            )
+            response.raise_for_status()
+        except Exception as err:
+            _logger.error(
+                "Failed to log Mina sidor message for %s: %s",
+                work_order_code,
+                err,
+            )
+
+    def _tenant_facing_author(self, values):
+        """The user whose organisation answered, for one set of create values.
+
+        Read from the message's own author_id where it has one, so this agrees
+        with the 19.0.1.0.2 backfill — which has nothing but author_id to go on
+        — by construction, rather than by the coincidence that every
+        tenant-facing type happens to be posted by the acting user today. A
+        message_post(author_id=...) on someone else's behalf would otherwise be
+        labelled one way now and the other way by a re-run of the migration.
+
+        A partner with no res.users behind it falls back to the acting user:
+        an author we cannot resolve must not silently drop a contractor label.
+        """
+        author_partner_id = values.get("author_id")
+        if not author_partner_id or author_partner_id == self.env.user.partner_id.id:
+            return self.env.user
+        # sudo(): whether the label is right must not depend on whether the
+        # posting user happens to be allowed to read other users.
+        author = (
+            self.env["res.users"]
+            .sudo()
+            .search([("partner_id", "=", author_partner_id)], limit=1)
+        )
+        return author or self.env.user
+
+    def _tenant_facing_author_name(self, author, record=None):
+        """The sender name the tenant sees on Mina sidor for one message.
+
+        Only membership of group_external_contractor is tested, with Mimer as
+        the default — the internal side is not a group we can enumerate, so
+        anyone we fail to recognise is attributed to Mimer rather than by name.
+
+        The resource group is taken from the request rather than from the
+        author's teams: a contractor can be a member of several, and the
+        request's team is the one they are answering on behalf of. It is also
+        what the SMS/e-post sign-off already uses. That only holds while the
+        author is a member of that team, though — see below — so an author
+        outside it gets the bare label instead of a name that is not theirs.
+        """
+        # security/maintenance.xml adds base.user_root to
+        # group_external_contractor, so OdooBot would otherwise be announced to
+        # the tenant as a supplier. Anything posted as the superuser is Mimer's
+        # own automation.
+        if author._is_superuser() or not author.sudo().has_group(
+            "onecore_maintenance_extension.group_external_contractor"
+        ):
+            return TENANT_AUTHOR_MIMER
+        team_name = ""
+        if record:
+            # sudo(): whether the label is right must not depend on whether the
+            # acting user is allowed to read the team's member list.
+            team = record.sudo().maintenance_team_id
+            # maintenance.team is a mixed taxonomy — alongside supplier
+            # organisations it holds Mimer's own queues
+            # ("Förvaltningsadministration", "Kundcenter - Inkomna
+            # serviceanmälningar", "Distrikt Väst"). Its name is the supplier's
+            # name only when the author actually belongs to it. A contractor
+            # answering an errand still parked in one of our queues would
+            # otherwise announce that Mimer department to the tenant as a
+            # supplier of ours, so an author outside the team falls back to the
+            # bare label rather than borrowing a name that is not theirs.
+            if author in team.member_ids:
+                team_name = (
+                    team.with_context(lang=tenant_author_lang(self.env)).name or ""
+                )
+        if not team_name:
+            return TENANT_AUTHOR_CONTRACTOR
+        return f"{TENANT_AUTHOR_CONTRACTOR} - {team_name}"
+
     @api.model_create_multi
     def create(self, values_list):
+        pending_my_pages = []
         for values in values_list:
-            if values["message_type"].startswith("tenant_"):
-                the_record = self.env["maintenance.request"].search(
-                    [("id", "=", values["res_id"])]
+            message_type = values.get("message_type")
+
+            # One lookup, shared by the sender label and the SMS/e-post
+            # dispatch below — each used to search the same request separately.
+            #
+            # search() rather than browse(): a res_id the acting user cannot
+            # read must degrade to the bare label, not raise. model is part of
+            # the condition so a message posted on some other model cannot
+            # borrow an unrelated request's resource group — or, in the
+            # dispatch below, an unrelated tenant's phone number.
+            the_record = None
+            if "maintenance.request" in self.env:
+                the_record = self.env["maintenance.request"].browse()
+                if values.get("model") == "maintenance.request" and values.get(
+                    "res_id"
+                ):
+                    the_record = the_record.search([("id", "=", values["res_id"])])
+
+            # Captured before the dispatch below, which rewrites message_type
+            # into a failed_* variant when a send fails (MIM-2040).
+            if message_type in TENANT_FACING_MESSAGE_TYPES:
+                values["onecore_tenant_author_name"] = self._tenant_facing_author_name(
+                    self._tenant_facing_author(values), the_record
                 )
+
+            # MIM-2040 (extra). Keyed on the type, not on author_id: the
+            # integration account that posts these differs between setups.
+            # setdefault so a caller that knows the writer can pass it.
+            # sudo(): the name must not depend on what the integration account
+            # may read.
+            if message_type in TENANT_AUTHORED_MESSAGE_TYPES and the_record:
+                values.setdefault(
+                    "onecore_from_tenant_name",
+                    the_record.sudo().tenant_id.name or False,
+                )
+
+            if message_type and message_type.startswith("tenant_"):
                 subject = f"Ang. serviceanmälan: {the_record.name}"
                 body = values["body"].replace("<br>", "\\n")
 
@@ -255,6 +516,23 @@ class OneCoreMailMessage(models.Model):
                 # log entry for the outbound SMS/email.
                 contact_code = the_record.tenant_id.contact_code
                 triggered_by_user = self.env.user.name
+                work_order_code = f"od-{the_record.id}"
+
+                # Mina sidor only: nothing is sent, the message is published by
+                # existing on the record. Refuse it outright when the errand is
+                # hidden from Mimer.nu — digital tenant communication is closed
+                # there, and the composer hides the checkboxes for that case.
+                if values["message_type"] == "tenant_my_pages":
+                    if the_record.hidden_from_my_pages:
+                        raise UserError(
+                            _(
+                                "Det här ärendet är dolt från Mimer.nu. "
+                                "Meddelanden till hyresgäst kan inte skickas."
+                            )
+                        )
+                    pending_my_pages.append(
+                        (work_order_code, contact_code, body, triggered_by_user)
+                    )
 
                 # send by sms
                 if values["message_type"] == "tenant_sms":
@@ -264,6 +542,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_sms_result is None:
@@ -278,6 +557,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None:
@@ -292,6 +572,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
                     send_sms_result = self._send_sms(
                         the_record.tenant_id.phone_number,
@@ -299,6 +580,7 @@ class OneCoreMailMessage(models.Model):
                         team_name,
                         contact_code,
                         triggered_by_user,
+                        work_order_code=work_order_code,
                     )
 
                     if send_email_result is None and send_sms_result is not None:
@@ -310,4 +592,225 @@ class OneCoreMailMessage(models.Model):
 
         messages = super(OneCoreMailMessage, self).create(values_list)
 
+        # Logged after the records exist: the log call is not transactional, so
+        # firing it inside the loop would leave OneCore asserting a publication
+        # that a later rollback erased. Safe to defer because nothing reads the
+        # result — a failed log call must never change message_type.
+        for args in pending_my_pages:
+            self._log_my_pages_message(*args)
+
         return messages
+
+    # ========================================================================
+    # HÄNDELSELOGG CATEGORY (MIM-1956)
+    # ========================================================================
+
+    onecore_log_category = fields.Selection(
+        [
+            (LOG_CATEGORY_EVENT, "Händelse"),
+            (LOG_CATEGORY_INTERNAL_NOTE, "Intern notering"),
+            (LOG_CATEGORY_COMMUNICATION, "Kommunikation"),
+        ],
+        string="Loggkategori",
+        compute="_compute_onecore_log_category",
+        store=False,
+    )
+
+    @api.model
+    def _onecore_log_category_for(self, message_type, subtype_internal):
+        """The single rule table behind the händelselogg filter.
+
+        First match wins. Both consumers — the computed field and
+        _onecore_log_category_domain — read these rules, so the server filter
+        and the value the OWL store sees cannot drift apart.
+
+        NOTE: Kommunikation is the catch-all. Any NEW message_type that is
+        neither "comment" nor "notification" therefore lands in the filter
+        handläggare read as the tenant conversation. tests/test_log_category.py
+        fails the build until such a type is classified deliberately.
+        """
+        if message_type == "notification":
+            return LOG_CATEGORY_EVENT
+        if message_type == "comment" and subtype_internal:
+            return LOG_CATEGORY_INTERNAL_NOTE
+        return LOG_CATEGORY_COMMUNICATION
+
+    @api.depends("message_type", "subtype_id.internal")
+    def _compute_onecore_log_category(self):
+        for message in self:
+            message.onecore_log_category = self._onecore_log_category_for(
+                message.message_type, message.subtype_id.internal
+            )
+
+    @api.model
+    def _onecore_log_category_domain(self, category):
+        """The search-domain twin of _onecore_log_category_for."""
+        event = Domain("message_type", "=", "notification")
+        internal_note = Domain("message_type", "=", "comment") & Domain(
+            "subtype_id.internal", "=", True
+        )
+        if category == LOG_CATEGORY_EVENT:
+            return event
+        if category == LOG_CATEGORY_INTERNAL_NOTE:
+            return internal_note
+        if category == LOG_CATEGORY_COMMUNICATION:
+            # Complement of the other two, so the three categories partition
+            # the log exactly.
+            #
+            # NULL-safety, i.e. why a message with no subtype at all stays in
+            # this bucket: DomainNot._to_sql is never reached, because
+            # DomainNot._optimize_step applies De Morgan first
+            # (odoo/orm/domains.py). ~internal_note therefore becomes
+            # message_type != "comment" OR subtype_id NOT ANY (internal = True),
+            # and Many2one.condition_to_sql wraps a negated 'any' as
+            # "(field IS NULL OR field NOT IN (...))" whenever can_be_null
+            # (odoo/orm/fields_relational.py). mail.message.subtype_id is
+            # nullable, so can_be_null holds and NULL subtypes match.
+            # Pinned by test_compute_and_domain_agree and
+            # test_categories_partition_all_messages, which both include a
+            # subtype-less "comment" — the only case where the relational
+            # branch decides the outcome on its own.
+            return ~event & ~internal_note
+        # Programmer error in server code. Values coming from the browser go
+        # through _onecore_sanitize_log_category first, so a bogus request
+        # cannot reach this.
+        raise ValueError(f"Okänd loggkategori: {category}")
+
+    @api.model
+    def _onecore_sanitize_log_category(self, category):
+        """Reduces a client-supplied category to a known value, or None.
+
+        onecore_log_category arrives from the browser as a top-level parameter
+        to /onecore/mail/thread/messages, so a stale or hand-crafted value must
+        not turn a malformed request into an Internal Server Error plus a
+        traceback in the log. Unknown values are dropped and the fetch returns
+        the unfiltered log (i.e. Alla). Nothing is exposed either way: the
+        category domain only ever narrows, and the fetch runs as the requesting
+        user with no sudo().
+        """
+        if not category:
+            return None
+        if category not in self._fields["onecore_log_category"].get_values(self.env):
+            _logger.warning(
+                "Okänd loggkategori i händelseloggens filter, ignoreras: %r", category
+            )
+            return None
+        return category
+
+    @api.model
+    def _message_fetch(self, domain, *, onecore_log_category=None, **kwargs):
+        """Adds the händelselogg category filter to the chatter fetch.
+
+        Applied as a plain search domain with no sudo(), so mail.message ACLs
+        and record rules still decide what an external contractor sees.
+        """
+        if onecore_log_category:
+            domain = Domain(
+                True if domain is None else domain
+            ) & self._onecore_log_category_domain(onecore_log_category)
+        return super()._message_fetch(domain, **kwargs)
+
+
+# ============================================================================
+# HÄNDELSELOGG CATEGORY EXPECTATIONS (MIM-1956)
+# ============================================================================
+# Every message_type the chatter can show, mapped to the category it MUST fall
+# into. `user_notification` is excluded because base _message_fetch filters it
+# out before it can reach the chatter.
+#
+# This map is deliberately exhaustive:
+# tests/test_log_category.py::test_every_message_type_is_classified fails the
+# build when a new type is added to the message_type selection without being
+# listed here. That is the only guard against a new type silently landing in
+# Kommunikation via the catch-all in _onecore_log_category_for, i.e. in the
+# filter a handläggare reads as "the tenant conversation" — so it lives next to
+# the rule table it guards, in the file a developer adding a type is already
+# editing.
+EXPECTED_CATEGORIES = {
+    # Base Odoo types (addons/mail/models/mail_message.py:119)
+    "email": LOG_CATEGORY_COMMUNICATION,
+    # `comment` is the one type whose category depends on the subtype: with an
+    # internal subtype (mail.mt_note = "Logga notering") it is an intern
+    # notering, with a public one (mail.mt_comment) it is kommunikation. The
+    # value below is its public reading; the internal one is covered by
+    # test_log_note_is_internal_note.
+    "comment": LOG_CATEGORY_COMMUNICATION,
+    "email_outgoing": LOG_CATEGORY_COMMUNICATION,
+    "notification": LOG_CATEGORY_EVENT,
+    "auto_comment": LOG_CATEGORY_COMMUNICATION,
+    "out_of_office": LOG_CATEGORY_COMMUNICATION,
+    # ONECore types (see the message_type selection_add above)
+    "from_tenant": LOG_CATEGORY_COMMUNICATION,
+    "receipt_to_tenant": LOG_CATEGORY_COMMUNICATION,
+    "tenant_sms": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_sms": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_mail": LOG_CATEGORY_COMMUNICATION,
+    "failed_tenant_mail_and_sms": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_ok_and_sms_failed": LOG_CATEGORY_COMMUNICATION,
+    "tenant_mail_failed_and_sms_ok": LOG_CATEGORY_COMMUNICATION,
+    "tenant_my_pages": LOG_CATEGORY_COMMUNICATION,
+    # MIM-2036 — both are read by the tenant on Mina sidor, so they belong in
+    # the filter handläggare read as the tenant conversation.
+    "close_request_from_tenant": LOG_CATEGORY_COMMUNICATION,
+    "close_request_declined": LOG_CATEGORY_COMMUNICATION,
+    # base `sms` and `snailmail` addons (auto_install=True on `mail`+`iap_mail`,
+    # both already satisfied here) add these two selection values even though
+    # onecore doesn't use either module directly. Neither is "comment" nor
+    # "notification", so the rule table's catch-all already puts them in
+    # Kommunikation — correct, since both represent outbound communication to
+    # a partner. Listed here so they are classified deliberately. They arrive
+    # via auto_install rather than this repo's -i list, so the test tolerates
+    # them being absent from the live selection instead of failing.
+    "sms": LOG_CATEGORY_COMMUNICATION,
+    "snailmail": LOG_CATEGORY_COMMUNICATION,
+}
+
+
+# The same guard as EXPECTED_CATEGORIES above, for the other decision a new
+# message_type forces (MIM-2040): does a tenant read this on Mina sidor?
+# tests/test_tenant_author_name.py::test_every_message_type_is_classified_as_
+# tenant_facing_or_not fails the build until a newly added type is answered
+# for here, and pins the True half against TENANT_FACING_MESSAGE_TYPES.
+#
+# Missing a tenant-facing type never leaks a name — the work-order adapter
+# falls back to "Mimer" for anything unlabelled — but it drops the contractor
+# attribution silently, with nothing else failing. That is exactly the bug this
+# field exists to fix, so it gets the same treatment as the log filter.
+EXPECTED_TENANT_FACING = {
+    # Base Odoo types (addons/mail/models/mail_message.py:119). None of these
+    # is ever published to Mimer.nu — they are Odoo's own chatter traffic.
+    "email": False,
+    "comment": False,
+    "email_outgoing": False,
+    "notification": False,
+    "auto_comment": False,
+    "out_of_office": False,
+    # Arrive via auto_install (see EXPECTED_CATEGORIES); outbound to a partner,
+    # never to a tenant through the work-order service.
+    "sms": False,
+    "snailmail": False,
+    # ONECore types (see the message_type selection_add above).
+    # The tenant wrote it; Mina sidor labels it "Du", so there is no sender of
+    # ours to capture.
+    "from_tenant": False,
+    "receipt_to_tenant": True,
+    "tenant_sms": True,
+    "tenant_mail": True,
+    "tenant_mail_and_sms": True,
+    "tenant_my_pages": True,
+    # MIM-2036. The request is the tenant's own words, posted on their behalf
+    # by the integration — Mina sidor labels it "Du", like from_tenant. The
+    # decline is ours and may come from a contractor, so it is labelled.
+    "close_request_from_tenant": False,
+    "close_request_declined": True,
+    # False because a caller never asks for these: create() rewrites one of the
+    # types above into them once a send fails, by which point the label is
+    # already on the values. The tenant does see them.
+    "failed_tenant_sms": False,
+    "failed_tenant_mail": False,
+    "failed_tenant_mail_and_sms": False,
+    "tenant_mail_ok_and_sms_failed": False,
+    "tenant_mail_failed_and_sms_ok": False,
+}

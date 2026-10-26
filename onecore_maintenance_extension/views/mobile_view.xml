@@ -11,7 +11,7 @@
          the assignee on every new request, which auto-moved the request to
          "Resurs tilldelad" during the very first onchange and raised the
          MIM-1873 priority error before the form had rendered. Keep
-         search_default_active: it is the "Aktiva ärenden" facet users expect. -->
+         search_default_active: it is the "Alla ärenden" facet users expect. -->
     <field name="context">{'search_default_active': True}</field>
   </record>
 
@@ -32,8 +32,9 @@
       <mobile default_group_by="stage_id">
         <!-- These are the fields we want for each record from the db for this view_mode -->
         <field name="stage_id" />
+        <field name="maintenance_team_id" />
         <field name="color" />
-        <field name="priority_expanded" />
+        <field name="priority_label" />
         <field name="equipment_id" />
         <field name="user_id" />
         <field name="owner_user_id" />
@@ -53,9 +54,11 @@
         <field name="schedule_date_date" />
         <field name="schedule_date_after_due_date" />
         <field name="today_date" />
-        <field name="new_mimer_notification" />
-        <field name="recently_added_tenant" />
+        <field name="has_unread_new_customer_info" />
+        <field name="has_unread_customer_message" />
+        <field name="close_request_pending" />
         <field name="special_attention" />
+        <field name="requires_pest_control" />
         <field name="has_unread_supplier_dialog" />
         <field name="has_unread_internal_dialog" />
         <field name="has_unread_master_key_change" />
