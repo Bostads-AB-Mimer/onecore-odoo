@@ -7,6 +7,9 @@
             <search string="Formulär">
                 <field name="name"/>
                 <field name="category_id"/>
+                <filter string="Formulär" name="kind_form" domain="[('kind', '=', 'form')]"/>
+                <filter string="Tilläggsformulär" name="kind_addon" domain="[('kind', '=', 'addon')]"/>
+                <separator/>
                 <filter string="Arkiverade" name="inactive" domain="[('active', '=', False)]"/>
                 <separator/>
                 <filter
@@ -20,6 +23,7 @@
                         name="group_category"
                         context="{'group_by': 'category_id'}"
                     />
+                    <filter string="Typ" name="group_kind" context="{'group_by': 'kind'}"/>
                 </group>
             </search>
         </field>
@@ -35,8 +39,10 @@
             <list string="Formulär">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
+                <field name="kind"/>
                 <field name="category_id"/>
                 <field name="question_summary"/>
+                <field name="category_addon_form_id"/>
                 <field name="show_in_portal" widget="boolean_toggle"/>
                 <field name="ticket_count" string="Ärenden"/>
                 <field
@@ -78,12 +84,25 @@
                     </div>
                     <group name="main">
                         <group>
-                            <field name="category_id"/>
+                            <field name="kind" widget="radio" options="{'horizontal': true}"/>
+                            <field
+                                name="category_id"
+                                required="kind == 'form'"
+                                invisible="kind == 'addon'"
+                            />
+                            <field
+                                name="category_addon_form_id"
+                                invisible="kind == 'addon' or not category_addon_form_id"
+                            />
                             <field name="sequence"/>
                             <field name="active" invisible="1"/>
                         </group>
                         <group>
-                            <field name="show_in_portal" widget="boolean_toggle"/>
+                            <field
+                                name="show_in_portal"
+                                widget="boolean_toggle"
+                                invisible="kind == 'addon'"
+                            />
                             <field name="company_id" groups="base.group_multi_company"/>
                         </group>
                     </group>
@@ -91,17 +110,34 @@
                         <page string="Frågor" name="questions">
                             <div class="alert alert-info" role="alert">
                                 Frågorna redigeras från ett ärende, inte här.
-                                Spara formuläret, öppna ett ärende med detta
-                                formulär (eller skapa ett nytt via knappen
-                                Ärenden ovan) och klicka på kugghjulet vid
-                                frågorna. Frågorna sparas på formuläret när
-                                ärendet sparas och gäller alla ärenden med
-                                formuläret.
+                                Spara formuläret, öppna ett ärende som använder
+                                det (för ett formulär: via knappen Ärenden ovan;
+                                för ett tilläggsformulär: ett ärende i en
+                                kategori som pekar på det) och klicka på
+                                kugghjulet vid frågorna. Frågorna sparas på
+                                formuläret när ärendet sparas och gäller alla
+                                ärenden som använder det.
                             </div>
                             <field name="question_summary" readonly="1"/>
                         </page>
                         <page string="Introduktionstext" name="description">
-                            <field name="description" widget="html" placeholder="Text som visas ovanför frågorna när formuläret fylls i."/>
+                            <field
+                                name="description"
+                                widget="html"
+                                placeholder="Text som visas under rubriken, ovanför frågorna."
+                            />
+                        </page>
+                        <page
+                            string="Används av"
+                            name="addon_categories"
+                            invisible="kind != 'addon'"
+                        >
+                            <field name="addon_category_ids" readonly="1">
+                                <list>
+                                    <field name="complete_name" string="Kategori"/>
+                                    <field name="form_count" string="Formulär"/>
+                                </list>
+                            </field>
                         </page>
                     </notebook>
                 </sheet>
@@ -119,7 +155,9 @@
             <p class="o_view_nocontent_smiling_face">Skapa ett formulär</p>
             <p>
                 Ett formulär hör till en kategori och lägger till extra
-                frågor på ärendet, utöver rubrik och beskrivning.
+                frågor på ärendet, utöver rubrik och beskrivning. Ett
+                tilläggsformulär ställer samma frågor på alla ärenden i de
+                kategorier som pekar på det.
             </p>
         </field>
     </record>

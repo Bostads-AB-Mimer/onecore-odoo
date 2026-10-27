@@ -5,6 +5,9 @@
         <field name="model">helpdesk.ticket.category</field>
         <field name="inherit_id" ref="helpdesk_mgmt.view_helpdesk_category_form"/>
         <field name="arch" type="xml">
+            <field name="show_in_portal" position="after">
+                <field name="addon_form_id" options="{'no_create': True}"/>
+            </field>
             <group name="main" position="after">
                 <notebook>
                     <page string="Formulär" name="forms">
@@ -20,6 +23,18 @@
                     </page>
                 </notebook>
             </group>
+        </field>
+    </record>
+
+    <record id="view_helpdesk_category_tree" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.category.list.onecore_helpdesk.forms</field>
+        <field name="model">helpdesk.ticket.category</field>
+        <field name="inherit_id" ref="helpdesk_mgmt.view_helpdesk_category_tree"/>
+        <field name="arch" type="xml">
+            <field name="parent_id" position="after">
+                <field name="form_count" string="Formulär"/>
+                <field name="addon_form_id" options="{'no_create': True}"/>
+            </field>
         </field>
     </record>
 </odoo>

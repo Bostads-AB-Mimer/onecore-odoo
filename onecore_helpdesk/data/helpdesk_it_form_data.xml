@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="1">
-        <!-- Intake form for "Felanmälan IT", modelled on the current intranet
-             form. Property names are stable identifiers that external intake
-             and reporting may rely on; labels and option lists are content
-             owned by IT and can be changed from the UI (gear icon on a
-             ticket with this form). -->
-        <record id="form_it_fault" model="helpdesk.ticket.form">
-            <field name="name">Felanmälan IT</field>
+        <!-- Forms modelled on the current intranet "Felanmälan IT" form.
+             Property names are stable identifiers that external intake and
+             reporting may rely on; labels, option lists, titles and intro
+             texts are content owned by IT and can be changed from the UI
+             (questions with the gear icon on a ticket that uses the form,
+             the rest on the form record). -->
+
+        <!-- "Påverkan": asked on every ticket of the categories that point
+             at it, under the form's own questions. -->
+        <record id="form_impact_addon" model="helpdesk.ticket.form">
+            <field name="name">Påverkan</field>
+            <field name="kind">addon</field>
             <field name="sequence">1</field>
-            <field name="category_id" ref="category_it_fault"/>
             <field name="description" type="html">
                 <p>
                     Här nedan väljer du vilken påverkan felet har. Tanken är
@@ -19,29 +23,6 @@
                 </p>
             </field>
             <field name="ticket_properties" eval="[
-                {
-                    'name': 'port_replicator',
-                    'string': 'Numret på portreplikatorn (ex 4137-12)',
-                    'type': 'char',
-                },
-                {
-                    'name': 'program',
-                    'string': 'Om program, vilket?',
-                    'type': 'selection',
-                    'selection': [
-                        ['teams', 'Teams'],
-                        ['outlook', 'Outlook'],
-                        ['word', 'Word'],
-                        ['excel', 'Excel'],
-                        ['odoo', 'Odoo'],
-                        ['other', 'Övrigt'],
-                    ],
-                },
-                {
-                    'name': 'impact_info',
-                    'string': 'Påverkan',
-                    'type': 'separator',
-                },
                 {
                     'name': 'affected_scope',
                     'string': 'Vilka påverkas?',
@@ -62,6 +43,37 @@
                         ['can_work', 'Kan arbeta som vanligt'],
                         ['limited', 'Kan arbeta med begränsningar'],
                         ['cannot_work', 'Kan inte arbeta'],
+                    ],
+                },
+            ]"/>
+        </record>
+
+        <record id="category_it_fault" model="helpdesk.ticket.category">
+            <field name="addon_form_id" ref="form_impact_addon"/>
+        </record>
+
+        <record id="form_it_fault" model="helpdesk.ticket.form">
+            <field name="name">Felanmälan IT</field>
+            <field name="kind">form</field>
+            <field name="sequence">1</field>
+            <field name="category_id" ref="category_it_fault"/>
+            <field name="ticket_properties" eval="[
+                {
+                    'name': 'port_replicator',
+                    'string': 'Numret på portreplikatorn (ex 4137-12)',
+                    'type': 'char',
+                },
+                {
+                    'name': 'program',
+                    'string': 'Om program, vilket?',
+                    'type': 'selection',
+                    'selection': [
+                        ['teams', 'Teams'],
+                        ['outlook', 'Outlook'],
+                        ['word', 'Word'],
+                        ['excel', 'Excel'],
+                        ['odoo', 'Odoo'],
+                        ['other', 'Övrigt'],
                     ],
                 },
             ]"/>
