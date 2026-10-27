@@ -1,7 +1,7 @@
 {
     "author": "Bostads-AB-Mimer",
     "name": "ONECore Helpdesk",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.1.0",
     "sequence": 100,
     "category": "ONECore",
     "summary": "IT tickets on top of OCA helpdesk_mgmt",

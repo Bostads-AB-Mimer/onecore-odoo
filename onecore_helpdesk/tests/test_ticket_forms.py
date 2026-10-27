@@ -22,14 +22,29 @@ class TestTicketForms(TransactionCase):
         cls.category_equipment = ref("onecore_helpdesk.category_equipment_order")
         cls.form_fault = ref("onecore_helpdesk.form_it_fault")
 
-    def _ticket(self, **vals):
+    ANSWERS = {"affected_scope": "me", "impact": "can_work"}
+
+    def _ticket(self, user=None, **vals):
         base = {
             "name": "Skrivaren på plan 3",
             "description": "<p>Skrivaren fungerar inte.</p>",
             "team_id": self.team.id,
         }
         base.update(vals)
-        return self.Ticket.create(base)
+        model = self.Ticket.with_user(user) if user else self.Ticket
+        return model.create(base)
+
+    def _optional_form(self, category):
+        """A form whose only question is optional."""
+        return self.Form.create(
+            {
+                "name": "Skrivare",
+                "category_id": category.id,
+                "ticket_properties": [
+                    {"name": "printer_model", "string": "Skrivarmodell", "type": "char"}
+                ],
+            }
+        )
 
     # Seed data -----------------------------------------------------------
 
@@ -65,7 +80,9 @@ class TestTicketForms(TransactionCase):
 
     def test_ticket_properties_read_the_form_definition(self):
         ticket = self._ticket(
-            category_id=self.category_fault.id, form_id=self.form_fault.id
+            category_id=self.category_fault.id,
+            form_id=self.form_fault.id,
+            properties=self.ANSWERS,
         )
 
         names = [p["name"] for p in self._read_properties(ticket)]
@@ -77,13 +94,13 @@ class TestTicketForms(TransactionCase):
         ticket = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "4137-12", "affected_scope": "me"},
+            properties={"port_replicator": "4137-12", **self.ANSWERS},
         )
 
         # record format: a mapping, selections resolve to their label
         self.assertEqual(ticket.properties["port_replicator"], "4137-12")
         self.assertEqual(ticket.properties["affected_scope"], "Bara jag")
-        self.assertFalse(ticket.properties["impact"])
+        self.assertFalse(ticket.properties["program"])
         keyed = ticket.with_context(property_selection_get_key=True)
         self.assertEqual(keyed.properties["affected_scope"], "me")
         # read format keeps the raw key
@@ -128,7 +145,7 @@ class TestTicketForms(TransactionCase):
         ticket = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "4137-12"},
+            properties={"port_replicator": "4137-12", **self.ANSWERS},
         )
 
         result = ticket.onchange(
@@ -148,16 +165,18 @@ class TestTicketForms(TransactionCase):
     # Category and form stay consistent -----------------------------------
 
     def test_category_with_a_single_form_preselects_it_on_create(self):
-        ticket = self._ticket(category_id=self.category_fault.id)
+        ticket = self._ticket(category_id=self.category_fault.id, properties=self.ANSWERS)
 
         self.assertEqual(ticket.form_id, self.form_fault)
 
     def test_recategorising_into_a_category_with_one_form_preselects_it(self):
         ticket = self._ticket(category_id=self.category_other.id)
 
-        ticket.category_id = self.category_fault
+        # the agent answers the questions in the same save, as in the UI
+        ticket.write({"category_id": self.category_fault.id, "properties": self.ANSWERS})
 
         self.assertEqual(ticket.form_id, self.form_fault)
+        self.assertEqual(ticket.properties["impact"], "Kan arbeta som vanligt")
 
     # Category and form are required for users creating tickets in Odoo ------
 
@@ -173,30 +192,18 @@ class TestTicketForms(TransactionCase):
             }
         )
 
-    def _employee_ticket(self, employee, **vals):
-        base = {
-            "name": "Skrivaren på plan 3",
-            "description": "<p>Skrivaren fungerar inte.</p>",
-            "team_id": self.team.id,
-        }
-        base.update(vals)
-        return self.Ticket.with_user(employee).create(base)
-
     def test_user_must_choose_a_category(self):
         with self.assertRaises(ValidationError):
-            self._employee_ticket(self._employee())
+            self._ticket(user=self._employee())
 
     def test_user_must_choose_a_form_when_the_category_has_several(self):
         self.Form.create({"name": "Skrivare", "category_id": self.category_fault.id})
 
         with self.assertRaises(ValidationError):
-            self._employee_ticket(self._employee(), category_id=self.category_fault.id)
-
-    ANSWERS = {"affected_scope": "me", "impact": "can_work"}
+            self._ticket(user=self._employee(), category_id=self.category_fault.id)
 
     def test_a_single_form_is_preselected_for_the_user(self):
-        ticket = self._employee_ticket(
-            self._employee(), category_id=self.category_fault.id, properties=self.ANSWERS
+        ticket = self._ticket(user=self._employee(), category_id=self.category_fault.id, properties=self.ANSWERS
         )
 
         self.assertEqual(ticket.form_id, self.form_fault)
@@ -205,25 +212,21 @@ class TestTicketForms(TransactionCase):
 
     def test_user_must_answer_the_required_questions(self):
         with self.assertRaises(ValidationError) as error:
-            self._employee_ticket(
-                self._employee(),
-                category_id=self.category_fault.id,
+            self._ticket(user=self._employee(), category_id=self.category_fault.id,
                 properties={"affected_scope": "me"},
             )
 
         self.assertIn("Hur drabbas du/ni?", str(error.exception))
 
     def test_optional_questions_may_stay_blank(self):
-        ticket = self._employee_ticket(
-            self._employee(), category_id=self.category_fault.id, properties=self.ANSWERS
+        ticket = self._ticket(user=self._employee(), category_id=self.category_fault.id, properties=self.ANSWERS
         )
 
         self.assertFalse(ticket.properties["port_replicator"])
 
     def test_blanking_a_required_answer_later_is_rejected(self):
         employee = self._employee()
-        ticket = self._employee_ticket(
-            employee, category_id=self.category_fault.id, properties=self.ANSWERS
+        ticket = self._ticket(user=employee, category_id=self.category_fault.id, properties=self.ANSWERS
         )
 
         with self.assertRaises(ValidationError):
@@ -247,20 +250,55 @@ class TestTicketForms(TransactionCase):
             }
         )
 
-        ticket = self._employee_ticket(
-            self._employee(),
-            category_id=self.category_equipment.id,
+        ticket = self._ticket(user=self._employee(), category_id=self.category_equipment.id,
             form_id=counted_form.id,
             properties={"pages": 0},
         )
 
         self.assertEqual(ticket.properties["pages"], 0)
 
-    def test_superuser_paths_skip_required_answers(self):
-        ticket = self._ticket(category_id=self.category_fault.id)
+    def test_rules_apply_to_automated_callers_too(self):
+        # the test environment runs as superuser
+        with self.assertRaises(ValidationError):
+            self._ticket(category_id=self.category_fault.id)
+
+    def test_skip_context_key_bypasses_the_rules(self):
+        ticket = self.Ticket.with_context(skip_ticket_form_rules=True).create(
+            {
+                "name": "Skrivaren på plan 3",
+                "description": "<p>Skrivaren fungerar inte.</p>",
+                "team_id": self.team.id,
+                "category_id": self.category_fault.id,
+            }
+        )
 
         self.assertEqual(ticket.form_id, self.form_fault)
         self.assertFalse(ticket.properties["impact"])
+
+    def test_adding_a_required_question_from_a_ticket_is_allowed(self):
+        """The gear editor writes the new definition through the host ticket;
+        that is configuration, not answering."""
+        ticket = self._ticket(
+            category_id=self.category_fault.id,
+            form_id=self.form_fault.id,
+            properties=self.ANSWERS,
+        )
+        definition = self._read_properties(ticket)
+        definition.append(
+            {
+                "name": "building",
+                "string": "Byggnad",
+                "type": "char",
+                "required": True,
+                "definition_changed": True,
+            }
+        )
+
+        ticket.write({"properties": definition})
+
+        self.assertIn("building", [p["name"] for p in self.form_fault.ticket_properties])
+        with self.assertRaises(ValidationError):
+            ticket.write({"properties": {**self.ANSWERS, "building": ""}})
 
     def test_required_must_be_a_boolean_in_the_definition(self):
         with self.assertRaises(ValueError):
@@ -275,8 +313,7 @@ class TestTicketForms(TransactionCase):
             )
 
     def test_a_category_without_forms_needs_no_form(self):
-        ticket = self._employee_ticket(
-            self._employee(), category_id=self.category_other.id
+        ticket = self._ticket(user=self._employee(), category_id=self.category_other.id
         )
 
         self.assertFalse(ticket.form_id)
@@ -284,23 +321,36 @@ class TestTicketForms(TransactionCase):
     def test_recategorising_to_a_category_with_several_forms_requires_a_form(self):
         self.Form.create({"name": "Skrivare", "category_id": self.category_fault.id})
         employee = self._employee()
-        ticket = self._employee_ticket(employee, category_id=self.category_other.id)
+        ticket = self._ticket(user=employee, category_id=self.category_other.id)
 
         with self.assertRaises(ValidationError):
             ticket.with_user(employee).write({"category_id": self.category_fault.id})
 
-    def test_superuser_paths_are_exempt_from_the_category_rule(self):
-        # mail gateway and portal create as superuser
+    def test_ticket_without_category_gets_the_team_default(self):
+        # automations, scripts and the mail gateway leave the category out
         ticket = self._ticket()
 
-        self.assertFalse(ticket.category_id)
+        self.assertEqual(ticket.category_id, self.category_other)
+        self.assertFalse(ticket.form_id)
+
+    def test_explicit_empty_category_is_rejected(self):
+        with self.assertRaises(ValidationError) as error:
+            self._ticket(category_id=False)
+
+        self.assertIn("Välj en kategori", str(error.exception))
+
+    def test_team_without_default_category_gives_no_default(self):
+        team = self.env["helpdesk.ticket.team"].create({"name": "Ekonomi"})
+
+        with self.assertRaises(ValidationError):
+            self._ticket(team_id=team.id)
 
     def test_category_with_several_forms_does_not_preselect(self):
         self.Form.create(
             {"name": "Skrivare", "category_id": self.category_fault.id}
         )
 
-        ticket = self._ticket(category_id=self.category_fault.id)
+        ticket = self.Ticket.new({"category_id": self.category_fault.id})
 
         self.assertFalse(ticket.form_id)
 
@@ -317,7 +367,7 @@ class TestTicketForms(TransactionCase):
         ticket = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "4137-12", "affected_scope": "me"},
+            properties={"port_replicator": "4137-12", **self.ANSWERS},
         )
 
         ticket.category_id = self.category_other
@@ -343,7 +393,7 @@ class TestTicketForms(TransactionCase):
         ticket = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "4137-12"},
+            properties={"port_replicator": "4137-12", **self.ANSWERS},
         )
 
         ticket.form_id = printer_form
@@ -354,7 +404,8 @@ class TestTicketForms(TransactionCase):
 
     def test_changing_category_without_answers_logs_nothing(self):
         ticket = self._ticket(
-            category_id=self.category_fault.id, form_id=self.form_fault.id
+            category_id=self.category_equipment.id,
+            form_id=self._optional_form(self.category_equipment).id,
         )
 
         ticket.category_id = self.category_other
@@ -362,16 +413,24 @@ class TestTicketForms(TransactionCase):
         self.assertFalse(self._notes(ticket))
 
     def test_form_implies_its_category_on_create(self):
-        ticket = self._ticket(form_id=self.form_fault.id)
+        ticket = self._ticket(form_id=self.form_fault.id, properties=self.ANSWERS)
 
         self.assertEqual(ticket.category_id, self.category_fault)
         self.assertEqual(ticket.form_id, self.form_fault)
 
     def test_form_implies_its_category_on_write(self):
-        ticket = self._ticket()
+        # an old ticket without category, e.g. mail to a team without default
+        ticket = self.Ticket.with_context(skip_ticket_form_rules=True).create(
+            {
+                "name": "Skrivaren på plan 3",
+                "description": "<p>Skrivaren fungerar inte.</p>",
+                "team_id": self.team.id,
+                "category_id": False,
+            }
+        )
         self.assertFalse(ticket.category_id)
 
-        ticket.write({"form_id": self.form_fault.id})
+        ticket.write({"form_id": self.form_fault.id, "properties": self.ANSWERS})
 
         self.assertEqual(ticket.category_id, self.category_fault)
         self.assertEqual(ticket.form_id, self.form_fault)
@@ -404,7 +463,7 @@ class TestTicketForms(TransactionCase):
             properties={"pages": 0},
         )
 
-        ticket.form_id = self.form_fault
+        ticket.form_id = self._optional_form(self.category_fault)
 
         self.assertIn("Antal sidor: 0", self._notes(ticket).body)
 
@@ -412,12 +471,12 @@ class TestTicketForms(TransactionCase):
         first = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "1111-11"},
+            properties={"port_replicator": "1111-11", **self.ANSWERS},
         )
         second = self._ticket(
             category_id=self.category_fault.id,
             form_id=self.form_fault.id,
-            properties={"port_replicator": "2222-22"},
+            properties={"port_replicator": "2222-22", **self.ANSWERS},
         )
 
         (first | second).write({"category_id": self.category_other.id})
@@ -446,8 +505,12 @@ class TestTicketForms(TransactionCase):
         )
 
     def test_ticket_count_and_action_cover_the_forms_tickets(self):
-        self._ticket(category_id=self.category_fault.id, form_id=self.form_fault.id)
-        self._ticket(category_id=self.category_fault.id, form_id=self.form_fault.id)
+        for _ in range(2):
+            self._ticket(
+                category_id=self.category_fault.id,
+                form_id=self.form_fault.id,
+                properties=self.ANSWERS,
+            )
         self._ticket(category_id=self.category_other.id)
 
         self.assertEqual(self.form_fault.ticket_count, 2)
@@ -498,3 +561,24 @@ class TestTicketForms(TransactionCase):
         self.assertEqual(ticket.category_id, self.category_other)
         self.assertFalse(ticket.form_id)
         self.assertFalse(ticket.properties)
+
+    def test_mail_to_a_team_without_default_category_is_not_rejected(self):
+        alias_domain = self.env["mail.alias.domain"].create({"name": "test.mimer.nu"})
+        self.env.company.alias_domain_id = alias_domain
+        team = self.env["helpdesk.ticket.team"].create(
+            {"name": "Ekonomi", "alias_name": "ekonomi-test"}
+        )
+        message = EMAIL_TEMPLATE.format(
+            sender="Anna Andersson <anna.andersson@mimer.nu>",
+            to="ekonomi-test@test.mimer.nu",
+            msg_id="<ekonomi@test.mimer.nu>",
+            extra_headers="",
+            subject="Fakturafråga",
+            body="Var är fakturan?",
+        )
+
+        ticket_id = self.env["mail.thread"].message_process(None, message)
+
+        ticket = self.Ticket.browse(ticket_id)
+        self.assertEqual(ticket.team_id, team)
+        self.assertFalse(ticket.category_id)
