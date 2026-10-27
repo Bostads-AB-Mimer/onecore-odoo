@@ -21,13 +21,17 @@
         "views/helpdesk_ticket_category_views.xml",
         "views/helpdesk_ticket_team_views.xml",
         "views/helpdesk_ticket_views.xml",
+        "views/portal_templates.xml",
         "data/helpdesk_it_team_data.xml",
         "data/helpdesk_it_form_data.xml",
         "data/helpdesk_p1_alarm_data.xml",
     ],
     "assets": {
         "web.assets_backend": [
-            "onecore_helpdesk/static/src/**/*",
+            "onecore_helpdesk/static/src/properties/**/*",
+        ],
+        "web.assets_frontend": [
+            "onecore_helpdesk/static/src/portal/**/*",
         ],
     },
     "installable": True,
