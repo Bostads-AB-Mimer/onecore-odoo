@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- One question rendered as a portal input. Expects `question` (a
+         definition dict in read format), `prefix` (input name prefix) and the
+         page variables `submitted`, `submitted_lists`, `portal_question_types`.
+         A required selection has no blank choice, only a placeholder that
+         cannot be picked, so the requester must answer and nothing is
+         preselected (same as the backend widget). -->
+    <template id="portal_question" name="Portal ticket question">
+        <t t-set="qtype" t-value="question.get('type')" />
+        <t t-set="input_name" t-value="prefix + question['name']" />
+        <t t-set="label" t-value="question.get('string') or question['name']" />
+        <t t-set="required" t-value="bool(question.get('required'))" />
+        <t t-set="answer" t-value="submitted.get(input_name)" />
+        <t t-if="qtype == 'separator'">
+            <div class="form-group mb-2">
+                <h5 class="mt-3 mb-1" t-esc="label" />
+            </div>
+        </t>
+        <div t-elif="qtype in portal_question_types" class="form-group mb-3">
+            <label class="control-label" t-att-for="input_name">
+                <t t-esc="label" />
+                <span t-if="required" class="text-danger"> *</span>
+            </label>
+            <div class="col-md-7 col-sm-8">
+                <t t-if="qtype == 'selection'">
+                    <select
+                        class="form-control"
+                        t-att-id="input_name"
+                        t-att-name="input_name"
+                        t-att-required="required"
+                    >
+                        <option
+                            value=""
+                            t-att-disabled="required"
+                            t-att-hidden="required"
+                            t-att-selected="not answer"
+                        />
+                        <t t-foreach="question.get('selection') or []" t-as="option">
+                            <option t-att-value="option[0]" t-att-selected="option[0] == answer">
+                                <t t-esc="option[1]" />
+                            </option>
+                        </t>
+                    </select>
+                </t>
+                <t t-elif="qtype == 'tags'">
+                    <select
+                        class="form-control"
+                        multiple="multiple"
+                        t-att-id="input_name"
+                        t-att-name="input_name"
+                        t-att-required="required"
+                    >
+                        <t t-foreach="question.get('tags') or []" t-as="tag">
+                            <option
+                                t-att-value="tag[0]"
+                                t-att-selected="tag[0] in (submitted_lists.get(input_name) or [])"
+                            >
+                                <t t-esc="tag[1]" />
+                            </option>
+                        </t>
+                    </select>
+                </t>
+                <t t-elif="qtype == 'boolean'">
+                    <div class="form-check mt-2">
+                        <input
+                            type="checkbox"
+                            class="form-check-input"
+                            value="1"
+                            t-att-id="input_name"
+                            t-att-name="input_name"
+                            t-att-checked="bool(answer)"
+                        />
+                    </div>
+                </t>
+                <t t-elif="qtype == 'text'">
+                    <textarea
+                        class="form-control"
+                        t-att-id="input_name"
+                        t-att-name="input_name"
+                        t-att-required="required"
+                    ><t t-esc="answer or ''" /></textarea>
+                </t>
+                <t t-else="">
+                    <t t-set="input_type" t-value="{'integer': 'number', 'float': 'number', 'date': 'date', 'datetime': 'datetime-local'}.get(qtype, 'text')" />
+                    <input
+                        class="form-control"
+                        t-att-type="input_type"
+                        t-att-step="'1' if qtype == 'integer' else ('any' if qtype == 'float' else None)"
+                        t-att-id="input_name"
+                        t-att-name="input_name"
+                        t-att-required="required"
+                        t-att-value="answer"
+                    />
+                </t>
+            </div>
+        </div>
+    </template>
+
+    <!-- New ticket page (/new/ticket): form select after the category, the
+         questions of every portal form in its own fieldset, then the common
+         questions of every category in its own fieldset. The script in
+         static/src/portal shows the forms of the chosen category and enables
+         the fieldsets of the chosen form and category; the others stay hidden
+         and disabled so their inputs are neither validated nor posted. -->
+    <template
+        id="portal_create_ticket_forms"
+        name="Portal create ticket: forms and questions"
+        inherit_id="helpdesk_mgmt.portal_create_ticket"
+    >
+        <xpath expr="//input[@name='csrf_token']" position="after">
+            <div t-if="error" class="alert alert-danger" role="alert">
+                <t t-esc="error" />
+            </div>
+        </xpath>
+        <!-- keep what the requester entered when the submit was rejected -->
+        <xpath expr="//select[@id='category']//option[@t-attf-value]" position="attributes">
+            <attribute name="t-att-selected">str(cat.id) == str(submitted.get('category') or '')</attribute>
+        </xpath>
+        <xpath expr="//input[@name='subject']" position="attributes">
+            <attribute name="t-att-value">submitted.get('subject')</attribute>
+        </xpath>
+        <xpath expr="//textarea[@name='description']" position="inside">
+            <t t-esc="submitted.get('description') or ''" />
+        </xpath>
+        <xpath expr="//select[@id='category']/ancestor::div[hasclass('form-group')][1]" position="after">
+            <div class="form-group mb-3" id="onecore_form_group" t-if="forms">
+                <label class="col-md-3 col-sm-4 control-label" for="form">Formulär</label>
+                <div class="col-md-7 col-sm-8">
+                    <select class="form-control" id="form" name="form">
+                        <option value="" />
+                        <t t-foreach="forms" t-as="form">
+                            <option
+                                t-att-value="form.id"
+                                t-att-data-category-id="form.category_id.id"
+                                t-att-selected="str(form.id) == str(submitted.get('form') or '')"
+                            >
+                                <t t-esc="form.name" />
+                            </option>
+                        </t>
+                    </select>
+                </div>
+            </div>
+            <t t-foreach="forms" t-as="form">
+                <fieldset
+                    t-att-data-form-id="form.id"
+                    class="onecore_ticket_questions d-none"
+                    disabled="disabled"
+                >
+                    <h5 class="mt-4 mb-1" t-esc="form.name" />
+                    <div
+                        t-if="form.description"
+                        class="form-group mb-3 text-muted"
+                        t-out="form.description"
+                    />
+                    <t t-foreach="form.ticket_properties" t-as="question">
+                        <t t-call="onecore_helpdesk.portal_question">
+                            <t t-set="prefix" t-value="question_prefix" />
+                        </t>
+                    </t>
+                </fieldset>
+            </t>
+            <!-- the category's add-on form, under the form's questions -->
+            <t t-foreach="categories" t-as="cat">
+                <t t-set="addon" t-value="category_addons.get(cat.id)" />
+                <fieldset
+                    t-if="addon"
+                    t-att-data-category-id="cat.id"
+                    class="onecore_ticket_questions d-none"
+                    disabled="disabled"
+                >
+                    <h5 class="mt-4 mb-1" t-esc="addon.name" />
+                    <div
+                        t-if="addon.description"
+                        class="form-group mb-3 text-muted"
+                        t-out="addon.description"
+                    />
+                    <t t-foreach="addon.ticket_properties" t-as="question">
+                        <t t-call="onecore_helpdesk.portal_question">
+                            <t t-set="prefix" t-value="addon_question_prefix" />
+                        </t>
+                    </t>
+                </fieldset>
+            </t>
+        </xpath>
+    </template>
+
+    <!-- Ticket page (/my/ticket/<id>): the form in the sidebar and the
+         answers of both blocks above the description. -->
+    <template
+        id="portal_helpdesk_ticket_page_answers"
+        name="Portal ticket page: form answers"
+        inherit_id="helpdesk_mgmt.portal_helpdesk_ticket_page"
+    >
+        <xpath expr="//div[@t-if='ticket.category_id']" position="after">
+            <div t-if="ticket.form_id">
+                <strong>Formulär:</strong>
+                <span t-field="ticket.form_id" />
+            </div>
+        </xpath>
+        <xpath expr="//div[@t-if='ticket.description or ticket.attachment_ids']" position="before">
+            <t t-set="answers" t-value="ticket._displayed_answers()" />
+            <div class="row" t-if="answers">
+                <div class="mb-4">
+                    <h5 class="mb-1">Svar från formuläret</h5>
+                    <hr class="mt-1 mb-2" />
+                    <dl class="row py-1 px-2 small mb-0 onecore_ticket_answers">
+                        <t t-foreach="answers" t-as="answer">
+                            <dt class="col-sm-4 fw-normal text-muted">
+                                <t t-esc="answer[0]" />
+                            </dt>
+                            <dd class="col-sm-8">
+                                <t t-esc="answer[1]" />
+                            </dd>
+                        </t>
+                    </dl>
+                </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

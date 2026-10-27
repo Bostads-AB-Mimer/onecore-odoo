@@ -2,7 +2,7 @@
 
 Date: 2026-10-22
 Module: `onecore_helpdesk` (Odoo 19 Community, on top of vendored OCA `helpdesk_mgmt`)
-Status: v1 built in `onecore_helpdesk` on 2026-10-22, add-on forms added 2026-10-27 (tests written, suite not yet run)
+Status: v1 built in `onecore_helpdesk` on 2026-10-22, portal intake and add-on forms added 2026-10-27 (tests written, suite not yet run)
 
 ## Intent
 
@@ -45,10 +45,10 @@ reporting, portal listing) and a category may have zero, one or many forms.
   `parent_id` on categories is left as is and not used by us.
 - No inheritance or merging of definitions between forms. Each form's
   definition is the complete set of extra questions.
-- Rendering the form in the OCA portal (`/new/ticket`) or in a ONECore
-  frontend is out of scope for this design. The data model must make it
-  possible (see "External intake" below), but the UI work is a separate
-  piece.
+- Rendering the form in a ONECore frontend is out of scope for this
+  design. The data model must make it possible (see "External intake"
+  below). The OCA portal page was extended on 2026-10-27, see "Portal
+  intake".
 - Deriving priority from "who is affected / how severe" is out of scope.
   Those become ordinary selection properties; an automation can be added
   later.
@@ -305,6 +305,43 @@ than styling:
 - **Chatter tracking.** Property changes are not tracked. Acceptable for
   v1; `form_id` itself is tracked.
 
+## Portal intake (built 2026-10-27)
+
+Requesters create tickets at `/my/tickets` → `/new/ticket`, the OCA portal
+page. `onecore_helpdesk/controllers/portal.py` extends the OCA controller
+and `views/portal_templates.xml` the two OCA templates:
+
+- The category select is always shown and required, whatever the OCA
+  company setting "Select category in Helpdesk portal" says, because the
+  category rule is uniform. The team select stays governed by the OCA
+  setting (off by default); the ticket goes to the team that owns the
+  category (`team.category_ids`) when no team was chosen.
+- A form select follows the category. Each portal form (`active`,
+  `show_in_portal`) renders its intro text and questions in its own
+  `<fieldset data-form-id>`, hidden and disabled until chosen. The script
+  in `static/src/portal/new_ticket_form.js` (an Odoo 19 public Interaction)
+  filters the forms by category, preselects a category's only form and
+  enables the chosen fieldset. Disabled fieldsets are neither validated by
+  the browser nor posted.
+- Inputs are named `question_<property name>`. Supported question types:
+  char, text, integer, float, boolean, date, datetime (posted as the
+  requester's wall clock, stored in UTC), selection (required ones get a
+  non-selectable placeholder instead of a blank choice, like the backend
+  widget) and tags. many2one, many2many, html and monetary are skipped in
+  rendering and parsing; a portal form should not use them.
+- The controller turns the posted inputs into the `properties` dict and
+  creates the ticket; the ticket rules (category, form, required answers)
+  apply as for everyone.
+  A rejected submit rolls back in a savepoint and shows the page again with
+  the message and the entered values. A posted form that is hidden from
+  the portal or belongs to another category is rejected.
+- The portal ticket page shows the form in the sidebar and the answered
+  questions as "Svar från formuläret" above the description, via
+  `helpdesk.ticket._displayed_answers()` (same formatting as the chatter
+  snapshot).
+
+Tests: `tests/test_portal_forms.py` (HttpCase as the portal user).
+
 ## Add-on forms (built 2026-10-27)
 
 Some questions repeat across every form of a category but not across the
@@ -350,10 +387,10 @@ Existing databases: the form and category records are noupdate, so the
 move of the Påverkan questions into an add-on must be done by hand or by
 recreating the database.
 
-## External intake (design constraint only)
+## External intake (design constraint for other intakes)
 
-Whatever later renders the form outside the Odoo backend (OCA portal
-template or a ONECore frontend) should:
+Whatever else renders the form outside the Odoo backend (a ONECore
+frontend) should:
 
 1. List active categories, then active `show_in_portal` forms for the
    chosen category.
