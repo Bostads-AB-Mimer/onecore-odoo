@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Intake form for "Felanmälan IT", modelled on the current intranet
+             form. Property names are stable identifiers that external intake
+             and reporting may rely on; labels and option lists are content
+             owned by IT and can be changed from the UI (gear icon on a
+             ticket with this form). -->
+        <record id="form_it_fault" model="helpdesk.ticket.form">
+            <field name="name">Felanmälan IT</field>
+            <field name="sequence">1</field>
+            <field name="category_id" ref="category_it_fault"/>
+            <field name="description" type="html">
+                <p>
+                    Här nedan väljer du vilken påverkan felet har. Tanken är
+                    inte att du kan prioritera upp ditt ärende här utan detta
+                    ska sättas objektivt. I slutänden bestämmer handläggaren
+                    ärendets prioritet.
+                </p>
+            </field>
+            <field name="ticket_properties" eval="[
+                {
+                    'name': 'port_replicator',
+                    'string': 'Numret på portreplikatorn (ex 4137-12)',
+                    'type': 'char',
+                },
+                {
+                    'name': 'program',
+                    'string': 'Om program, vilket?',
+                    'type': 'selection',
+                    'selection': [
+                        ['teams', 'Teams'],
+                        ['outlook', 'Outlook'],
+                        ['word', 'Word'],
+                        ['excel', 'Excel'],
+                        ['odoo', 'Odoo'],
+                        ['other', 'Övrigt'],
+                    ],
+                },
+                {
+                    'name': 'impact_info',
+                    'string': 'Påverkan',
+                    'type': 'separator',
+                },
+                {
+                    'name': 'affected_scope',
+                    'string': 'Vilka påverkas?',
+                    'type': 'selection',
+                    'required': True,
+                    'selection': [
+                        ['me', 'Bara jag'],
+                        ['department', 'Min avdelning'],
+                        ['all', 'Hela Mimer'],
+                    ],
+                },
+                {
+                    'name': 'impact',
+                    'string': 'Hur drabbas du/ni?',
+                    'type': 'selection',
+                    'required': True,
+                    'selection': [
+                        ['can_work', 'Kan arbeta som vanligt'],
+                        ['limited', 'Kan arbeta med begränsningar'],
+                        ['cannot_work', 'Kan inte arbeta'],
+                    ],
+                },
+            ]"/>
+        </record>
+    </data>
+</odoo>

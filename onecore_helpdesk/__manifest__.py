@@ -15,9 +15,21 @@
         "helpdesk_ticket_close_inactive",
     ],
     "data": [
+        "security/ir.model.access.csv",
+        "security/helpdesk_security.xml",
+        "views/helpdesk_ticket_form_views.xml",
+        "views/helpdesk_ticket_category_views.xml",
+        "views/helpdesk_ticket_team_views.xml",
+        "views/helpdesk_ticket_views.xml",
         "data/helpdesk_it_team_data.xml",
+        "data/helpdesk_it_form_data.xml",
         "data/helpdesk_p1_alarm_data.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "onecore_helpdesk/static/src/**/*",
+        ],
+    },
     "installable": True,
     "auto_install": False,
     "license": "LGPL-3",

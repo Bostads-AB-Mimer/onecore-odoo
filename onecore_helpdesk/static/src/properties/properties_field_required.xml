@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="web.PropertiesField" t-inherit-mode="extension">
+        <!-- asterisk after the label (placed after the t-else so the
+             t-if / t-else pair stays adjacent) -->
+        <xpath expr="//label[hasclass('o_field_property_label')]/i[hasclass('o_field_property_empty_label')]" position="after">
+            <span t-if="propertyConfiguration.required" class="text-danger ms-1" title="Obligatorisk">*</span>
+        </xpath>
+        <!-- red outline on the unanswered required question once the user
+             tried to save -->
+        <xpath expr="//div[hasclass('o_property_field_value')]" position="attributes">
+            <attribute name="t-att-class">{'o_field_invalid': isMissingRequiredAnswer(propertyConfiguration)}</attribute>
+        </xpath>
+        <xpath expr="//PropertyValue" position="attributes">
+            <attribute name="required">!!propertyConfiguration.required</attribute>
+        </xpath>
+    </t>
+</templates>

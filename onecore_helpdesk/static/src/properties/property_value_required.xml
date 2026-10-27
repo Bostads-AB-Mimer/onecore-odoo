@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- A required selection starts empty but cannot be set back to empty:
+         the blank entry stays as a hidden, disabled placeholder. -->
+    <t t-inherit="web.PropertyValue" t-inherit-mode="extension">
+        <xpath expr="//select/option[1]" position="attributes">
+            <attribute name="t-att-disabled">props.required</attribute>
+            <attribute name="t-att-hidden">props.required</attribute>
+            <attribute name="t-att-selected">!propertyValue</attribute>
+        </xpath>
+    </t>
+</templates>

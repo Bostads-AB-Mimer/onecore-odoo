@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="ticket_view_form" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.form.onecore_helpdesk.forms</field>
+        <field name="model">helpdesk.ticket</field>
+        <field name="inherit_id" ref="helpdesk_mgmt.ticket_view_form"/>
+        <field name="arch" type="xml">
+            <!-- Every ticket made in Odoo needs a category, and a form when
+                 the category has any (email tickets get the team's default
+                 category). The same rule is enforced server side. -->
+            <field name="category_id" position="attributes">
+                <attribute name="required">1</attribute>
+            </field>
+            <field name="category_id" position="after">
+                <field name="category_form_count" invisible="1"/>
+                <!-- Stays visible on a ticket whose only form was archived,
+                     so the agent can see which questions it answered. -->
+                <field
+                    name="form_id"
+                    invisible="not category_form_count and not form_id"
+                    required="category_form_count > 0"
+                    options="{'no_create': True, 'no_open': True}"
+                />
+            </field>
+            <!-- OCA hides the properties until a team is set; the questions
+                 now come from the form instead -->
+            <field name="properties" position="attributes">
+                <attribute name="invisible">not form_id</attribute>
+            </field>
+        </field>
+    </record>
+
+    <record id="helpdesk_ticket_view_search" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.search.onecore_helpdesk.forms</field>
+        <field name="model">helpdesk.ticket</field>
+        <field name="inherit_id" ref="helpdesk_mgmt.helpdesk_ticket_view_search"/>
+        <field name="arch" type="xml">
+            <field name="category_id" position="after">
+                <field name="form_id"/>
+            </field>
+            <filter name="group_category" position="after">
+                <filter
+                    string="Formulär"
+                    name="group_form"
+                    domain="[]"
+                    context="{'group_by': 'form_id'}"
+                />
+            </filter>
+        </field>
+    </record>
+
+    <record id="ticket_view_tree" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.list.onecore_helpdesk.forms</field>
+        <field name="model">helpdesk.ticket</field>
+        <field name="inherit_id" ref="helpdesk_mgmt.ticket_view_tree"/>
+        <field name="arch" type="xml">
+            <field name="category_id" position="after">
+                <field name="form_id" optional="hide"/>
+            </field>
+        </field>
+    </record>
+</odoo>
