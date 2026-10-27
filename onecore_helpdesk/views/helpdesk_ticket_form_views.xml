@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="helpdesk_ticket_form_view_search" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.form.search</field>
+        <field name="model">helpdesk.ticket.form</field>
+        <field name="arch" type="xml">
+            <search string="Formulär">
+                <field name="name"/>
+                <field name="category_id"/>
+                <filter string="Arkiverade" name="inactive" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter
+                    string="Visas i portalen"
+                    name="show_in_portal"
+                    domain="[('show_in_portal', '=', True)]"
+                />
+                <group>
+                    <filter
+                        string="Kategori"
+                        name="group_category"
+                        context="{'group_by': 'category_id'}"
+                    />
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="helpdesk_ticket_form_view_list" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.form.list</field>
+        <field name="model">helpdesk.ticket.form</field>
+        <field name="arch" type="xml">
+            <!-- no default_order: the drag handle only works when the list is
+                 not ordered by something other than sequence; the model order
+                 already groups by category -->
+            <list string="Formulär">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="category_id"/>
+                <field name="question_summary"/>
+                <field name="show_in_portal" widget="boolean_toggle"/>
+                <field name="ticket_count" string="Ärenden"/>
+                <field
+                    name="company_id"
+                    optional="hide"
+                    groups="base.group_multi_company"
+                />
+            </list>
+        </field>
+    </record>
+
+    <record id="helpdesk_ticket_form_view_form" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.form.form</field>
+        <field name="model">helpdesk.ticket.form</field>
+        <field name="arch" type="xml">
+            <form string="Formulär">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button
+                            name="action_view_tickets"
+                            type="object"
+                            class="oe_stat_button"
+                            icon="fa-ticket"
+                        >
+                            <field name="ticket_count" widget="statinfo" string="Ärenden"/>
+                        </button>
+                    </div>
+                    <widget
+                        name="web_ribbon"
+                        title="Arkiverad"
+                        bg_color="bg-danger"
+                        invisible="active"
+                    />
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="t.ex. Dator / arbetsplats"/>
+                        </h1>
+                    </div>
+                    <group name="main">
+                        <group>
+                            <field name="category_id"/>
+                            <field name="sequence"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="show_in_portal" widget="boolean_toggle"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Frågor" name="questions">
+                            <div class="alert alert-info" role="alert">
+                                Frågorna redigeras från ett ärende, inte här.
+                                Spara formuläret, öppna ett ärende med detta
+                                formulär (eller skapa ett nytt via knappen
+                                Ärenden ovan) och klicka på kugghjulet vid
+                                frågorna. Frågorna sparas på formuläret när
+                                ärendet sparas och gäller alla ärenden med
+                                formuläret.
+                            </div>
+                            <field name="question_summary" readonly="1"/>
+                        </page>
+                        <page string="Introduktionstext" name="description">
+                            <field name="description" widget="html" placeholder="Text som visas ovanför frågorna när formuläret fylls i."/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="helpdesk_ticket_form_action" model="ir.actions.act_window">
+        <field name="name">Formulär</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">helpdesk.ticket.form</field>
+        <field name="view_mode">list,form</field>
+        <field name="path">helpdesk-forms</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Skapa ett formulär</p>
+            <p>
+                Ett formulär hör till en kategori och lägger till extra
+                frågor på ärendet, utöver rubrik och beskrivning.
+            </p>
+        </field>
+    </record>
+
+    <menuitem
+        id="helpdesk_ticket_form_menu"
+        name="Formulär"
+        parent="helpdesk_mgmt.helpdesk_ticket_config_main_menu"
+        action="helpdesk_ticket_form_action"
+        sequence="16"
+    />
+</odoo>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_helpdesk_category_form" model="ir.ui.view">
+        <field name="name">helpdesk.ticket.category.form.onecore_helpdesk.forms</field>
+        <field name="model">helpdesk.ticket.category</field>
+        <field name="inherit_id" ref="helpdesk_mgmt.view_helpdesk_category_form"/>
+        <field name="arch" type="xml">
+            <group name="main" position="after">
+                <notebook>
+                    <page string="Formulär" name="forms">
+                        <field name="form_ids">
+                            <list editable="bottom">
+                                <field name="sequence" widget="handle"/>
+                                <field name="name"/>
+                                <field name="question_summary"/>
+                                <field name="show_in_portal" widget="boolean_toggle"/>
+                                <field name="ticket_count" string="Ärenden"/>
+                            </list>
+                        </field>
+                    </page>
+                </notebook>
+            </group>
+        </field>
+    </record>
+</odoo>

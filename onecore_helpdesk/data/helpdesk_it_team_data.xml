@@ -85,6 +85,8 @@
                 ref('category_tenant_fault'),
                 ref('category_property_it_order'),
             ])]"/>
+            <!-- email tickets are free text and land here -->
+            <field name="default_category_id" ref="category_it_other"/>
             <field name="autoupdate_ticket_stage" eval="True"/>
             <field name="autopupdate_src_stage_ids" eval="[(6, 0, [ref('stage_awaiting_user'), ref('stage_solved')])]"/>
             <field name="autopupdate_dest_stage_id" ref="stage_user_replied"/>

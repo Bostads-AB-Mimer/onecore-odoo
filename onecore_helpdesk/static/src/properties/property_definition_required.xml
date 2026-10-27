@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!-- "Obligatorisk" checkbox in the question editor (gear icon). Placed
+         after the second (separator) kanban block so the t-if / t-else pair
+         above it stays adjacent. -->
+    <t t-inherit="web.PropertyDefinition" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_field_property_definition_kanban')][2]" position="after">
+            <div t-if="state.propertyDefinition.type !== 'separator'"
+                class="o_field_property_definition_required d-contents mb-3 mb-sm-0">
+                <label t-att-for="getUniqueDomID('required')" class="o_form_label align-self-center text-900">
+                    Obligatorisk
+                    <sup class="text-info" title="Frågan måste besvaras innan ärendet kan sparas">?</sup>
+                </label>
+                <CheckBox
+                    id="getUniqueDomID('required')"
+                    value="!!props.propertyDefinition.required"
+                    disabled="props.readonly"
+                    onChange.bind="onRequiredChange"
+                />
+            </div>
+        </xpath>
+    </t>
+</templates>
