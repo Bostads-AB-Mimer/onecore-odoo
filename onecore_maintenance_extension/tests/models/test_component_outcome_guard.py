@@ -59,6 +59,24 @@ class TestComponentOutcomeGuard(MarkDoneCase):
         self.assertIn("Markera som utförd", message)
         self.assertNotEqual(request.stage_id, self.done_stage)
 
+    def test_still_applies_when_the_done_xml_id_is_missing(self):
+        # The stage is then found by its name
+        request = self._request(_link_vals())
+        self.env["ir.model.data"].search(
+            [("module", "=", "maintenance"), ("name", "=", "stage_5")]
+        ).unlink()
+        self.env.registry.clear_cache()
+        self.addCleanup(self.env.registry.clear_cache)
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+
     def test_request_without_components_moves_as_before(self):
         for xml_id in ("maintenance.stage_5", "maintenance.stage_6"):
             with self.subTest(stage=xml_id):

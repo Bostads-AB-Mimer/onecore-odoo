@@ -704,7 +704,9 @@ class TestDoneStageLookup(MarkDoneCase):
     def test_contractors_stay_locked_by_name_when_the_xml_id_is_missing(self):
         contractor = create_external_contractor_user(self.env)
         team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
-        request = self._request(_link_vals(), maintenance_team_id=team.id)
+        request = self._request(
+            _link_vals(outcome="REPAIRED"), maintenance_team_id=team.id
+        )
         self._move(request, "maintenance.stage_5")
         self._drop_done_stage_xml_id()
 
