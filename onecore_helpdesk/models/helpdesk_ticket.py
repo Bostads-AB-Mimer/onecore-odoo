@@ -51,12 +51,17 @@ class HelpdeskTicket(models.Model):
                     )
                 )
 
-    # Every ticket made by a user in Odoo needs a category, and a form when the
-    # category has any. Not a constraint: the mail gateway and the OCA portal
-    # create as superuser and are exempt (email gets the team's default
-    # category instead, see message_new).
-    def _check_category_and_form_required(self):
-        if self.env.su:
+    # Every ticket needs a category, and a form when the category has any,
+    # whoever creates it: users in Odoo, the portal, the mail gateway, API
+    # clients and automations alike. Automated callers get defaults instead
+    # of an exemption: a ticket created without a category gets the team's
+    # default category (see create). Only ``skip_ticket_form_rules`` in the
+    # context bypasses the rule; message_new sets it when a team has no
+    # default category, so an email never bounces. Not a constraint: write
+    # only checks when the category, form or answers change, so stage moves
+    # and other edits never trip over an old ticket.
+    def _check_category_and_form_required(self, check_answers=True):
+        if self.env.context.get("skip_ticket_form_rules"):
             return
         for ticket in self:
             if not ticket.category_id:
@@ -68,7 +73,8 @@ class HelpdeskTicket(models.Model):
                         category=ticket.category_id.complete_name,
                     )
                 )
-        self._check_required_answers()
+        if check_answers:
+            self._check_required_answers()
 
     # Questions flagged ``required`` on the form must be answered. The flag is
     # a Mimer extension of the definition schema (see models/base.py); the
@@ -95,22 +101,43 @@ class HelpdeskTicket(models.Model):
     def _is_missing_required_answer(self, prop):
         if not prop.get("required") or prop.get("type") in ("separator", "boolean"):
             return False
-        value = prop.get("value")
-        # identity checks: 0 is an answer
+        return self._is_blank_answer(prop.get("value"))
+
+    @api.model
+    def _is_blank_answer(self, value):
+        """Unanswered in read format. Identity checks on purpose: ``0 == False``
+        in Python, and a numeric answer of 0 is an answer."""
         return value is None or value is False or value in ("", [])
 
     # The form determines the category, so a payload with only form_id (an API
     # client, or an agent attaching a form to a ticket without one) implies it.
-    # A ticket that already has a category keeps it, and a mismatching form is
-    # left to the constraint.
+    # A payload without any category (mail gateway, automations, scripts) gets
+    # the team's default category. An explicit empty category is kept and left
+    # to the rule. A mismatching form is left to the constraint.
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get("form_id") and not vals.get("category_id"):
                 vals["category_id"] = self._form_category_id(vals["form_id"])
+            elif "category_id" not in vals:
+                vals["category_id"] = self._default_category_id(vals)
         tickets = super().create(vals_list)
         tickets._check_category_and_form_required()
         return tickets
+
+    @api.model
+    def _default_category_id(self, vals):
+        team = self.env["helpdesk.ticket.team"].browse(vals.get("team_id") or [])
+        return team.default_category_id.id
+
+    @api.model
+    def _edits_definition(self, properties_value):
+        """True when a properties payload in read format carries a definition
+        change (the gear editor), as opposed to plain answers."""
+        return isinstance(properties_value, list) and any(
+            isinstance(prop, dict) and prop.get("definition_changed")
+            for prop in properties_value
+        )
 
     def write(self, vals):
         if vals.get("form_id") and "category_id" not in vals:
@@ -125,7 +152,13 @@ class HelpdeskTicket(models.Model):
         snapshots = self._answer_snapshots() if touches_form else {}
         res = super().write(vals)
         if touches_form or "properties" in vals:
-            self._check_category_and_form_required()
+            # Editing the questions with the gear icon writes the new
+            # definition through the host ticket. That is configuration, not
+            # answering: a required question added that way is enforced from
+            # the next answer edit on, not on the ticket it was added from.
+            self._check_category_and_form_required(
+                check_answers=not self._edits_definition(vals.get("properties"))
+            )
         for ticket in self:
             old_form, answers = snapshots.get(ticket.id, (False, []))
             if old_form and answers and ticket.form_id != old_form:
@@ -178,13 +211,17 @@ class HelpdeskTicket(models.Model):
 
     @api.model
     def message_new(self, msg, custom_values=None):
-        """Email tickets are free text: give them the team's default category
-        so the category rule holds without attaching a form."""
+        """Email tickets are free text: create gives them the team's default
+        category, which satisfies the category rule without a form. A team
+        without a default category must still accept mail, so the rule is
+        skipped for that ticket and an agent categorises it later."""
         custom_values = dict(custom_values or {})
-        if not custom_values.get("category_id") and custom_values.get("team_id"):
-            team = self.env["helpdesk.ticket.team"].browse(custom_values["team_id"])
-            if team.default_category_id:
-                custom_values["category_id"] = team.default_category_id.id
+        if not custom_values.get("category_id") and not self._default_category_id(
+            custom_values
+        ):
+            return super(
+                HelpdeskTicket, self.with_context(skip_ticket_form_rules=True)
+            ).message_new(msg, custom_values=custom_values)
         return super().message_new(msg, custom_values=custom_values)
 
     # Odoo recomputes ``properties`` when the form changes and keeps only the
@@ -213,14 +250,10 @@ class HelpdeskTicket(models.Model):
 
     @api.model
     def _format_answer(self, prop):
-        """(label, display) for an answered property in read format, else None.
-
-        Identity checks on purpose: ``0 == False`` in Python, and a numeric
-        answer of 0 is an answer.
-        """
+        """(label, display) for an answered property in read format, else None."""
         value = prop.get("value")
         ptype = prop.get("type")
-        if ptype == "separator" or value is None or value is False or value in ("", []):
+        if ptype == "separator" or self._is_blank_answer(value):
             return None
         if ptype == "selection":
             display = dict(prop.get("selection") or []).get(value, value)

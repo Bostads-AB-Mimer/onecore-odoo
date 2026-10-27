@@ -122,17 +122,28 @@ pattern OCA uses for teams.
   preselect the category's only active form, otherwise clear.
 - Constraint: if `form_id` is set, `form_id.category_id` must equal
   `category_id`.
-- **Category and form rule (uniform, decided 2026-10-26).** Every ticket
-  made by a user in Odoo needs a category, and a form when the category has
-  any. Enforced in the ticket form view (`required`) and server side in
-  `create` and `write` for non-superuser callers. The mail gateway and the
-  OCA portal create as superuser and are exempt. Agents are not exempt: a
+- **Category and form rule (uniform, decided 2026-10-26, widened
+  2026-10-27).** Every ticket needs a category, and a form when the category
+  has any, whoever creates it. Enforced in the ticket form view (`required`)
+  and server side in `create` and `write`. There is no superuser exemption:
+  automated callers get defaults instead. A ticket created without any
+  category gets the team's default category in `create`; an explicit empty
+  category is rejected. Only the context key `skip_ticket_form_rules`
+  bypasses the rule, and only `message_new` sets it, for a team without a
+  default category, so an email never bounces. `write` checks only when
+  the category, form or answers are in the payload, so stage moves and other
+  edits on an old ticket without answers still save; the client-side check
+  mirrors this (new record, or answers/form changed). A write that carries a
+  definition change (the gear editor) skips the required-answer check, since
+  adding a required question is configuration, not answering. Agents are not
+  exempt: a
   category with one form preselects it, so the rule rarely costs them a
   click. If IT later wants to re-categorise email tickets without a form,
   the rule is one method to relax.
 - **Email tickets get the team's default category.** New field
   `default_category_id` on `helpdesk.ticket.team`, applied in the ticket's
-  `message_new`. Seeded as "Övriga IT-frågor" for the IT team, a category
+  `create` to any payload without a category (so also automations and
+  scripts). Seeded as "Övriga IT-frågor" for the IT team, a category
   with no forms, so email stays free text and still satisfies the rule.
 - A payload with `form_id` but no `category_id` (an API client, or an agent
   attaching a form to an email ticket) gets the category derived from the
@@ -305,8 +316,8 @@ template or a ONECore frontend) should:
 3. Create the ticket with `category_id`, `form_id`, `name`,
    `description`, attachments, and `properties` as a dict
    `{property_name: value}`.
-4. Enforce mandatory answers itself (see "Required questions"); the
-   server will not.
+4. Rely on the server for category, form and required answers; they are
+   enforced for every caller.
 
 The data model in this document must not make any of that harder. Nothing
 else is required now.
