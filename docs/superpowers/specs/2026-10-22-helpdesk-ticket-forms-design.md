@@ -2,7 +2,7 @@
 
 Date: 2026-10-22
 Module: `onecore_helpdesk` (Odoo 19 Community, on top of vendored OCA `helpdesk_mgmt`)
-Status: v1 built in `onecore_helpdesk` on 2026-10-22 (tests written, suite not yet run)
+Status: v1 built in `onecore_helpdesk` on 2026-10-22, add-on forms added 2026-10-27 (tests written, suite not yet run)
 
 ## Intent
 
@@ -305,6 +305,51 @@ than styling:
 - **Chatter tracking.** Property changes are not tracked. Acceptable for
   v1; `form_id` itself is tracked.
 
+## Add-on forms (built 2026-10-27)
+
+Some questions repeat across every form of a category but not across the
+team: the intranet "Påverkan" section (who is affected, how badly) belongs
+to every IT fault form and to none of the order forms. Instead of copying
+it into each form, it is a form record of its own that categories point at:
+
+- `helpdesk.ticket.form.kind`: `form` (picked by the requester, belongs to
+  a category) or `addon` (no category of its own; categories reference it
+  through `helpdesk.ticket.category.addon_form_id`, several may share one).
+  Both kinds have name, intro text, questions and ticket count, and both
+  appear in the Formulär list. A constraint keeps a form in a category and
+  an add-on out of one.
+- The ticket gets a second block, `addon_properties`, whose definition is
+  the add-on's. A Properties definition may only follow one relation, so
+  the category's add-on is mirrored on the ticket as the stored related
+  field `addon_form_id` and the block follows that. Everything written for
+  the form block (required answers, the onchange fix, the chatter snapshot
+  on container change, the client patches, the portal) applies to both;
+  the model keeps the pairs in `QUESTION_BLOCKS`.
+- Ticket form view: each block under a rule, with the form's name as title
+  and its intro text below, then the questions. Questions are edited with
+  the gear icon on the block of any ticket that uses the form. The add-on's
+  record shows which categories use it; a form's record and the Formulär
+  list show the add-on that comes with it.
+- Portal: the form dropdown lists ordinary forms only. The add-on of the
+  chosen category renders under the form's questions with its name and
+  intro, inputs named `addon_question_<name>`. An add-on follows its
+  category into the portal regardless of its own `show_in_portal` flag.
+- Seed: add-on "Påverkan" with the intranet explanation as intro and the
+  required questions "Vilka påverkas?" and "Hur drabbas du/ni?", referenced
+  by the IT fault category. The Felanmälan IT form keeps only the port
+  replicator and program questions and has no intro text.
+- The mail gateway now always skips the ticket rules: an email can neither
+  pick a form nor answer questions. The team's default category is still
+  applied in `create`.
+- Tried and rejected on the way: questions on the category record itself
+  (not reachable from the Formulär list, and a second place to maintain
+  questions), and a separator question as the block's title (rendered as a
+  foldable uppercase group header, splitting the questions across columns).
+
+Existing databases: the form and category records are noupdate, so the
+move of the Påverkan questions into an add-on must be done by hand or by
+recreating the database.
+
 ## External intake (design constraint only)
 
 Whatever later renders the form outside the Odoo backend (OCA portal
@@ -314,8 +359,8 @@ template or a ONECore frontend) should:
    chosen category.
 2. Render `form.ticket_properties` (the definition JSON) as inputs.
 3. Create the ticket with `category_id`, `form_id`, `name`,
-   `description`, attachments, and `properties` as a dict
-   `{property_name: value}`.
+   `description`, attachments, `properties` and `addon_properties` as
+   dicts `{property_name: value}`.
 4. Rely on the server for category, form and required answers; they are
    enforced for every caller.
 

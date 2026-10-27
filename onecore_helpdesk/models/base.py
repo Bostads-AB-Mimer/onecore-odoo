@@ -2,14 +2,11 @@ from odoo import models
 
 
 class Base(models.AbstractModel):
-    """Allow a ``required`` flag on property definitions.
-
-    Odoo's Properties have no notion of a mandatory answer. These two hooks are
-    the supported way to extend the definition schema; the ticket enforces the
-    flag server side and ``static/src`` teaches the editor and the widget about
-    it. The hooks are global to every Properties field, which is harmless: the
-    key is only ever set from the helpdesk form editor.
-    """
+    """Mimer extension of the Properties definition schema: ``required``
+    (bool) on a question means it must be answered before the ticket is
+    saved. Enforced by helpdesk.ticket and the patched widget. Odoo strips
+    unknown keys from definitions, so the key is declared here through the
+    hooks Odoo provides for that purpose."""
 
     _inherit = "base"
 

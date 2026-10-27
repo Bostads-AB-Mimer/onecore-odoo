@@ -51,6 +51,7 @@
         <record id="category_it_fault" model="helpdesk.ticket.category">
             <field name="sequence">1</field>
             <field name="name">Felanmälan IT</field>
+            <!-- its add-on form (Påverkan) is set in helpdesk_it_form_data.xml -->
         </record>
         <record id="category_equipment_order" model="helpdesk.ticket.category">
             <field name="sequence">2</field>
