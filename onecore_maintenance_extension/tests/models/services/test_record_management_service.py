@@ -302,6 +302,65 @@ class TestEmptyTenantAutoRefetchHidesFromMyPages(TransactionCase):
             self.env["maintenance.lease"].search_count([]), leases_before + 1
         )
 
+    def test_backfill_skips_an_object_with_only_unsigned_leases(self):
+        """A draft or a lease waiting for a signature is not a tenancy yet: the
+        applicant on it must not be attached, nor the ärende hidden from Mina
+        sidor."""
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        draft = dict(
+            _lease_payload([_tenant_payload("P000002")], "216-034-03-0101/06"),
+            status="NotSent",
+        )
+        pending = dict(
+            _lease_payload([_tenant_payload("P000003")], "216-034-03-0101/07"),
+            status="PendingSignature",
+        )
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [
+                {"lease": draft},
+                {"lease": pending},
+            ]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertFalse(request.lease_id)
+        self.assertFalse(request.tenant_id)
+        self.assertFalse(request.hidden_from_my_pages)
+
+    def test_backfill_attaches_the_first_tenant_only(self):
+        """A lease with a co-tenant and a sublet tenant: the first tenant is
+        attached, as the form preselects it, and no other tenant row is made."""
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        lease = _lease_payload(
+            [
+                _tenant_payload("P000001"),
+                _tenant_payload("P000002"),
+                _tenant_payload("P000003"),
+            ]
+        )
+        tenants_before = self.env["maintenance.tenant"].search_count([])
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [{"lease": lease}]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertEqual(request.tenant_id.contact_code, "P000001")
+        self.assertEqual(
+            self.env["maintenance.tenant"].search_count([]), tenants_before + 1
+        )
+
     def test_lease_without_optional_dates_is_backfilled(self):
         """Core leaves lastDebitDate, contractDate and approvalDate out of a
         Tenfast lease when they are unset."""

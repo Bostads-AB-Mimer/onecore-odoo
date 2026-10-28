@@ -1,6 +1,5 @@
 import requests
 import logging
-import re
 import urllib.parse
 import json
 
@@ -24,6 +23,9 @@ LEASE_PATHS = {
     "pnr": "/leases/by-pnr",
 }
 
+# The rental object endpoint of a core without /leases/by-rental-object-code.
+LEGACY_RENTAL_OBJECT_LEASE_PATH = "/leases/by-rental-property-id"
+
 # OneCore's LeaseStatus enum names, in the order of their numeric values.
 ONECORE_LEASE_STATUSES = (
     "Current",
@@ -35,18 +37,26 @@ ONECORE_LEASE_STATUSES = (
     "NotSent",
 )
 
-# An ended lease, by name or by number.
-ENDED_LEASE_STATUSES = ("Ended", ONECORE_LEASE_STATUSES.index("Ended"))
+# An ended lease: by name, or by the number a core without
+# /leases/by-rental-object-code passes through from Xpand on some routes.
+ENDED_LEASE_STATUSES = ("Ended", 3)
 
-# The statuses the search endpoints are asked for: every one but "ended",
-# spelled as OneCore's status filter wants them ("AboutToEnd" -> "about-to-end").
-# The rental object endpoint ignores the filter, so ended leases are also
-# dropped from the answer.
-OPEN_LEASE_STATUS_FILTER = ",".join(
-    re.sub(r"(?<!^)(?=[A-Z])", "-", name).lower()
-    for name in ONECORE_LEASE_STATUSES
-    if name not in ENDED_LEASE_STATUSES
+# The statuses the search endpoints are asked for: every one but "ended", as
+# spelled in core's GetLeasesStatusSchema. The rental object endpoint ignores
+# the filter, so ended leases are also dropped from the answer.
+OPEN_LEASE_STATUS_FILTER = (
+    "current,upcoming,about-to-end,preliminary-terminated,pending-signature,not-sent"
 )
+
+def is_not_found(err):
+    """True when OneCore answered "no such record" (404) rather than failing.
+
+    Only a lookup of one record answers 404 for a miss; a search answers an
+    empty list, so a 404 from a search means the call itself failed.
+    """
+    response = getattr(err, "response", None)
+    return getattr(response, "status_code", None) == 404
+
 
 # Which kind of rental object a contract points at. Single source of truth, also
 # used by the direct lookups in onecore_maintenance_extension.
@@ -225,12 +235,24 @@ class CoreApi:
         is_search = identifier != "leaseId"
         params = {"includeContacts": "true"}
         if is_search:
+            # status for core with /leases/by-rental-object-code,
+            # includeUpcomingLeases for core without it.
             params["status"] = OPEN_LEASE_STATUS_FILTER
+            params["includeUpcomingLeases"] = "true"
 
-        content = self._get_json(
-            f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-            params=params,
-        )
+        quoted_value = urllib.parse.quote(str(value), safe="")
+        try:
+            content = self._get_json(
+                f"{LEASE_PATHS[identifier]}/{quoted_value}", params=params
+            )
+        except requests.HTTPError as err:
+            # A search answers an empty list for a miss, so a 404 from the
+            # rental object endpoint means this core doesn't have it yet.
+            if identifier != "rentalObjectId" or not is_not_found(err):
+                raise
+            content = self._get_json(
+                f"{LEGACY_RENTAL_OBJECT_LEASE_PATH}/{quoted_value}", params=params
+            )
         if is_search and isinstance(content, list):
             content = [
                 lease
@@ -290,7 +312,7 @@ class CoreApi:
             # so a 404 from them means the call itself failed.
             if (
                 identifier == "leaseId"
-                and getattr(http_err.response, "status_code", None) == 404
+                and is_not_found(http_err)
             ):
                 return []
             raise OneCoreException(

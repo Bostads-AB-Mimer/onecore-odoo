@@ -38,6 +38,12 @@ class FlagSyncTestMixin:
         super().setUp()
         sync_module._pest_set_cache.clear()
         self.service = OneCoreFlagSyncService(self.env)
+        # A test may not commit; the lease status sync commits per chunk.
+        self.commit_progress = self.startPatcher(
+            patch.object(
+                type(self.env["ir.cron"]), "_commit_progress", return_value=float("inf")
+            )
+        )
 
     def _configure_onecore(self):
         self.env["ir.config_parameter"].sudo().set_param(
@@ -644,6 +650,66 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
 
         call = MockApi.return_value.fetch_leases_batch.call_args
         self.assertGreater(call.kwargs["timeout"], sync_module.LOOKUP_TIMEOUT)
+
+    def test_each_chunk_is_committed(self):
+        """A worker killed mid-run keeps the chunks it already wrote."""
+        self._request_with_lease(lease_ref="1/01", lease_status=0)
+        self._request_with_lease(lease_ref="2/01", lease_status=0)
+        self._request_with_lease(lease_ref="3/01", lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "LEASE_BATCH_SIZE", 1
+        ):
+            MockApi.return_value.fetch_leases_batch.return_value = []
+            self.service.sync_lease_status()
+
+        self.assertEqual(self.commit_progress.call_count, 3)
+        for call in self.commit_progress.call_args_list:
+            self.assertEqual(call.kwargs["remaining"], 0)
+
+    def test_no_chunk_is_started_that_could_pass_the_cron_time_limit(self):
+        """The run stops cleanly instead of being killed by the server."""
+        self._request_with_lease(lease_ref="1/01", lease_status=0)
+        self._request_with_lease(lease_ref="2/01", lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "LEASE_BATCH_SIZE", 1
+        ), patch.object(sync_module, "_cron_time_limit", return_value=1):
+            MockApi.return_value.fetch_leases_batch.return_value = []
+            with self.assertLogs(sync_module.__name__, level="WARNING"):
+                self.service.sync_lease_status()
+
+        self.assertEqual(MockApi.return_value.fetch_leases_batch.call_count, 1)
+
+    def test_status_note_does_not_notify_followers(self):
+        """The note is a record for the chatter, not a message to the
+        followers: the first run after a status mapping change touches almost
+        every open ärende."""
+        request = self._request_with_lease(lease_status=0)
+        follower = create_internal_user(self.env)
+        request.message_subscribe(
+            partner_ids=[follower.partner_id.id],
+            subtype_ids=[self.env.ref("mail.mt_note").id],
+        )
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease("216-034-03-0101/01", status="AboutToEnd")
+            ]
+            self.service.sync_lease_status()
+
+        notes = request.message_ids.filtered(
+            lambda m: "Kontraktsstatus" in (m.body or "")
+        )
+        self.assertEqual(len(notes), 1)
+        self.assertFalse(
+            self.env["mail.notification"].search_count(
+                [("mail_message_id", "in", notes.ids)]
+            )
+        )
 
     def test_a_failing_chunk_does_not_lose_the_others(self):
         request_one = self._request_with_lease(lease_ref="1/01", lease_status=0)

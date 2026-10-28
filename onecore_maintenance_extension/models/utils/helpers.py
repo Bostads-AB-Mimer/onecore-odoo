@@ -10,11 +10,38 @@ from ....onecore_api.core_api import ONECORE_LEASE_STATUSES
 _logger = logging.getLogger(__name__)
 
 # OneCore's lease status names, mapped to the numeric codes used throughout
-# this addon (LEASE_STATUS_LABELS in constants.py), in ONECORE_LEASE_STATUSES
-# order. The codes are this addon's own: 4 is "Okänd status", so OneCore's
-# 4-6 map to 5-7.
-LEASE_STATUS_MAP = dict(zip(ONECORE_LEASE_STATUSES, (0, 1, 2, 3, 5, 6, 7)))
+# this addon (LEASE_STATUS_LABELS in constants.py). The codes are this addon's
+# own: 4 is "Okänd status", so OneCore's 4-6 map to 5-7.
+LEASE_STATUS_MAP = {
+    "Current": 0,
+    "Upcoming": 1,
+    "AboutToEnd": 2,
+    "Ended": 3,
+    "PreliminaryTerminated": 5,
+    "PendingSignature": 6,
+    "NotSent": 7,
+}
 UNKNOWN_LEASE_STATUS = 4
+
+# The order a lease is preselected in when an object or customer has several.
+LEASE_STATUS_PRIORITY = [
+    LEASE_STATUS_MAP[name]
+    for name in (
+        "Current",
+        "AboutToEnd",
+        "PreliminaryTerminated",
+        "Upcoming",
+        "PendingSignature",
+        "NotSent",
+        "Ended",
+    )
+] + [UNKNOWN_LEASE_STATUS]
+
+# Leases nobody has signed yet: the person on them isn't a tenant yet.
+UNSIGNED_LEASE_STATUSES = (
+    LEASE_STATUS_MAP["PendingSignature"],
+    LEASE_STATUS_MAP["NotSent"],
+)
 
 
 def normalize_lease_status(raw_status):
@@ -58,7 +85,7 @@ def get_main_phone_number(tenant):
 
 
 def _select_by_lease_priority(leases, status_of, number_of):
-    for priority_status in [0, 2, 5, 1, 6, 7, 3, 4]:
+    for priority_status in LEASE_STATUS_PRIORITY:
         matches = [lease for lease in leases if status_of(lease) == priority_status]
         if matches:
             return max(matches, key=number_of)

@@ -5,6 +5,7 @@ import datetime
 import logging
 from odoo import fields
 from ..utils.helpers import (
+    UNSIGNED_LEASE_STATUSES,
     get_tenant_name,
     get_main_phone_number,
     normalize_lease_status,
@@ -392,22 +393,29 @@ class RecordManagementService:
         if not data:
             return
 
-        leases = [item["lease"] for item in data if item.get("lease")]
-        # No lease (no active lease for this rental property): skip lease/tenant creation
+        # Signed leases only: the person on an unsigned one isn't a tenant yet.
+        leases = [
+            item["lease"]
+            for item in data
+            if item.get("lease")
+            and normalize_lease_status(item["lease"].get("status"))
+            not in UNSIGNED_LEASE_STATUSES
+        ]
+        # No signed lease for this rental property: skip lease/tenant creation
         if not leases:
             _logger.info(
-                "No lease found for rental property %s. Skipping lease and tenant creation.",
+                "No signed lease found for rental property %s. Skipping lease and tenant creation.",
                 record.rental_property_id.rental_property_id,
             )
             return
 
-        # One lease, the one the form would preselect.
+        # One lease and one tenant, the ones the form would preselect.
         lease = select_active_lease_data(leases)
         new_lease_record = self._create_lease(lease, record)
         record.lease_id = new_lease_record.id
 
         if new_lease_record and lease.get("tenants"):
-            self._create_tenant(lease["tenants"], record)
+            self._create_tenant(lease["tenants"][0], record)
 
     def _create_lease(self, lease, record):
         """Create a lease record from API data."""
@@ -425,26 +433,22 @@ class RecordManagementService:
             }
         )
 
-    def _create_tenant(self, tenants, record):
-        """Create tenant records from API data."""
-        for tenant in tenants:
-            name = get_tenant_name(tenant)
-            phone_number = get_main_phone_number(tenant)
+    def _create_tenant(self, tenant, record):
+        """Create the tenant record from API data and attach it."""
+        recently_added_tenant_record = self.env["maintenance.tenant"].create(
+            {
+                "name": get_tenant_name(tenant),
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": get_main_phone_number(tenant),
+                "is_tenant": tenant["isTenant"],
+            }
+        )
 
-            recently_added_tenant_record = self.env["maintenance.tenant"].create(
-                {
-                    "name": name,
-                    "contact_code": tenant["contactCode"],
-                    "contact_key": tenant["contactKey"],
-                    "national_registration_number": tenant.get(
-                        "nationalRegistrationNumber"
-                    ),
-                    "email_address": tenant.get("emailAddress"),
-                    "phone_number": phone_number,
-                    "is_tenant": tenant["isTenant"],
-                }
-            )
-
-            record.tenant_id = recently_added_tenant_record.id
-            record.empty_tenant = False
-            self.flag_new_tenant_attached(record)
+        record.tenant_id = recently_added_tenant_record.id
+        record.empty_tenant = False
+        self.flag_new_tenant_attached(record)

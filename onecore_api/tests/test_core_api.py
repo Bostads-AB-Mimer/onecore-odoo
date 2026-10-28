@@ -507,8 +507,41 @@ class TestFetchLeases:
                 "includeContacts": "true",
                 "status": "current,upcoming,about-to-end,"
                 "preliminary-terminated,pending-signature,not-sent",
+                "includeUpcomingLeases": "true",
             },
         )
+
+    @patch.object(CoreApi, '_get_json')
+    def test_rental_object_search_falls_back_on_a_core_without_the_route(
+        self, mock_get_json, api
+    ):
+        """A core without /leases/by-rental-object-code answers 404; the
+        search then uses /leases/by-rental-property-id."""
+        response = requests.Response()
+        response.status_code = 404
+        lease = {"leaseId": "1/01", "type": "Bostadskontrakt", "status": 0}
+        mock_get_json.side_effect = [requests.HTTPError(response=response), [lease]]
+
+        result = api.fetch_leases("rentalObjectId", "306-001-01-0201", "Lägenhet")
+
+        assert result == [lease]
+        assert mock_get_json.call_args_list[1][0][0] == (
+            "/leases/by-rental-property-id/306-001-01-0201"
+        )
+
+    @patch.object(CoreApi, '_get_json')
+    def test_rental_object_search_does_not_fall_back_on_other_errors(
+        self, mock_get_json, api
+    ):
+        """Only a missing route falls back; a failing core stays a failure."""
+        response = requests.Response()
+        response.status_code = 500
+        mock_get_json.side_effect = requests.HTTPError(response=response)
+
+        with pytest.raises(OneCoreException):
+            api.fetch_leases("rentalObjectId", "306-001-01-0201", "Lägenhet")
+
+        assert mock_get_json.call_count == 1
 
     @patch.object(CoreApi, '_get_json')
     def test_search_drops_ended_leases(self, mock_get_json, api):

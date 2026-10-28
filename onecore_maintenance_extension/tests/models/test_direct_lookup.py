@@ -217,13 +217,23 @@ class TestLoadObjectContracts(TransactionCase):
         self.assertIsNone(self.service.load_object_contracts(request, "000"))
 
     def test_missing_object_is_reported_as_not_found(self):
-        # OneCore answering 404 for every kind means "no such objektnummer".
+        # No contracts, and every object lookup answering 404, means "no such
+        # objektnummer".
         request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.core_api.fetch_leases_unfiltered.side_effect = _http_error(404)
+        self.core_api.fetch_leases_unfiltered.return_value = []
         self.core_api.fetch_residence.side_effect = _http_error(404)
         self.core_api.fetch_parking_space.side_effect = _http_error(404)
         self.core_api.fetch_facility.side_effect = _http_error(404)
         self.assertIsNone(self.service.load_object_contracts(request, "000"))
+
+    def test_404_from_the_lease_search_raises_instead_of_offering_a_vacancy(self):
+        # A search answers an empty list for a miss, so a 404 means the call
+        # failed (e.g. a core without the route), not that the object is vacant.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        self.core_api.fetch_leases_unfiltered.side_effect = _http_error(404)
+        self.core_api.fetch_residence.return_value = RESIDENCE
+        with self.assertRaises(LookupFailed):
+            self.service.load_object_contracts(request, "216-034-03-0101")
 
     def test_failed_lookup_raises_instead_of_reporting_not_found(self):
         # A broken call must NOT look like a wrong objektnummer.
