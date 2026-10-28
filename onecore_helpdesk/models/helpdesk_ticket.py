@@ -147,9 +147,29 @@ class HelpdeskTicket(models.Model):
                 vals["category_id"] = self._form_category_id(vals["form_id"])
             elif "category_id" not in vals:
                 vals["category_id"] = self._default_category_id(vals)
+            self._fill_question_containers(vals)
         tickets = super().create(vals_list)
         tickets._check_category_and_form_required()
         return tickets
+
+    @api.model
+    def _fill_question_containers(self, vals):
+        """Put the form and add-on into the create values.
+
+        Odoo rebuilds every properties value at create from its container's
+        defaults, and drops the given value when the container is not among
+        the create values (``_add_missing_default_values``). form_id and
+        addon_form_id are computed from the category, so a payload with a
+        category and answers but no containers would lose the answers before
+        the required check. Fill them in the way the computes would.
+        """
+        category = self.env["helpdesk.ticket.category"].browse(vals.get("category_id") or [])
+        if not category:
+            return
+        if "form_id" not in vals and len(category.form_ids) == 1:
+            vals["form_id"] = category.form_ids.id
+        if "addon_form_id" not in vals:
+            vals["addon_form_id"] = category.addon_form_id.id
 
     @api.model
     def _default_category_id(self, vals):
