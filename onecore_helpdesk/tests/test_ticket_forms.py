@@ -159,6 +159,20 @@ class TestTicketForms(TransactionCase):
         values = {p["name"]: p.get("value") for p in self._read(ticket, "addon_properties")}
         self.assertEqual(values["affected_scope"], "me")
 
+    def test_answers_given_at_create_survive_without_the_containers_in_the_payload(self):
+        """Odoo drops a properties value at create unless its container is in
+        the values; the ticket fills form and add-on in from the category."""
+        ticket = self._ticket(
+            category_id=self.category_fault.id,
+            properties={"program": "teams"},
+            addon_properties=self.ANSWERS,
+        )
+
+        self.assertEqual(ticket.form_id, self.form_fault)
+        self.assertEqual(ticket.addon_form_id, self.addon_impact)
+        self.assertEqual(ticket.properties["program"], "Teams")
+        self.assertEqual(ticket.addon_properties["impact"], "Kan arbeta som vanligt")
+
     def test_ticket_in_a_category_without_forms_or_addon_has_empty_blocks(self):
         ticket = self._ticket(category_id=self.category_other.id)
 

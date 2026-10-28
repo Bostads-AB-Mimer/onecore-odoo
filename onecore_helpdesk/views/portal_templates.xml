@@ -123,8 +123,9 @@
         <xpath expr="//input[@name='subject']" position="attributes">
             <attribute name="t-att-value">submitted.get('subject')</attribute>
         </xpath>
-        <xpath expr="//textarea[@name='description']" position="inside">
-            <t t-esc="submitted.get('description') or ''" />
+        <xpath expr="//textarea[@name='description']" position="attributes">
+            <!-- as an attribute, so no template whitespace ends up in the box -->
+            <attribute name="t-esc">submitted.get('description') or ''</attribute>
         </xpath>
         <xpath expr="//select[@id='category']/ancestor::div[hasclass('form-group')][1]" position="after">
             <div class="form-group mb-3" id="onecore_form_group" t-if="forms">
