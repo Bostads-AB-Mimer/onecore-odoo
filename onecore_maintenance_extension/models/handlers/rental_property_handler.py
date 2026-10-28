@@ -5,6 +5,8 @@ from ..constants import BUILDING_SPACE_TYPES
 class RentalPropertyHandler(RentalObjectBaseHandler):
     """Handler for rental property maintenance requests (apartments, etc.)."""
 
+    _object_option_field = "rental_property_option_id"
+
     def update_form_options(self, work_order_data):
         """Update form options with rental property data."""
         for item in work_order_data:
@@ -85,13 +87,9 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
         if property_records:
             self.record.rental_property_option_id = property_records[0].id
 
+        # Also selects the active lease's object, so the unit below is picked
+        # for THAT object, not for property_records[0].
         self._set_lease_and_tenant_selections(search_type, search_value)
-
-        # The active lease decides the object (the lease onchange would switch
-        # it anyway); pick the unit for THAT object, not for property_records[0].
-        lease_object = self.record.lease_option_id.rental_property_option_id
-        if lease_object:
-            self.record.rental_property_option_id = lease_object.id
 
         # The unit Xpand assigns to the selected object, or none — never the
         # property's first unit (MIM-1921: it was always the same laundry room

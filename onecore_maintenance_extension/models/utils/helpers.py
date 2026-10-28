@@ -5,25 +5,30 @@ import os
 
 from markupsafe import Markup
 
+from ....onecore_api.core_api import ONECORE_LEASE_STATUSES
+
 _logger = logging.getLogger(__name__)
 
-# OneCore's lease status strings, mapped to the numeric codes used throughout
-# this addon (LEASE_STATUS_LABELS in constants.py).
-LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
+# OneCore's lease status names, mapped to the numeric codes used throughout
+# this addon (LEASE_STATUS_LABELS in constants.py), in ONECORE_LEASE_STATUSES
+# order. The codes are this addon's own: 4 is "Okänd status", so OneCore's
+# 4-6 map to 5-7.
+LEASE_STATUS_MAP = dict(zip(ONECORE_LEASE_STATUSES, (0, 1, 2, 3, 5, 6, 7)))
 UNKNOWN_LEASE_STATUS = 4
 
 
 def normalize_lease_status(raw_status):
     """Normalize a OneCore lease status to a LEASE_STATUS_LABELS key.
 
-    Accepts either OneCore's string status ("Current", "Upcoming", ...) or an
-    already-numeric LEASE_STATUS_LABELS code, so callers that re-fetch a lease
-    and callers that already hold a normalized value can share this function.
+    Accepts OneCore's status either by name ("Current", "PendingSignature", ...)
+    or by its LeaseStatus number, which is translated through the name. The
+    input is always OneCore's value, never one of this addon's codes.
     """
+    if isinstance(raw_status, int) and not isinstance(raw_status, bool):
+        if 0 <= raw_status < len(ONECORE_LEASE_STATUSES):
+            raw_status = ONECORE_LEASE_STATUSES[raw_status]
     if raw_status in LEASE_STATUS_MAP:
         return LEASE_STATUS_MAP[raw_status]
-    if raw_status in LEASE_STATUS_MAP.values():
-        return raw_status
     _logger.warning("Unexpected lease status value: %s", raw_status)
     return UNKNOWN_LEASE_STATUS
 
@@ -52,13 +57,32 @@ def get_main_phone_number(tenant):
     )
 
 
-def select_active_lease(lease_records):
-    """Select lease by priority: Current (0) > AboutToEnd (2) > Upcoming (1) > Ended (3) > Okänd (4) > highest lease_number."""
-    for priority_status in [0, 2, 1, 3, 4]:
-        matches = [r for r in lease_records if r.lease_status == priority_status]
+def _select_by_lease_priority(leases, status_of, number_of):
+    for priority_status in [0, 2, 5, 1, 6, 7, 3, 4]:
+        matches = [lease for lease in leases if status_of(lease) == priority_status]
         if matches:
-            return max(matches, key=lambda r: r.lease_number or "")
-    return max(lease_records, key=lambda r: r.lease_number or "")
+            return max(matches, key=number_of)
+    return max(leases, key=number_of)
+
+
+def select_active_lease(lease_records):
+    """Select lease by priority: Current (0) > AboutToEnd (2) >
+    PreliminaryTerminated (5) > Upcoming (1) > PendingSignature (6) >
+    NotSent (7) > Ended (3) > Okänd (4) > highest lease_number."""
+    return _select_by_lease_priority(
+        lease_records,
+        lambda record: record.lease_status,
+        lambda record: record.lease_number or "",
+    )
+
+
+def select_active_lease_data(leases):
+    """select_active_lease for lease dicts in the shape OneCore returns them."""
+    return _select_by_lease_priority(
+        leases,
+        lambda lease: normalize_lease_status(lease.get("status")),
+        lambda lease: lease.get("leaseNumber") or "",
+    )
 
 
 def close_request_reason_html(reason):

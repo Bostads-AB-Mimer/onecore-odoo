@@ -56,10 +56,11 @@ _pest_set_cache = {}  # dbname -> (expires_at_monotonic, frozenset | _PEST_SET_F
 # param, so the practical ceiling is URL length, not a documented limit.
 CONTACT_BATCH_SIZE = 200
 
-# Lease ids per POST /leases/batch call. Matches the page size core's
-# getLeasesBatch already chunks at against the leasing service, so one
-# onecore-odoo call maps to one Xpand IN(...) query on the other side.
-LEASE_BATCH_SIZE = 500
+# Lease ids per POST /leases/batch call, and the seconds the call may take.
+# The leasing service fetches each id from Tenfast separately, ten at a time,
+# so a call can take longer than LOOKUP_TIMEOUT.
+LEASE_BATCH_SIZE = 100
+LEASE_BATCH_TIMEOUT = 60
 
 
 class OneCoreFlagSyncService:
@@ -385,7 +386,7 @@ class OneCoreFlagSyncService:
         for start in range(0, len(ids), LEASE_BATCH_SIZE):
             chunk = ids[start : start + LEASE_BATCH_SIZE]
             try:
-                content = api.fetch_leases_batch(chunk, timeout=LOOKUP_TIMEOUT)
+                content = api.fetch_leases_batch(chunk, timeout=LEASE_BATCH_TIMEOUT)
             except Exception as err:
                 _logger.warning(
                     "Kontraktsstatus: could not fetch %s leases (from %s): %s",

@@ -268,3 +268,59 @@ class TestEmptyTenantAutoRefetchHidesFromMyPages(TransactionCase):
         self.assertTrue(request.tenant_id)
         self.assertTrue(request.recently_added_tenant)
         self.assertTrue(request.hidden_from_my_pages)
+
+    def test_backfill_attaches_the_lease_the_form_would_preselect(self):
+        """An object with an upcoming lease and an unsent draft for someone
+        else: only the upcoming lease and its tenant are attached."""
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        upcoming = dict(
+            _lease_payload([_tenant_payload("P000001")], "216-034-03-0101/05"),
+            status="Upcoming",
+        )
+        draft = dict(
+            _lease_payload([_tenant_payload("P000002")], "216-034-03-0101/06"),
+            status="NotSent",
+        )
+        leases_before = self.env["maintenance.lease"].search_count([])
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [
+                {"lease": upcoming},
+                {"lease": draft},
+            ]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertEqual(request.lease_id.lease_id, "216-034-03-0101/05")
+        self.assertEqual(request.tenant_id.contact_code, "P000001")
+        self.assertEqual(
+            self.env["maintenance.lease"].search_count([]), leases_before + 1
+        )
+
+    def test_lease_without_optional_dates_is_backfilled(self):
+        """Core leaves lastDebitDate, contractDate and approvalDate out of a
+        Tenfast lease when they are unset."""
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        lease = _lease_payload([_tenant_payload()])
+        for key in ("lastDebitDate", "contractDate", "approvalDate"):
+            del lease[key]
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [{"lease": lease}]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertEqual(request.lease_id.lease_id, "216-034-03-0101/01")
+        self.assertFalse(request.lease_id.last_debit_date)
+        self.assertFalse(request.lease_id.contract_date)
+        self.assertFalse(request.lease_id.approval_date)

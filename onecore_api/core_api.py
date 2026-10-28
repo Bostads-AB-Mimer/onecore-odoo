@@ -1,5 +1,6 @@
 import requests
 import logging
+import re
 import urllib.parse
 import json
 
@@ -18,10 +19,34 @@ _PARALLEL_GET_TIMEOUT = (5, 30)
 # Endpoints that answer "which leases match this identifier".
 LEASE_PATHS = {
     "leaseId": "/leases",
-    "rentalObjectId": "/leases/by-rental-property-id",
+    "rentalObjectId": "/leases/by-rental-object-code",
     "contactCode": "/leases/by-contact-code",
     "pnr": "/leases/by-pnr",
 }
+
+# OneCore's LeaseStatus enum names, in the order of their numeric values.
+ONECORE_LEASE_STATUSES = (
+    "Current",
+    "Upcoming",
+    "AboutToEnd",
+    "Ended",
+    "PreliminaryTerminated",
+    "PendingSignature",
+    "NotSent",
+)
+
+# An ended lease, by name or by number.
+ENDED_LEASE_STATUSES = ("Ended", ONECORE_LEASE_STATUSES.index("Ended"))
+
+# The statuses the search endpoints are asked for: every one but "ended",
+# spelled as OneCore's status filter wants them ("AboutToEnd" -> "about-to-end").
+# The rental object endpoint ignores the filter, so ended leases are also
+# dropped from the answer.
+OPEN_LEASE_STATUS_FILTER = ",".join(
+    re.sub(r"(?<!^)(?=[A-Z])", "-", name).lower()
+    for name in ONECORE_LEASE_STATUSES
+    if name not in ENDED_LEASE_STATUSES
+)
 
 # Which kind of rental object a contract points at. Single source of truth, also
 # used by the direct lookups in onecore_maintenance_extension.
@@ -187,27 +212,45 @@ class CoreApi:
         return results
 
     def _fetch_leases_raw(self, identifier, value):
-        """The lease payload exactly as OneCore returns it.
+        """The lease payload in the shape OneCore returns it.
 
         The search endpoints answer with a list, but ``/leases/{leaseId}`` answers
         with a single lease object. Callers that care about that distinction — see
-        ``fetch_leases`` — need the raw shape.
+        ``fetch_leases`` — need the raw shape. A search list holds open leases
+        only; the single lease is returned whatever its status.
         """
         if identifier not in LEASE_PATHS:
             raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
-        return self._get_json(
+        is_search = identifier != "leaseId"
+        params = {"includeContacts": "true"}
+        if is_search:
+            params["status"] = OPEN_LEASE_STATUS_FILTER
+
+        content = self._get_json(
             f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
+            params=params,
         )
+        if is_search and isinstance(content, list):
+            content = [
+                lease
+                for lease in content
+                if not (
+                    isinstance(lease, dict)
+                    and lease.get("status") in ENDED_LEASE_STATUSES
+                )
+            ]
+        return content
 
     def fetch_leases_unfiltered(self, identifier, value):
         """Leases for an identifier WITHOUT location-type filtering.
 
         Used by the direct lookups (MIM-1841): there the object/contact must
         resolve regardless of contract type, so this deliberately skips
-        ``filter_lease_on_location_type``. Each lease dict may carry a ``tenants``
-        list; returns an empty list when there is no content.
+        ``filter_lease_on_location_type``. Ended leases are still dropped from a
+        search, as in every lookup (see ``_fetch_leases_raw``). Each lease dict
+        may carry a ``tenants`` list; returns an empty list when there is no
+        content.
         """
         content = self._fetch_leases_raw(identifier, value)
         if content is None:
@@ -242,6 +285,14 @@ class CoreApi:
             )
 
         except requests.HTTPError as http_err:
+            # OneCore answers 404 for an unknown lease id: no result, not a
+            # failed call. The search endpoints answer an empty list instead,
+            # so a 404 from them means the call itself failed.
+            if (
+                identifier == "leaseId"
+                and getattr(http_err.response, "status_code", None) == 404
+            ):
+                return []
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )

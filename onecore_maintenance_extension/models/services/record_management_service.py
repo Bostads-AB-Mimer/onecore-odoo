@@ -4,7 +4,12 @@ import base64
 import datetime
 import logging
 from odoo import fields
-from ..utils.helpers import get_tenant_name, get_main_phone_number, normalize_lease_status
+from ..utils.helpers import (
+    get_tenant_name,
+    get_main_phone_number,
+    normalize_lease_status,
+    select_active_lease_data,
+)
 from .direct_lookup_service import all_routes
 from ....onecore_api import core_api
 
@@ -387,22 +392,22 @@ class RecordManagementService:
         if not data:
             return
 
-        for item in data:
-            lease = item.get("lease")
+        leases = [item["lease"] for item in data if item.get("lease")]
+        # No lease (no active lease for this rental property): skip lease/tenant creation
+        if not leases:
+            _logger.info(
+                "No lease found for rental property %s. Skipping lease and tenant creation.",
+                record.rental_property_id.rental_property_id,
+            )
+            return
 
-            # If lease is None (no active lease for this rental property), skip lease/tenant creation
-            if not lease:
-                _logger.info(
-                    "No lease found for rental property %s. Skipping lease and tenant creation.",
-                    record.rental_property_id.rental_property_id,
-                )
-                return
+        # One lease, the one the form would preselect.
+        lease = select_active_lease_data(leases)
+        new_lease_record = self._create_lease(lease, record)
+        record.lease_id = new_lease_record.id
 
-            new_lease_record = self._create_lease(lease, record)
-            record.lease_id = new_lease_record.id
-
-            if new_lease_record and lease.get("tenants"):
-                self._create_tenant(lease["tenants"], record)
+        if new_lease_record and lease.get("tenants"):
+            self._create_tenant(lease["tenants"], record)
 
     def _create_lease(self, lease, record):
         """Create a lease record from API data."""
@@ -412,9 +417,10 @@ class RecordManagementService:
                 "lease_number": lease["leaseNumber"],
                 "lease_type": lease["type"],
                 "lease_start_date": lease["leaseStartDate"],
-                "last_debit_date": lease["lastDebitDate"],
-                "contract_date": lease["contractDate"],
-                "approval_date": lease["approvalDate"],
+                # Optional in core: Tenfast leases leave them out when unset.
+                "last_debit_date": lease.get("lastDebitDate") or False,
+                "contract_date": lease.get("contractDate") or False,
+                "approval_date": lease.get("approvalDate") or False,
                 "lease_status": normalize_lease_status(lease.get("status")),
             }
         )

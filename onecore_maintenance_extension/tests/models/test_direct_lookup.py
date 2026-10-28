@@ -5,6 +5,7 @@ import requests
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 
+from ....onecore_api import core_api
 from ...models.handlers.rental_property_handler import RentalPropertyHandler
 from ...models.services.direct_lookup_service import (
     DirectLookupService,
@@ -115,6 +116,32 @@ class TestLoadObjectContracts(TransactionCase):
             [("lease_option_id", "=", leases.id)]
         )
         self.assertEqual(tenant.contact_code, "P005468")
+
+    def test_object_history_offers_only_the_open_contracts(self):
+        # The rental object route answers with the object's whole history and
+        # status by name: a previous tenant's ended contract must not be
+        # offered, and a Tenfast status keeps its own label.
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+        ended = dict(RES_LEASE, leaseId="216-034-03-0101/01", status="Ended")
+        pending = dict(
+            RES_LEASE, leaseId="216-034-03-0101/02", status="PendingSignature"
+        )
+        api = core_api.CoreApi.__new__(core_api.CoreApi)
+        api._get_json = MagicMock(return_value=[ended, pending])
+        self.core_api.fetch_leases_unfiltered.side_effect = (
+            api.fetch_leases_unfiltered
+        )
+        self.core_api.fetch_residence.return_value = RESIDENCE
+
+        result = self.service.load_object_contracts(request, "216-034-03-0101")
+
+        self.assertEqual(
+            api._get_json.call_args[0][0],
+            "/leases/by-rental-object-code/216-034-03-0101",
+        )
+        leases = result["lease_options"]
+        self.assertEqual(leases.mapped("lease_id"), ["216-034-03-0101/02"])
+        self.assertEqual(leases.lease_status, 6)
 
     def test_object_fetched_once_for_several_contracts(self):
         request = create_maintenance_request(self.env, space_caption="Lägenhet")

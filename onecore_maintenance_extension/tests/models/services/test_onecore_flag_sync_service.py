@@ -509,6 +509,28 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
         # after Kontraktsstatus had already moved on to "Uppsagt".
         self.assertEqual(request.lease_id.name, "216-034-03-0101/01 (Uppsagt)")
 
+    def test_tenfast_status_gets_its_own_label(self):
+        """A Tenfast status is stored and posted as itself, not as Okänd."""
+        request = self._request_with_lease(lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = [
+                _fresh_lease("216-034-03-0101/01", status="PendingSignature")
+            ]
+            changed = self.service.sync_lease_status()
+
+        self.assertEqual(changed, 1)
+        self.assertEqual(request.lease_id.lease_status, 6)
+        self.assertEqual(
+            request.lease_id.name, "216-034-03-0101/01 (Väntar på signering)"
+        )
+        notes = request.message_ids.filtered(
+            lambda m: "Kontraktsstatus" in (m.body or "")
+        )
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Gällande → Väntar på signering", notes.body)
+
     def test_last_debit_date_change_alone_updates_without_chatter(self):
         request = self._request_with_lease(
             lease_status=0, last_debit_date="2027-01-01"
@@ -609,6 +631,19 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][0][0], ["1/01", "2/01"])
         self.assertEqual(calls[1][0][0], ["3/01"])
+
+    def test_batch_call_gets_more_time_than_the_other_lookups(self):
+        """Leasing fetches every lease in the batch from Tenfast, so the call
+        must not be cut off at the single-lookup timeout."""
+        self._request_with_lease(lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_leases_batch.return_value = []
+            self.service.sync_lease_status()
+
+        call = MockApi.return_value.fetch_leases_batch.call_args
+        self.assertGreater(call.kwargs["timeout"], sync_module.LOOKUP_TIMEOUT)
 
     def test_a_failing_chunk_does_not_lose_the_others(self):
         request_one = self._request_with_lease(lease_ref="1/01", lease_status=0)

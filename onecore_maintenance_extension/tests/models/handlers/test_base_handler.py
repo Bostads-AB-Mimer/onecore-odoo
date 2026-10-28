@@ -178,6 +178,53 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertFalse(lease_option.rental_property_option_id)
         self.assertFalse(lease_option.parking_space_option_id)
 
+    def test_create_lease_option_without_optional_dates(self):
+        """Test that a lease without lastDebitDate, contractDate and
+        approvalDate, which core leaves out of a Tenfast lease when unset,
+        still becomes an option."""
+        rental_property_option = create_rental_property_option(self.env)
+
+        lease_data = {
+            "leaseId": self.fake.lease_id(),
+            "leaseNumber": self.fake.lease_number(),
+            "type": self.fake.lease_type(),
+            "status": "Current",
+            "leaseStartDate": self.fake.date(),
+        }
+
+        lease_option = self.handler._create_lease_option(
+            lease_data, rental_property_option_id=rental_property_option.id
+        )
+
+        self.assertEqual(lease_option.lease_id, lease_data["leaseId"])
+        self.assertFalse(lease_option.last_debit_date)
+        self.assertFalse(lease_option.contract_date)
+        self.assertFalse(lease_option.approval_date)
+
+    def test_create_lease_option_with_tenfast_status(self):
+        """Test that a Tenfast status is stored and labelled as itself."""
+        rental_property_option = create_rental_property_option(self.env)
+
+        lease_data = {
+            "leaseId": self.fake.lease_id(),
+            "leaseNumber": self.fake.lease_number(),
+            "type": self.fake.lease_type(),
+            "status": "PendingSignature",
+            "leaseStartDate": self.fake.date(),
+            "lastDebitDate": self.fake.date(),
+            "contractDate": self.fake.date(),
+            "approvalDate": self.fake.date(),
+        }
+
+        lease_option = self.handler._create_lease_option(
+            lease_data, rental_property_option_id=rental_property_option.id
+        )
+
+        self.assertEqual(lease_option.lease_status, 6)
+        self.assertEqual(
+            lease_option.name, f"{lease_data['leaseId']} (Väntar på signering)"
+        )
+
     def test_create_tenant_options_creates_new_tenant(self):
         """Test creating tenant options for new tenants."""
         tenants = [
@@ -342,7 +389,7 @@ class TestBaseMaintenanceHandler(TransactionCase):
     # --- _normalize_lease_status tests ---
 
     def test_normalize_lease_status_with_integer(self):
-        """Test that known integer status values pass through unchanged."""
+        """Test that OneCore's status numbers 0-3 map to the same codes."""
         self.assertEqual(self.handler._normalize_lease_status(0), 0)
         self.assertEqual(self.handler._normalize_lease_status(1), 1)
         self.assertEqual(self.handler._normalize_lease_status(2), 2)
@@ -355,12 +402,28 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertEqual(self.handler._normalize_lease_status("AboutToEnd"), 2)
         self.assertEqual(self.handler._normalize_lease_status("Ended"), 3)
 
+    def test_normalize_lease_status_with_tenfast_string(self):
+        """Test that the Tenfast statuses get their own codes, not Okänd (4)."""
+        self.assertEqual(
+            self.handler._normalize_lease_status("PreliminaryTerminated"), 5
+        )
+        self.assertEqual(self.handler._normalize_lease_status("PendingSignature"), 6)
+        self.assertEqual(self.handler._normalize_lease_status("NotSent"), 7)
+
+    def test_normalize_lease_status_with_tenfast_integer(self):
+        """Test that OneCore's numbers 4-6 are translated, so OneCore's 4
+        (PreliminaryTerminated) never reads as this addon's 4 (Okänd)."""
+        self.assertEqual(self.handler._normalize_lease_status(4), 5)
+        self.assertEqual(self.handler._normalize_lease_status(5), 6)
+        self.assertEqual(self.handler._normalize_lease_status(6), 7)
+
     def test_normalize_lease_status_unknown_string_defaults_to_unknown(self):
         """Test that unknown string status defaults to 4 (Okänd status)."""
         self.assertEqual(self.handler._normalize_lease_status("Unknown"), 4)
 
     def test_normalize_lease_status_unknown_integer_defaults_to_unknown(self):
         """Test that unknown integer status defaults to 4 (Okänd status)."""
+        self.assertEqual(self.handler._normalize_lease_status(7), 4)
         self.assertEqual(self.handler._normalize_lease_status(99), 4)
 
     def test_normalize_lease_status_none_defaults_to_unknown(self):
