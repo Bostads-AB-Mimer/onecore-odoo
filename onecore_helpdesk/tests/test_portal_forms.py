@@ -244,6 +244,31 @@ class TestPortalTicketForms(HttpCaseWithUserPortal):
         )
         self.assertRejected(response, "Antal måste vara ett heltal")
 
+    def test_submit_with_an_infinite_number_is_rejected(self):
+        for raw in ("inf", "nan", "-Infinity"):
+            response = self._post(
+                category=self.category_equipment.id,
+                form=self.form_typed.id,
+                question_quantity="1",
+                question_budget=raw,
+            )
+            self.assertRejected(response, "Budget måste vara ett tal")
+
+    def test_rejected_submit_says_that_attachments_must_be_added_again(self):
+        response = self.url_open(
+            "/submitted/ticket",
+            data={
+                "csrf_token": http.Request.csrf_token(self),
+                "subject": "Skrivaren på plan 3",
+                "description": "Skrivaren fungerar inte",
+                "category": self.category_fault.id,
+                "form": self.form_fault.id,
+            },
+            files={"attachment": ("ip-adresser.xlsx", b"x")},
+            allow_redirects=False,
+        )
+        self.assertRejected(response, "Bifoga filerna igen")
+
     def test_submit_ignores_answers_outside_the_definition(self):
         self._post(
             category=self.category_equipment.id,
