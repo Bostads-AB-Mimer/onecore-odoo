@@ -489,9 +489,108 @@ class TestFetchLeases:
 
         mock_get_json.assert_called_once_with(
             "/leases/123",
-            params={"includeContacts": "true", "includeUpcomingLeases": "true"}
+            params={"includeContacts": "true"}
         )
         assert isinstance(result, list)
+
+    @patch.object(CoreApi, '_get_json')
+    def test_rental_object_search_asks_for_open_leases(self, mock_get_json, api):
+        """The rental object search uses /leases/by-rental-object-code and asks
+        for every status but ended."""
+        mock_get_json.return_value = []
+
+        api.fetch_leases("rentalObjectId", "306-001-01-0201", "Lägenhet")
+
+        mock_get_json.assert_called_once_with(
+            "/leases/by-rental-object-code/306-001-01-0201",
+            params={
+                "includeContacts": "true",
+                "status": "current,upcoming,about-to-end,"
+                "preliminary-terminated,pending-signature,not-sent",
+                "includeUpcomingLeases": "true",
+            },
+        )
+
+    @patch.object(CoreApi, '_get_json')
+    def test_rental_object_search_falls_back_on_a_core_without_the_route(
+        self, mock_get_json, api
+    ):
+        """A core without /leases/by-rental-object-code answers 404; the
+        search then uses /leases/by-rental-property-id."""
+        response = requests.Response()
+        response.status_code = 404
+        lease = {"leaseId": "1/01", "type": "Bostadskontrakt", "status": 0}
+        mock_get_json.side_effect = [requests.HTTPError(response=response), [lease]]
+
+        result = api.fetch_leases("rentalObjectId", "306-001-01-0201", "Lägenhet")
+
+        assert result == [lease]
+        assert mock_get_json.call_args_list[1][0][0] == (
+            "/leases/by-rental-property-id/306-001-01-0201"
+        )
+
+    @patch.object(CoreApi, '_get_json')
+    def test_rental_object_search_does_not_fall_back_on_other_errors(
+        self, mock_get_json, api
+    ):
+        """Only a missing route falls back; a failing core stays a failure."""
+        response = requests.Response()
+        response.status_code = 500
+        mock_get_json.side_effect = requests.HTTPError(response=response)
+
+        with pytest.raises(OneCoreException):
+            api.fetch_leases("rentalObjectId", "306-001-01-0201", "Lägenhet")
+
+        assert mock_get_json.call_count == 1
+
+    @patch.object(CoreApi, '_get_json')
+    def test_search_drops_ended_leases(self, mock_get_json, api):
+        """A search list keeps open leases only, since the rental object route
+        ignores the status filter."""
+        ended = {"leaseId": "1/01", "type": "Bostadskontrakt", "status": "Ended"}
+        current = {"leaseId": "1/02", "type": "Bostadskontrakt", "status": "Current"}
+        preliminary = {
+            "leaseId": "1/03",
+            "type": "Bostadskontrakt",
+            "status": "PreliminaryTerminated",
+        }
+        mock_get_json.return_value = [ended, current, preliminary]
+
+        result = api.fetch_leases_unfiltered("rentalObjectId", "1")
+
+        assert result == [current, preliminary]
+
+    @patch.object(CoreApi, '_get_json')
+    def test_single_lease_is_kept_whatever_its_status(self, mock_get_json, api):
+        """An exact contract number finds the contract even when it has ended."""
+        lease = {"leaseId": "1/01", "type": "Bostadskontrakt", "status": "Ended"}
+        mock_get_json.return_value = lease
+
+        result = api.fetch_leases("leaseId", "1/01", "Lägenhet")
+
+        assert result == [lease]
+
+    @patch.object(CoreApi, '_get_json')
+    def test_unknown_lease_id_returns_empty(self, mock_get_json, api):
+        """OneCore answers 404 for an unknown lease id: no result, not an error."""
+        response = requests.Response()
+        response.status_code = 404
+        mock_get_json.side_effect = requests.HTTPError(response=response)
+
+        result = api.fetch_leases("leaseId", "999-999-99-9999/01", "Lägenhet")
+
+        assert result == []
+
+    @patch.object(CoreApi, '_get_json')
+    def test_404_on_a_search_is_a_failed_call(self, mock_get_json, api):
+        """The search endpoints answer an empty list for a miss, so a 404 from
+        one (a missing route, a wrong base url) must not read as no result."""
+        response = requests.Response()
+        response.status_code = 404
+        mock_get_json.side_effect = requests.HTTPError(response=response)
+
+        with pytest.raises(OneCoreException):
+            api.fetch_leases("contactCode", "P123456", "Lägenhet")
 
     @patch.object(CoreApi, '_get_json')
     @patch.object(CoreApi, 'filter_lease_on_location_type')

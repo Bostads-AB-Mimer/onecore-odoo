@@ -4,6 +4,8 @@ from .rental_object_base_handler import RentalObjectBaseHandler
 class ParkingSpaceHandler(RentalObjectBaseHandler):
     """Handler for parking space maintenance requests."""
 
+    _object_option_field = "parking_space_option_id"
+
     def update_form_options(self, work_order_data):
         """Update form options with parking space data."""
         for item in work_order_data:

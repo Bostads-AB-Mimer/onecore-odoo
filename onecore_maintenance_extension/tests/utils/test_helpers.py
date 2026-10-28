@@ -43,6 +43,42 @@ class TestSelectActiveLease(TransactionCase):
         result = self.select_active_lease(records)
         self.assertEqual(result, lease_upcoming)
 
+    def test_selects_preliminary_terminated_over_upcoming(self):
+        """PreliminaryTerminated (status=5) is a running contract, so it is
+        preferred over Upcoming (status=1)."""
+        lease_upcoming = create_lease_option(self.env, lease_status=1, lease_number="200")
+        lease_preliminary = create_lease_option(self.env, lease_status=5, lease_number="100")
+
+        records = lease_upcoming | lease_preliminary
+        result = self.select_active_lease(records)
+        self.assertEqual(result, lease_preliminary)
+
+    def test_selects_unsigned_after_upcoming_and_before_ended(self):
+        """PendingSignature (status=6) and NotSent (status=7) come after Upcoming
+        (status=1) and before Ended (status=3), PendingSignature first."""
+        lease_ended = create_lease_option(self.env, lease_status=3, lease_number="300")
+        lease_not_sent = create_lease_option(self.env, lease_status=7, lease_number="200")
+        lease_pending = create_lease_option(self.env, lease_status=6, lease_number="100")
+        lease_upcoming = create_lease_option(self.env, lease_status=1, lease_number="050")
+
+        result = self.select_active_lease(lease_ended | lease_not_sent | lease_pending)
+        self.assertEqual(result, lease_pending)
+
+        result = self.select_active_lease(lease_ended | lease_not_sent)
+        self.assertEqual(result, lease_not_sent)
+
+        result = self.select_active_lease(lease_pending | lease_upcoming)
+        self.assertEqual(result, lease_upcoming)
+
+    def test_selects_unknown_last(self):
+        """Okänd (status=4) comes after every known status."""
+        lease_unknown = create_lease_option(self.env, lease_status=4, lease_number="200")
+        lease_not_sent = create_lease_option(self.env, lease_status=7, lease_number="100")
+
+        records = lease_unknown | lease_not_sent
+        result = self.select_active_lease(records)
+        self.assertEqual(result, lease_not_sent)
+
     def test_falls_back_to_highest_lease_number(self):
         """When all leases have an unrecognized status, falls back to highest lease_number."""
         lease_low = create_lease_option(self.env, lease_status=99, lease_number="100")

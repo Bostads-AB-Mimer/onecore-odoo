@@ -39,7 +39,7 @@ _ROUTES = {
     "residence": {
         "space": "Lägenhet",
         "option_model": "maintenance.rental.property.option",
-        "option_field": "rental_property_option_id",
+        "option_field": RentalPropertyHandler._object_option_field,
         "handler": RentalPropertyHandler,
         "save_method": "_save_rental_property",
         "record_field": "rental_property_id",
@@ -47,7 +47,7 @@ _ROUTES = {
     "parking": {
         "space": "Bilplats",
         "option_model": "maintenance.parking.space.option",
-        "option_field": "parking_space_option_id",
+        "option_field": ParkingSpaceHandler._object_option_field,
         "handler": ParkingSpaceHandler,
         "save_method": "_save_parking_space",
         "record_field": "parking_space_id",
@@ -55,7 +55,7 @@ _ROUTES = {
     "facility": {
         "space": "Lokal",
         "option_model": "maintenance.facility.option",
-        "option_field": "facility_option_id",
+        "option_field": FacilityHandler._object_option_field,
         "handler": FacilityHandler,
         "save_method": "_save_facility",
         "record_field": "facility_id",
@@ -83,12 +83,6 @@ def route_for_object_option(object_option):
 
 def all_routes():
     return list(_ROUTES.values())
-
-
-def _is_not_found(err):
-    """True when OneCore answered "no such record" (404) rather than failing."""
-    response = getattr(err, "response", None)
-    return getattr(response, "status_code", None) == 404
 
 
 class DirectLookupService:
@@ -143,11 +137,11 @@ class DirectLookupService:
 
     # ----------------------------------------------------------------- fetching
     def _fetch_leases(self, identifier, value):
+        """Leases for an objektnummer or kundnummer search. A miss is an empty
+        list; any error, a 404 included, is a failed call."""
         try:
             return self.core_api.fetch_leases_unfiltered(identifier, value)
         except Exception as err:
-            if _is_not_found(err):
-                return []
             _logger.warning("Lease lookup failed for %s %s: %s", identifier, value, err)
             raise LookupFailed(str(err)) from err
 
@@ -158,7 +152,7 @@ class DirectLookupService:
         try:
             return fetcher(rental_id)
         except Exception as err:
-            if _is_not_found(err):
+            if core_api.is_not_found(err):
                 return None
             _logger.warning(
                 "Object lookup failed for %s as %s: %s", rental_id, kind, err

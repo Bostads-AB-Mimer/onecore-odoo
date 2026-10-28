@@ -88,7 +88,7 @@
         <!--
         Kontraktsstatus + sista debiteringsdatum on the lease of every open
         request. A contract snapshotted at case creation can change status
-        afterwards (MIM-1954); the run costs one call per 500 distinct lease
+        afterwards (MIM-1954); the run costs one call per 100 distinct lease
         ids (POST /leases/batch), not one per open request. Hourly, like
         viktig kundinfo: a contract's status changes about as often as that
         flag does.

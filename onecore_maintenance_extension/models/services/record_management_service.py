@@ -4,7 +4,13 @@ import base64
 import datetime
 import logging
 from odoo import fields
-from ..utils.helpers import get_tenant_name, get_main_phone_number, normalize_lease_status
+from ..utils.helpers import (
+    UNSIGNED_LEASE_STATUSES,
+    get_tenant_name,
+    get_main_phone_number,
+    normalize_lease_status,
+    select_active_lease_data,
+)
 from .direct_lookup_service import all_routes
 from ....onecore_api import core_api
 
@@ -387,22 +393,29 @@ class RecordManagementService:
         if not data:
             return
 
-        for item in data:
-            lease = item.get("lease")
+        # Signed leases only: the person on an unsigned one isn't a tenant yet.
+        leases = [
+            item["lease"]
+            for item in data
+            if item.get("lease")
+            and normalize_lease_status(item["lease"].get("status"))
+            not in UNSIGNED_LEASE_STATUSES
+        ]
+        # No signed lease for this rental property: skip lease/tenant creation
+        if not leases:
+            _logger.info(
+                "No signed lease found for rental property %s. Skipping lease and tenant creation.",
+                record.rental_property_id.rental_property_id,
+            )
+            return
 
-            # If lease is None (no active lease for this rental property), skip lease/tenant creation
-            if not lease:
-                _logger.info(
-                    "No lease found for rental property %s. Skipping lease and tenant creation.",
-                    record.rental_property_id.rental_property_id,
-                )
-                return
+        # One lease and one tenant, the ones the form would preselect.
+        lease = select_active_lease_data(leases)
+        new_lease_record = self._create_lease(lease, record)
+        record.lease_id = new_lease_record.id
 
-            new_lease_record = self._create_lease(lease, record)
-            record.lease_id = new_lease_record.id
-
-            if new_lease_record and lease.get("tenants"):
-                self._create_tenant(lease["tenants"], record)
+        if new_lease_record and lease.get("tenants"):
+            self._create_tenant(lease["tenants"][0], record)
 
     def _create_lease(self, lease, record):
         """Create a lease record from API data."""
@@ -412,33 +425,30 @@ class RecordManagementService:
                 "lease_number": lease["leaseNumber"],
                 "lease_type": lease["type"],
                 "lease_start_date": lease["leaseStartDate"],
-                "last_debit_date": lease["lastDebitDate"],
-                "contract_date": lease["contractDate"],
-                "approval_date": lease["approvalDate"],
+                # Optional in core: Tenfast leases leave them out when unset.
+                "last_debit_date": lease.get("lastDebitDate") or False,
+                "contract_date": lease.get("contractDate") or False,
+                "approval_date": lease.get("approvalDate") or False,
                 "lease_status": normalize_lease_status(lease.get("status")),
             }
         )
 
-    def _create_tenant(self, tenants, record):
-        """Create tenant records from API data."""
-        for tenant in tenants:
-            name = get_tenant_name(tenant)
-            phone_number = get_main_phone_number(tenant)
+    def _create_tenant(self, tenant, record):
+        """Create the tenant record from API data and attach it."""
+        recently_added_tenant_record = self.env["maintenance.tenant"].create(
+            {
+                "name": get_tenant_name(tenant),
+                "contact_code": tenant["contactCode"],
+                "contact_key": tenant["contactKey"],
+                "national_registration_number": tenant.get(
+                    "nationalRegistrationNumber"
+                ),
+                "email_address": tenant.get("emailAddress"),
+                "phone_number": get_main_phone_number(tenant),
+                "is_tenant": tenant["isTenant"],
+            }
+        )
 
-            recently_added_tenant_record = self.env["maintenance.tenant"].create(
-                {
-                    "name": name,
-                    "contact_code": tenant["contactCode"],
-                    "contact_key": tenant["contactKey"],
-                    "national_registration_number": tenant.get(
-                        "nationalRegistrationNumber"
-                    ),
-                    "email_address": tenant.get("emailAddress"),
-                    "phone_number": phone_number,
-                    "is_tenant": tenant["isTenant"],
-                }
-            )
-
-            record.tenant_id = recently_added_tenant_record.id
-            record.empty_tenant = False
-            self.flag_new_tenant_attached(record)
+        record.tenant_id = recently_added_tenant_record.id
+        record.empty_tenant = False
+        self.flag_new_tenant_attached(record)

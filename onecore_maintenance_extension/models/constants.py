@@ -7,6 +7,9 @@ LEASE_STATUS_LABELS = {
     2: "Uppsagt",
     3: "Upphört",
     4: "Okänd status",
+    5: "Preliminärt uppsagt",
+    6: "Väntar på signering",
+    7: "Ej skickat",
 }
 
 # Space types available for maintenance requests

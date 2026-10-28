@@ -22,6 +22,7 @@ import time
 from markupsafe import Markup, escape
 
 from odoo import _, fields
+from odoo.tools import config
 
 from ..constants import LEASE_STATUS_LABELS
 from ..utils.helpers import normalize_lease_status
@@ -56,10 +57,23 @@ _pest_set_cache = {}  # dbname -> (expires_at_monotonic, frozenset | _PEST_SET_F
 # param, so the practical ceiling is URL length, not a documented limit.
 CONTACT_BATCH_SIZE = 200
 
-# Lease ids per POST /leases/batch call. Matches the page size core's
-# getLeasesBatch already chunks at against the leasing service, so one
-# onecore-odoo call maps to one Xpand IN(...) query on the other side.
-LEASE_BATCH_SIZE = 500
+# Lease ids per POST /leases/batch call, and the seconds the call may take.
+# The leasing service fetches each id from Tenfast separately, ten at a time,
+# so a call can take longer than LOOKUP_TIMEOUT.
+LEASE_BATCH_SIZE = 100
+LEASE_BATCH_TIMEOUT = 60
+
+
+def _cron_time_limit():
+    """Seconds a cron thread may run before the server restarts it, or None.
+
+    The threaded server checks limit_time_real_cron when it is set above 0,
+    else limit_time_real (odoo/service/server.py, process_limit).
+    """
+    limit = config["limit_time_real_cron"]
+    if not limit or limit < 0:
+        limit = config["limit_time_real"]
+    return limit or None
 
 
 class OneCoreFlagSyncService:
@@ -385,7 +399,7 @@ class OneCoreFlagSyncService:
         for start in range(0, len(ids), LEASE_BATCH_SIZE):
             chunk = ids[start : start + LEASE_BATCH_SIZE]
             try:
-                content = api.fetch_leases_batch(chunk, timeout=LOOKUP_TIMEOUT)
+                content = api.fetch_leases_batch(chunk, timeout=LEASE_BATCH_TIMEOUT)
             except Exception as err:
                 _logger.warning(
                     "Kontraktsstatus: could not fetch %s leases (from %s): %s",
@@ -408,11 +422,16 @@ class OneCoreFlagSyncService:
         A contract snapshotted as "Gällande" when the case was created can
         become "Uppsagt" or "Upphört" afterwards; without this the ärende
         keeps showing the stale status forever (MIM-1954). Unlike the two
-        silent flag syncs above, a status change is posted to the ärende's
+        silent flag syncs above, a status change is logged in the ärende's
         chatter - a contract's status flipping while a case is open is worth
-        a record, not just a quiet snapshot update. A last-debit-date-only
-        change is not chatter-worthy on its own and is written silently.
-        Returns the number of leases changed.
+        a record, not just a quiet snapshot update. It is logged, not posted:
+        a cron must not notify the followers. A last-debit-date-only change is
+        not chatter-worthy on its own and is written silently.
+
+        Each chunk is committed before the next is fetched, and no chunk is
+        started that could run past the cron time limit: one transaction
+        across every chunk's call would lose the whole run when the worker
+        is killed. Returns the number of leases changed.
         """
         if not self.is_configured():
             _logger.info("Kontraktsstatus-sync skipped: onecore_base_url is not set")
@@ -421,52 +440,80 @@ class OneCoreFlagSyncService:
         requests = self.open_requests().filtered(
             lambda r: r.lease_id and r.lease_id.lease_id
         )
-        lease_ids = sorted({r.lease_id.lease_id for r in requests})
+        requests_by_lease_id = {}
+        for request in requests:
+            requests_by_lease_id.setdefault(request.lease_id.lease_id, []).append(
+                request
+            )
+        lease_ids = sorted(requests_by_lease_id)
         if not lease_ids:
             return 0
 
-        fresh_by_id = self.fetch_lease_statuses(lease_ids, api=api)
+        try:
+            api = self._api(api)
+        except Exception as err:  # e.g. the token POST in CoreApi.__init__
+            _logger.warning("Kontraktsstatus: could not reach OneCore: %s", err)
+            return 0
 
-        changed = 0
-        for request in requests:
-            lease = request.lease_id
-            fresh = fresh_by_id.get(lease.lease_id)
-            if fresh is None:
-                continue
-
-            new_status = normalize_lease_status(fresh.get("status"))
-            # "or False", not the bare parse: to_date returns None for a
-            # missing lastDebitDate (the normal state of a Gällande contract),
-            # while an empty stored Date reads back as False - and None !=
-            # False, so without this the guard below never short-circuits and
-            # every running contract takes a no-op write() (which still bumps
-            # write_uid/write_date) on every run.
-            new_last_debit_date = (
-                fields.Date.to_date(fresh.get("lastDebitDate")) or False
-            )
-            status_changed = new_status != lease.lease_status
-            if not status_changed and new_last_debit_date == lease.last_debit_date:
-                continue
-
-            old_label = LEASE_STATUS_LABELS.get(lease.lease_status)
-            new_label = LEASE_STATUS_LABELS.get(new_status)
-
-            lease.write(
-                {"lease_status": new_status, "last_debit_date": new_last_debit_date}
-            )
-            if status_changed:
-                request.message_post(
-                    body=Markup("%s: %s → %s")
-                    % (_("Kontraktsstatus"), escape(old_label), escape(new_label)),
-                    message_type="notification",
-                    subtype_xmlid="mail.mt_note",
+        time_limit = _cron_time_limit()
+        started = time.monotonic()
+        changed = answered = 0
+        for start in range(0, len(lease_ids), LEASE_BATCH_SIZE):
+            if (
+                start
+                and time_limit
+                and time.monotonic() - started + LEASE_BATCH_TIMEOUT > time_limit
+            ):
+                _logger.warning(
+                    "Kontraktsstatus-sync stopped after %s of %s lease ids to stay "
+                    "within the cron time limit (%ss); the rest wait for the next run",
+                    start,
+                    len(lease_ids),
+                    time_limit,
                 )
-            changed += 1
+                break
+
+            chunk = lease_ids[start : start + LEASE_BATCH_SIZE]
+            fresh_by_id = self.fetch_lease_statuses(chunk, api=api)
+            answered += len(fresh_by_id)
+            for lease_id, fresh in fresh_by_id.items():
+                for request in requests_by_lease_id.get(lease_id, []):
+                    changed += self._apply_lease_status(request, fresh)
+            # remaining=0: a re-run would start over from the first lease id,
+            # so the cron must not loop this job when a run stops early.
+            self.env["ir.cron"]._commit_progress(len(chunk), remaining=0)
 
         _logger.info(
             "Kontraktsstatus-sync: %s distinct lease ids, %s answered, %s changed",
             len(lease_ids),
-            len(fresh_by_id),
+            answered,
             changed,
         )
         return changed
+
+    def _apply_lease_status(self, request, fresh):
+        """Write a lease's fresh status and last debit date when they moved.
+        Returns 1 when the lease changed, else 0."""
+        lease = request.lease_id
+        new_status = normalize_lease_status(fresh.get("status"))
+        # "or False", not the bare parse: to_date returns None for a missing
+        # lastDebitDate (the normal state of a Gällande contract), while an
+        # empty stored Date reads back as False - and None != False, so without
+        # this the guard below never short-circuits and every running contract
+        # takes a no-op write() (which still bumps write_uid/write_date) on
+        # every run.
+        new_last_debit_date = fields.Date.to_date(fresh.get("lastDebitDate")) or False
+        status_changed = new_status != lease.lease_status
+        if not status_changed and new_last_debit_date == lease.last_debit_date:
+            return 0
+
+        old_label = LEASE_STATUS_LABELS.get(lease.lease_status)
+        new_label = LEASE_STATUS_LABELS.get(new_status)
+
+        lease.write({"lease_status": new_status, "last_debit_date": new_last_debit_date})
+        if status_changed:
+            request._message_log(
+                body=Markup("%s: %s → %s")
+                % (_("Kontraktsstatus"), escape(old_label), escape(new_label)),
+            )
+        return 1
