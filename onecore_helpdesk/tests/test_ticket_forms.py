@@ -517,6 +517,61 @@ class TestTicketForms(TransactionCase):
         self.assertIn("4137-12", notes.body)
         self.assertEqual(ticket.addon_properties["affected_scope"], "Bara jag")
 
+    def test_logged_answers_are_appended_to_the_description(self):
+        ticket = self._fault_ticket(
+            form_id=self.form_fault.id, properties={"port_replicator": "4137-12"}
+        )
+
+        ticket.category_id = self.category_other
+
+        self.assertIn("Skrivaren fungerar inte.", ticket.description)
+        self.assertIn("Numret på portreplikatorn (ex 4137-12): 4137-12", ticket.description)
+        self.assertIn("Hur drabbas du/ni?: Kan arbeta som vanligt", ticket.description)
+
+    def test_repointing_the_category_addon_logs_the_answers_on_every_ticket(self):
+        ticket = self._fault_ticket(form_id=self.form_fault.id)
+        other_addon = self.Form.create(
+            {
+                "name": "Plats",
+                "kind": "addon",
+                "ticket_properties": [
+                    {"name": "building", "string": "Byggnad", "type": "char"}
+                ],
+            }
+        )
+
+        self.category_fault.addon_form_id = other_addon
+
+        self.assertEqual(ticket.addon_form_id, other_addon)
+        self.assertEqual(self._names(ticket, "addon_properties"), ["building"])
+        note = self._notes(ticket)
+        self.assertEqual(len(note), 1)
+        self.assertIn("Påverkan", note.body)
+        self.assertIn("Vilka påverkas?: Bara jag", note.body)
+        self.assertIn("Vilka påverkas?: Bara jag", ticket.description)
+
+    def test_deleting_a_question_logs_its_answers_on_every_ticket_using_the_form(self):
+        first = self._fault_ticket(
+            form_id=self.form_fault.id, properties={"port_replicator": "1111-11"}
+        )
+        second = self._fault_ticket(
+            form_id=self.form_fault.id, properties={"port_replicator": "2222-22"}
+        )
+        definition = self._read(first)
+        for prop in definition:
+            if prop["name"] == "port_replicator":
+                prop["definition_deleted"] = True
+                prop["definition_changed"] = True
+
+        first.write({"properties": definition})
+
+        self.assertEqual([p["name"] for p in self.form_fault.ticket_properties], ["program"])
+        for ticket, number in ((first, "1111-11"), (second, "2222-22")):
+            note = self._notes(ticket, "togs bort ur formuläret")
+            self.assertEqual(len(note), 1)
+            self.assertIn(f"Numret på portreplikatorn (ex 4137-12): {number}", note.body)
+            self.assertIn(number, ticket.description)
+
     def test_changing_category_without_answers_logs_nothing(self):
         ticket = self._ticket(
             category_id=self.category_equipment.id,
@@ -585,6 +640,27 @@ class TestTicketForms(TransactionCase):
                 ("Hur drabbas du/ni?", "Kan arbeta som vanligt"),
             ],
         )
+
+    def test_datetime_answers_are_displayed_in_the_readers_time_zone(self):
+        timed_form = self.Form.create(
+            {
+                "name": "Installation",
+                "category_id": self.category_equipment.id,
+                "ticket_properties": [
+                    {"name": "install_at", "string": "Installation", "type": "datetime"}
+                ],
+            }
+        )
+        ticket = self._ticket(
+            category_id=self.category_equipment.id,
+            form_id=timed_form.id,
+            properties={"install_at": "2026-11-02 08:30:00"},
+        )
+
+        # Europe/Stockholm is UTC+1 in November
+        answers = ticket.with_context(tz="Europe/Stockholm")._displayed_answers()
+
+        self.assertEqual(answers, [("Installation", "2026-11-02 09:30")])
 
     # Form record helpers ---------------------------------------------------
 

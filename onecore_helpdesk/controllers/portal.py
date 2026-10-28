@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 
 import pytz
@@ -113,6 +114,10 @@ class OnecoreHelpdeskTicketController(HelpdeskTicketController):
                 "submitted_lists": {
                     key: posted.getlist(key) for key in posted if key in kw
                 },
+                # a browser cannot refill a file input, so say so
+                "attachments_dropped": any(
+                    f.filename for f in request.httprequest.files.getlist("attachment")
+                ),
             }
         )
         return request.render("helpdesk_mgmt.portal_create_ticket", values)
@@ -219,11 +224,15 @@ class OnecoreHelpdeskTicketController(HelpdeskTicketController):
                 ) from None
         if qtype == "float":
             try:
-                return float(raw.replace(",", "."))
+                number = float(raw.replace(",", "."))
             except ValueError:
+                number = None
+            # "inf" and "nan" parse as floats but cannot be stored as JSON
+            if number is None or not math.isfinite(number):
                 raise ValidationError(
                     _("Svaret på %(question)s måste vara ett tal.", question=label)
-                ) from None
+                )
+            return number
         if qtype == "date":
             return self._parse_date_answer(raw, label)
         if qtype == "datetime":

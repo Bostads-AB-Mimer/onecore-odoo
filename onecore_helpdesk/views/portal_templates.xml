@@ -111,6 +111,9 @@
         <xpath expr="//input[@name='csrf_token']" position="after">
             <div t-if="error" class="alert alert-danger" role="alert">
                 <t t-esc="error" />
+                <div t-if="attachments_dropped" class="mt-1">
+                    Bilagorna följde inte med. Bifoga filerna igen innan du skickar.
+                </div>
             </div>
         </xpath>
         <!-- keep what the requester entered when the submit was rejected -->

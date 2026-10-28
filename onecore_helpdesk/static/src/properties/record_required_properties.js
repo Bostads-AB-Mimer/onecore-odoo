@@ -13,16 +13,23 @@ import { isMissingRequiredAnswer } from "./required_answers";
  * answers or the form (the definition record) changed, never on an untouched
  * old ticket, so a stage move on a ticket that arrived without answers
  * still saves.
+ *
+ * Odoo also runs this check after every field edit with `removeInvalidOnly`,
+ * to clear marks on fields that became valid. In that mode a block only
+ * stays marked if it already was; new marks appear on a save attempt, like
+ * for other required fields.
  */
 patch(Record.prototype, {
     _checkValidity(options = {}) {
         const missing = this._propertiesFieldsWithMissingAnswers();
+        const markedBefore = missing.filter((fieldName) => this._invalidFields.has(fieldName));
         // the notification is shown once, with the questions included
         const valid = super._checkValidity({ ...options, displayNotification: false });
         if (options.silent) {
             return valid && !missing.length;
         }
-        for (const fieldName of missing) {
+        const toMark = options.removeInvalidOnly ? markedBefore : missing;
+        for (const fieldName of toMark) {
             this._unsetRequiredFields.add(fieldName);
             this._invalidFields.add(fieldName);
         }

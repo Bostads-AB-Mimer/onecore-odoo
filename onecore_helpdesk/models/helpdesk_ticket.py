@@ -169,6 +169,32 @@ class HelpdeskTicket(models.Model):
                 return True
         return False
 
+    def _log_deleted_question_answers(self, vals):
+        """Deleting a question with the gear icon removes it from the form's
+        definition, and with it the answer on every ticket using that form.
+        Keep those answers on each ticket before the definition changes."""
+        Ticket = self.env["helpdesk.ticket"].sudo().with_context(active_test=False)
+        for field_name, container in QUESTION_BLOCKS:
+            value = vals.get(field_name)
+            if not isinstance(value, list):
+                continue
+            deleted = {
+                prop["name"]
+                for prop in value
+                if isinstance(prop, dict) and prop.get("definition_deleted")
+            }
+            if not deleted:
+                continue
+            for form in self.mapped(container):
+                tickets = Ticket.search([(container, "=", form.id)])
+                for data in tickets.read([field_name]):
+                    gone = [p for p in data[field_name] if p["name"] in deleted]
+                    answers = [a for a in map(self._format_answer, gone) if a]
+                    if answers:
+                        Ticket.browse(data["id"])._log_answer_snapshot(
+                            form, answers, deleted_questions=True
+                        )
+
     def write(self, vals):
         if vals.get("form_id") and "category_id" not in vals:
             without_category = self.filtered(lambda t: not t.category_id)
@@ -181,6 +207,7 @@ class HelpdeskTicket(models.Model):
         touches_container = "category_id" in vals or "form_id" in vals
         touches_answers = any(field_name in vals for field_name, _c in QUESTION_BLOCKS)
         snapshots = self._answer_snapshots() if touches_container else {}
+        self._log_deleted_question_answers(vals)
         res = super().write(vals)
         if touches_container or touches_answers:
             # Editing the questions with the gear icon writes the new
@@ -313,18 +340,33 @@ class HelpdeskTicket(models.Model):
             display = ", ".join(str(labels.get(key, key)) for key in value)
         elif ptype == "boolean":
             display = _("Ja")
+        elif ptype == "datetime":
+            # stored in UTC, shown in the reader's time zone
+            local = fields.Datetime.context_timestamp(self, fields.Datetime.to_datetime(value))
+            display = local.strftime("%Y-%m-%d %H:%M")
         else:
             display = value
         return prop.get("string") or prop["name"], display
 
-    def _log_answer_snapshot(self, old_form, answers):
+    def _log_answer_snapshot(self, old_form, answers, deleted_questions=False):
+        """Keep answers that are about to disappear: a chatter note, and the
+        same list appended to the description so agents see it on the ticket
+        without opening the log."""
         self.ensure_one()
         items = Markup("").join(
             Markup("<li>%s: %s</li>") % (escape(label), escape(str(value)))
             for label, value in answers
         )
-        body = Markup("<p>%s</p><ul>%s</ul>") % (
-            _("Svar från formuläret %(form)s innan det byttes:", form=old_form.name),
-            items,
+        if deleted_questions:
+            title = _(
+                "Svar på frågor som togs bort ur formuläret %(form)s:", form=old_form.name
+            )
+        else:
+            title = _("Svar från formuläret %(form)s innan det byttes:", form=old_form.name)
+        self.message_post(
+            body=Markup("<p>%s</p><ul>%s</ul>") % (title, items),
+            subtype_xmlid="mail.mt_note",
         )
-        self.message_post(body=body, subtype_xmlid="mail.mt_note")
+        self.description = (self.description or Markup("")) + Markup(
+            "<p><strong>%s</strong></p><ul>%s</ul>"
+        ) % (title, items)
