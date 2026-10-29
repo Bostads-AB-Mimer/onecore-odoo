@@ -3,15 +3,19 @@ from odoo.tests import tagged
 from odoo.exceptions import UserError
 from datetime import date, timedelta
 
+from lxml import etree
+
 from ..utils.test_utils import (
     setup_faker,
     create_internal_user,
     create_maintenance_request,
     create_property_option,
     create_building_option,
+    create_parking_space_option,
     create_property,
     create_building,
 )
+from ...models.constants import PRIORITY_CUSTOM
 from ...models.utils.helpers import get_tenant_name, get_main_phone_number
 
 
@@ -72,26 +76,35 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         self.assertEqual(request.due_date, expected_due_date)
 
     def test_due_date_with_priority_6_months(self):
-        """6 månader option should map to 183 days."""
+        """26 veckor (the former 6 månader option) should map to 182 days."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="183"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=26,
         )
-        self.assertEqual(request.due_date, request_date + timedelta(days=183))
+        self.assertEqual(request.due_date, request_date + timedelta(days=182))
 
     def test_due_date_with_priority_more_than_one_year(self):
-        """mer än 1 år option should map to 365 days."""
+        """52 veckor (the former mer än 1 år option) should map to 364 days."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="365"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=52,
         )
-        self.assertEqual(request.due_date, request_date + timedelta(days=365))
+        self.assertEqual(request.due_date, request_date + timedelta(days=364))
 
     def test_manual_due_date_persists_on_write(self):
         """Manually overriding due_date after auto-fill should survive save."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="42"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=6,
         )
         self.assertEqual(request.due_date, request_date + timedelta(days=42))
 
@@ -104,24 +117,28 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         """Changing priority without touching due_date should refresh the deadline."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="14"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=2,
         )
         self.assertEqual(request.due_date, request_date + timedelta(days=14))
 
-        request.write({"priority_expanded": "42"})
+        request.write({"priority_weeks": 6})
         self.assertEqual(request.due_date, request_date + timedelta(days=42))
 
     def test_explicit_due_date_wins_over_recompute(self):
         """Writing priority and due_date in the same vals should persist the user's due_date."""
         request_date = date.today()
         request = create_maintenance_request(
-            self.env, request_date=request_date, priority_expanded="14"
+            self.env,
+            request_date=request_date,
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=2,
         )
 
         manual_due_date = request_date + timedelta(days=100)
-        request.write(
-            {"priority_expanded": "42", "due_date": manual_due_date}
-        )
+        request.write({"priority_weeks": 6, "due_date": manual_due_date})
         request.invalidate_recordset()
         self.assertEqual(request.due_date, manual_due_date)
 
@@ -132,7 +149,8 @@ class TestMaintenanceRequestDueDate(FakerMixin, TransactionCase):
         request = create_maintenance_request(
             self.env,
             request_date=request_date,
-            priority_expanded="42",
+            priority_expanded=PRIORITY_CUSTOM,
+            priority_weeks=6,
             due_date=manual_due_date,
         )
         request.invalidate_recordset()
@@ -280,3 +298,98 @@ class TestMaintenanceRequestUtilityMethods(FakerMixin, TransactionCase):
         # Should have correct domain
         expected_domain = [("id", "in", [self.internal_user.id])]
         self.assertEqual(request.maintenance_team_domain, expected_domain)
+
+
+@tagged("onecore")
+class TestMaintenanceRequestFormPropertyCode(TransactionCase):
+    """MIM-2164: the property number (fastighetsnummer) is shown directly
+    after the property name in every object group of the form."""
+
+    def setUp(self):
+        super().setUp()
+        view = self.env.ref("maintenance.hr_equipment_request_view_form")
+        arch = self.env["maintenance.request"].get_view(view.id, "form")["arch"]
+        self.form = etree.fromstring(arch)
+
+    def _group_fields(self, form_state):
+        groups = self.form.xpath(
+            f"//group[@invisible=\"form_state != '{form_state}'\"]"
+        )
+        self.assertEqual(len(groups), 1, form_state)
+        return groups[0].xpath(".//field")
+
+    def _assert_code_follows_name(self, form_state, name_field, code_field, invisible):
+        fields = self._group_fields(form_state)
+        names = [field.get("name") for field in fields]
+        self.assertIn(code_field, names, form_state)
+        index = names.index(code_field)
+        self.assertGreater(index, 0, form_state)
+        self.assertEqual(names[index - 1], name_field, form_state)
+        code_node = fields[index]
+        self.assertEqual(code_node.get("invisible"), invisible, form_state)
+        self.assertEqual(code_node.get("string"), "Fastighetsnummer", form_state)
+
+    def test_rental_property_shows_estate_code_after_estate(self):
+        self._assert_code_follows_name(
+            "rental-property", "estate", "estate_code", "not estate_code"
+        )
+
+    def test_maintenance_unit_shows_property_code_after_designation(self):
+        self._assert_code_follows_name(
+            "maintenance-unit",
+            "property_designation",
+            "property_code",
+            "not property_code",
+        )
+
+    def test_property_shows_property_code_after_designation(self):
+        self._assert_code_follows_name(
+            "property", "property_designation", "property_code", "not property_code"
+        )
+
+    def test_building_shows_estate_code_after_estate(self):
+        self._assert_code_follows_name(
+            "building", "estate", "estate_code", "not estate_code"
+        )
+
+    def test_building_shows_building_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "building",
+            "building_property_name",
+            "building_property_code",
+            "estate or not building_property_code",
+        )
+
+    def test_parking_space_shows_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "parking-space",
+            "parking_space_property_name",
+            "parking_space_property_code",
+            "not parking_space_property_code",
+        )
+
+    def test_facility_shows_property_code_after_property_name(self):
+        self._assert_code_follows_name(
+            "facility",
+            "facility_property_name",
+            "facility_property_code",
+            "not facility_property_code",
+        )
+
+    def test_property_code_set_when_property_selected(self):
+        option = create_property_option(self.env, code="0123")
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Fastighet", "property_option_id": option.id}
+        )
+        record._onchange_property_option_id()
+        self.assertEqual(record.property_code, "0123")
+
+    def test_parking_space_property_code_set_when_parking_space_selected(self):
+        option = create_parking_space_option(
+            self.env, property_code="0456", property_name="Fastigheten"
+        )
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Bilplats", "parking_space_option_id": option.id}
+        )
+        record._onchange_parking_space_option_id()
+        self.assertEqual(record.parking_space_property_code, "0456")

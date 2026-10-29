@@ -1,3 +1,19 @@
+/* MIM-1841: section-header edit (pen) button.
+   Bootstrap raises .accordion-button z-index on :hover (2) and :focus (3),
+   which would paint the header over the absolutely-positioned pen and make it
+   vanish when the header is hovered. Neutralize that bump for our headers and
+   keep the pen on top. */
+.o-backfill-header {
+    .accordion-button:hover,
+    .accordion-button:focus {
+        z-index: auto;
+    }
+
+    .o-section-edit-btn {
+        z-index: 5;
+    }
+}
+
 .mimer-badge {
     background: #F2F6FF;
     border: 0.5px solid #BACEFF;
@@ -25,12 +41,71 @@ $mimer-orange-text: #E65100;
     color: $mimer-orange-text;
 }
 
+// Mimer new-tenant green (Material green 50 / 300 / 900). Used for "Ny kund"
+// (recently_added_tenant) so it reads apart from the tenant-message/dialog
+// signals above and the default blue .mimer-badge (MIM-1953).
+$mimer-green-bg: #E8F5E9;
+$mimer-green-border: #81C784;
+$mimer-green-text: #1B5E20;
+
+.mimer-badge-green {
+    background: $mimer-green-bg;
+    border-color: $mimer-green-border;
+    color: $mimer-green-text;
+}
+
+// Mimer decision purple (Material purple 50 / 300 / 900). "Hyresgäst vill
+// avsluta" is the only badge that asks for a decision rather than an
+// acknowledgement, so it gets a colour of its own next to the four orange
+// ones, plus the fa-flag-checkered icon so colour is not the only signal
+// (MIM-2036).
+$mimer-purple-bg: #F3E5F5;
+$mimer-purple-border: #BA68C8;
+$mimer-purple-text: #4A148C;
+
+.mimer-badge-purple {
+    background: $mimer-purple-bg;
+    border-color: $mimer-purple-border;
+    color: $mimer-purple-text;
+}
+
+// Resource group card: every number opens its own list, so hovering must
+// single out that row rather than read as "the card is one link". A shadow
+// instead of font-weight: bold text is wider and would shift the row.
+.o_team_card_link {
+    margin-left: -0.25rem;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+
+    &:hover {
+        background: rgba(var(--bs-emphasis-color-rgb), 0.06);
+        text-shadow: 0 0 0.6px currentColor;
+    }
+}
+
+// The help "?" widget (static/src/js/help_tooltip.js) inline after its
+// heading's last word, also when the heading wraps; widgets are wrapped in
+// a block div by default.
+.o_widget_mimer_help_tooltip {
+    display: inline;
+}
+
 // Mimer address blue (Tailwind blue-700) - contrast against white is ~6.7:1 (WCAG AA).
 $mimer-address-blue: #1D4ED8;
 
 .mimer-address {
     color: $mimer-address-blue;
     font-weight: 600;
+}
+
+// MIM-2037: maintenance team on the kanban card, sharing the assignee's row.
+// Muted so the assigned person keeps the weight when both are shown - the
+// team is something you scan for, not something you read. nowrap keeps the
+// dot glued to the team when a long name wraps; an &#160; in the template
+// does not, because OWL collapses it like any other whitespace.
+.mimer-team {
+    color: #6C757D;
+    white-space: nowrap;
 }
 
 /* Component wizard - component list table styling */

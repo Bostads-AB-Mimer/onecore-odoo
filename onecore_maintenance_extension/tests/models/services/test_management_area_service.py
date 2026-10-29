@@ -18,11 +18,13 @@ from odoo.tools import mute_logger
 
 from ...utils.test_utils import (
     create_building,
+    create_building_option,
     create_facility,
     create_internal_user,
     create_maintenance_request,
     create_parking_space,
     create_property,
+    create_property_option,
     create_rental_property,
     create_rental_property_option,
 )
@@ -38,7 +40,7 @@ def kvv_payload(
     cc_code="61140",
     cc_name="Distrikt Väst",
 ):
-    """Shape of GET /properties/{code}/kvv-area ``content``."""
+    """Shape of GET /kvv-areas/resolve ``content``."""
     return {
         "kvvArea": {"id": 41, "code": kvv_code, "name": kvv_name},
         "costCenter": {"id": 4, "code": cc_code, "name": cc_name},
@@ -63,11 +65,14 @@ class ManagementAreaTestMixin:
     def _stage(self, name):
         return self.env["maintenance.stage"].search([("name", "=", name)], limit=1)
 
-    def _apartment_request(self, estate_code="2201", **kwargs):
-        """Lägenhet request whose rental property carries ``estate_code``.
-        Created while OneCore is unconfigured unless the caller patched it."""
+    def _apartment_request(
+        self, estate_code="2201", rental_id="705-022-04-0201", **kwargs
+    ):
+        """Lägenhet request whose rental property carries ``estate_code`` and
+        ``rental_id``. Created while OneCore is unconfigured unless the caller
+        patched it."""
         rental_property = create_rental_property(
-            self.env, rental_property_id="705-022-04-0201", estate_code=estate_code
+            self.env, rental_property_id=rental_id, estate_code=estate_code
         )
         request = create_maintenance_request(
             self.env,
@@ -136,30 +141,135 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         self.assertFalse(self.service.get_property_code(request))
 
     # ------------------------------------------------------------------
-    # fetch_for_property
+    # Location key — the most specific key OneCore can resolve (MIM-1997:
+    # a split property has buildings in different kvv areas, so the property
+    # code alone is unreliable)
+    # ------------------------------------------------------------------
+    def test_location_key_prefers_rental_id_of_apartment(self):
+        request = self._apartment_request(estate_code="2201")
+        self.assertEqual(
+            self.service.get_location_key(request), ("rental_id", "705-022-04-0201")
+        )
+
+    def test_location_key_falls_back_to_property_code_for_legacy_apartment(self):
+        rental_property = create_rental_property(self.env, estate_code="2201")
+        request = create_maintenance_request(
+            self.env, space_caption="Lägenhet", rental_property_id=rental_property.id
+        )
+        self.assertEqual(self.service.get_location_key(request), ("property_code", "2201"))
+
+    def test_location_key_from_parking_space_rental_id(self):
+        request = create_maintenance_request(self.env, space_caption="Bilplats")
+        parking = create_parking_space(
+            self.env,
+            maintenance_request_id=request.id,
+            rental_property_id="705-123-45-0001",
+            property_code="3301",
+        )
+        request.parking_space_id = parking.id
+        self.assertEqual(
+            self.service.get_location_key(request), ("rental_id", "705-123-45-0001")
+        )
+
+    def test_location_key_from_facility_rental_id_then_building(self):
+        request = create_maintenance_request(self.env, space_caption="Lokal")
+        facility = create_facility(
+            self.env,
+            maintenance_request_id=request.id,
+            rental_property_id="705-555-01-0001",
+            building_code="4401-01",
+            property_code="4401",
+        )
+        request.facility_id = facility.id
+        self.assertEqual(
+            self.service.get_location_key(request), ("rental_id", "705-555-01-0001")
+        )
+        facility.rental_property_id = False
+        self.assertEqual(
+            self.service.get_location_key(request), ("building_code", "4401-01")
+        )
+
+    def test_location_key_from_building_code(self):
+        request = create_maintenance_request(self.env, space_caption="Byggnad")
+        building = create_building(
+            self.env, maintenance_request_id=request.id, code="6601-02", property_code="6601"
+        )
+        request.building_id = building.id
+        self.assertEqual(
+            self.service.get_location_key(request), ("building_code", "6601-02")
+        )
+
+    def test_location_key_from_property_code(self):
+        request = create_maintenance_request(self.env, space_caption="Fastighet")
+        prop = create_property(self.env, maintenance_request_id=request.id, code="5501")
+        request.property_id = prop.id
+        self.assertEqual(self.service.get_location_key(request), ("property_code", "5501"))
+
+    def test_location_key_missing(self):
+        request = create_maintenance_request(self.env)
+        self.assertIsNone(self.service.get_location_key(request))
+
+    def test_location_key_from_options_before_save(self):
+        record = self.env["maintenance.request"].new({"space_caption": "Lägenhet"})
+        self.assertIsNone(self.service.get_location_key_from_options(record))
+        record.rental_property_option_id = create_rental_property_option(
+            self.env, rental_id="705-022-04-0201", estate_code="2201"
+        )
+        self.assertEqual(
+            self.service.get_location_key_from_options(record),
+            ("rental_id", "705-022-04-0201"),
+        )
+
+        building = self.env["maintenance.request"].new({"space_caption": "Byggnad"})
+        building.building_option_id = create_building_option(
+            self.env, code="6601-02", property_code="6601"
+        )
+        self.assertEqual(
+            self.service.get_location_key_from_options(building),
+            ("building_code", "6601-02"),
+        )
+
+        prop = self.env["maintenance.request"].new({"space_caption": "Fastighet"})
+        prop.property_option_id = create_property_option(self.env, code="5501")
+        self.assertEqual(
+            self.service.get_location_key_from_options(prop), ("property_code", "5501")
+        )
+
+    # ------------------------------------------------------------------
+    # fetch_for_location
     # ------------------------------------------------------------------
     def test_fetch_skips_when_onecore_not_configured(self):
         with patch(CORE_API_PATH) as MockApi:
-            ok, values = self.service.fetch_for_property("2201")
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
         self.assertFalse(ok)
         self.assertIsNone(values)
         MockApi.assert_not_called()
 
-    def test_fetch_skips_without_property_code(self):
+    def test_fetch_skips_without_location_key(self):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            ok, values = self.service.fetch_for_property(False)
+            ok, values = self.service.fetch_for_location(None)
         self.assertFalse(ok)
         self.assertIsNone(values)
         MockApi.assert_not_called()
+
+    def test_fetch_sends_the_key_kind_it_was_given(self):
+        self._configure_onecore()
+        with patch(CORE_API_PATH) as MockApi:
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
+            fetch.return_value = kvv_payload()
+            self.service.fetch_for_location(("rental_id", "705-022-04-0201"))
+            self.service.fetch_for_location(("building_code", "2201-01"))
+        fetch.assert_any_call(rental_id="705-022-04-0201", timeout=5)
+        fetch.assert_any_call(building_code="2201-01", timeout=5)
 
     def test_fetch_normalizes_payload(self):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
-            ok, values = self.service.fetch_for_property("2201")
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
-        fetch.assert_called_once_with("2201", timeout=5)
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
+        fetch.assert_called_once_with(property_code="2201", timeout=5)
         self.assertTrue(ok)
         self.assertEqual(
             values,
@@ -175,10 +285,10 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         """OneCore has no kvv-area names yet — must not break normalisation."""
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 kvv_name=None
             )
-            ok, values = self.service.fetch_for_property("2201")
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
         self.assertTrue(ok)
         self.assertEqual(values["kvv_area_code"], "61141")
         self.assertFalse(values["kvv_area_name"])
@@ -186,31 +296,31 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
     def test_fetch_unlinked_property_is_ok_without_values(self):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = None
-            ok, values = self.service.fetch_for_property("2201")
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = None
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
         self.assertTrue(ok)
         self.assertIsNone(values)
 
     def test_fetch_error_is_not_ok(self):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.side_effect = Exception(
+            MockApi.return_value.fetch_kvv_area_for_location.side_effect = Exception(
                 "boom"
             )
-            ok, values = self.service.fetch_for_property("2201")
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
         self.assertFalse(ok)
         self.assertIsNone(values)
 
-    def test_fetch_is_cached_per_property(self):
-        """Second lookup of the same property makes no call (form preview +
+    def test_fetch_is_cached_per_location(self):
+        """Second lookup of the same location makes no call (form preview +
         create() share one)."""
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
-            self.service.fetch_for_property("2201")
-            ok, values = self.service.fetch_for_property("2201")
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
+            self.service.fetch_for_location(("property_code", "2201"))
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
             self.assertEqual(
-                MockApi.return_value.fetch_kvv_area_for_property.call_count, 1
+                MockApi.return_value.fetch_kvv_area_for_location.call_count, 1
             )
         self.assertTrue(ok)
         self.assertEqual(values["cost_center_code"], "61140")
@@ -218,12 +328,12 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
     def test_fetch_error_is_not_cached(self):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            fetch = MockApi.return_value.fetch_kvv_area_for_property
+            fetch = MockApi.return_value.fetch_kvv_area_for_location
             fetch.side_effect = Exception("boom")
-            self.service.fetch_for_property("2201")
+            self.service.fetch_for_location(("property_code", "2201"))
             fetch.side_effect = None
             fetch.return_value = kvv_payload()
-            ok, values = self.service.fetch_for_property("2201")
+            ok, values = self.service.fetch_for_location(("property_code", "2201"))
         self.assertTrue(ok)
         self.assertEqual(values["cost_center_code"], "61140")
 
@@ -244,7 +354,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             {"space_caption": "Lägenhet", "rental_property_option_id": option.id}
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.assertTrue(self.service.preview(record))
         self.assertEqual(record.cost_center_name, "Distrikt Väst")
         self.assertEqual(record.kvv_area_code, "61141")
@@ -261,7 +371,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             {"space_caption": "Lägenhet", "rental_property_option_id": option.id}
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.service.preview(record)
         self.assertEqual(record.maintenance_team_id, self.vast_team)
 
@@ -278,7 +388,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             }
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.service.preview(record)
         self.assertEqual(record.maintenance_team_id, vitvaror)
         self.assertEqual(record.cost_center_name, "Distrikt Väst")
@@ -290,7 +400,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             {"space_caption": "Lägenhet", "rental_property_option_id": option.id}
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 cc_code="61199", cc_name="Distrikt Okänt"
             )
             self.service.preview(record)
@@ -306,7 +416,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.env, estate_code="2201"
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.service.preview(record)
         self.assertEqual(record.cost_center_code, "61140")
         self.assertEqual(record.maintenance_team_id, self.vast_team)
@@ -317,7 +427,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.env, estate_code="3301"
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 kvv_code="61111", cc_code="61110", cc_name="Distrikt Mitt"
             )
             self.service.preview(record)
@@ -339,7 +449,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.env, estate_code="2201"
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.service.preview(record)
         self.assertEqual(record.maintenance_team_id, vitvaror)
         self.assertEqual(record.cost_center_code, "61140")
@@ -363,7 +473,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             }
         )
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.assertFalse(self.service.preview(unchanged))
         self.assertEqual(unchanged.cost_center_code, "61140")
 
@@ -374,7 +484,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.assertTrue(self.service.populate(request))
         self.assertEqual(request.kvv_area_code, "61141")
         self.assertEqual(request.kvv_area_name, "Distrikt Väst: BÄCKBY")
@@ -388,14 +498,14 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
             self.assertFalse(self.service.populate(request))
-            MockApi.return_value.fetch_kvv_area_for_property.assert_not_called()
+            MockApi.return_value.fetch_kvv_area_for_location.assert_not_called()
 
     def test_populate_force_refetches(self):
         request = self._apartment_request()
         self._set_district(request, cc_code="61110", cc_name="Distrikt Mitt")
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.assertTrue(self.service.populate(request, force=True))
         self.assertEqual(request.cost_center_code, "61140")
 
@@ -404,7 +514,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.side_effect = Exception(
+            MockApi.return_value.fetch_kvv_area_for_location.side_effect = Exception(
                 "boom"
             )
             self.assertFalse(self.service.populate(request))
@@ -416,7 +526,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = None
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = None
             self.assertFalse(self.service.populate(request))
         self.assertFalse(request.cost_center_code)
         self.assertTrue(request.management_area_lookup_at)
@@ -434,7 +544,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         messages_before = len(request.message_ids)
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             self.service.populate(request)
         self.assertEqual(len(request.message_ids), messages_before)
 
@@ -514,7 +624,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         self.assertFalse(request.cost_center_code)
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload()
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload()
             result = self.service.assign_team(request)
         self.assertEqual(result["team"], self.vast_team)
         self.assertEqual(request.cost_center_code, "61140")
@@ -524,7 +634,7 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
         request = self._apartment_request()
         self._configure_onecore()
         with patch(CORE_API_PATH) as MockApi:
-            MockApi.return_value.fetch_kvv_area_for_property.return_value = kvv_payload(
+            MockApi.return_value.fetch_kvv_area_for_location.return_value = kvv_payload(
                 cc_code="61199", cc_name="Distrikt Okänt"
             )
             result = self.service.assign_team(request)
@@ -667,30 +777,56 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
     # ------------------------------------------------------------------
     # Backfill
     # ------------------------------------------------------------------
+    @staticmethod
+    def _node(type_, code, children=None, **extra):
+        node = {"type": type_, "code": code, "name": None,
+                "subtypeCode": None, "subtypeName": None, **extra}
+        if children is not None:
+            node["children"] = children
+        return node
+
     def _mock_trees(self, MockApi):
+        """GET /property-tree?groupBy=costCenter with objects: one district,
+        one kvv area, two whole properties. 2201 has one building with a
+        staircase-hung residence and a markyta parking space straight under
+        the property."""
         api = MockApi.return_value
         api.fetch_cost_centers.return_value = [
             {"id": 4, "code": "61140", "name": "Distrikt Väst"}
         ]
-        api.fetch_cost_center_tree.return_value = {
+        api.fetch_property_tree_for_cost_center.return_value = {
+            "grouping": "costCenter",
             "id": 4,
             "code": "61140",
             "name": "Distrikt Väst",
-            "kvvAreas": [
+            "groups": [
                 {
                     "id": 41,
                     "code": "61141",
                     "name": None,
-                    "properties": [{"code": "2201"}, {"code": "2202"}],
+                    "responsible": None,
+                    "properties": [
+                        self._node("property", "2201", [
+                            self._node("building", "2201-01", [
+                                self._node("staircase", "A", [
+                                    self._node("residence", "705-022-04-0201"),
+                                ]),
+                            ]),
+                            self._node("parkingSpace", "705-022-00-0001"),
+                        ]),
+                        self._node("property", "2202", []),
+                    ],
                 }
             ],
         }
         return api
 
-    def test_backfill_stamps_requests_from_cost_center_trees(self):
+    def test_backfill_stamps_requests_from_property_trees(self):
         linked_1 = self._apartment_request(estate_code="2201")
         linked_2 = self._apartment_request(estate_code="2201")
-        unlinked = self._apartment_request(estate_code="9999")
+        unlinked = self._apartment_request(
+            estate_code="9999", rental_id="705-999-99-9999"
+        )
         no_code = create_maintenance_request(self.env)
         team_before = linked_1.maintenance_team_id
         self._configure_onecore()
@@ -700,8 +836,8 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             processed = self.service.backfill_batch(limit=500)
 
         self.assertGreaterEqual(processed, 4)
-        api.fetch_cost_center_tree.assert_called_once_with(4)
-        api.fetch_kvv_area_for_property.assert_not_called()
+        api.fetch_property_tree_for_cost_center.assert_called_once_with(4)
+        api.fetch_kvv_area_for_location.assert_not_called()
         for request in (linked_1, linked_2):
             self.assertEqual(request.cost_center_code, "61140")
             self.assertEqual(request.cost_center_name, "Distrikt Väst")
@@ -713,6 +849,84 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
             self.assertTrue(request.management_area_lookup_at)
         # Display only: team/resource untouched
         self.assertEqual(linked_1.maintenance_team_id, team_before)
+
+    def test_backfill_resolves_requests_by_most_specific_tree_node(self):
+        """Rental id beats building code beats property code, so a rental
+        object is found wherever it hangs (staircase, building or property)."""
+        apartment = self._apartment_request(estate_code="9999")  # id only
+        parking_request = create_maintenance_request(self.env, space_caption="Bilplats")
+        parking = create_parking_space(
+            self.env,
+            maintenance_request_id=parking_request.id,
+            rental_property_id="705-022-00-0001",
+            property_code="9999",
+        )
+        parking_request.parking_space_id = parking.id
+        building_request = create_maintenance_request(self.env, space_caption="Byggnad")
+        building = create_building(
+            self.env, maintenance_request_id=building_request.id,
+            code="2201-01", property_code="9999",
+        )
+        building_request.building_id = building.id
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            self._mock_trees(MockApi)
+            self.service.backfill_batch(limit=500)
+
+        for request in (apartment, parking_request, building_request):
+            self.assertEqual(request.kvv_area_code, "61141")
+            self.assertEqual(request.cost_center_code, "61140")
+
+    def test_backfill_maps_split_properties_by_building_and_default_side(self):
+        """MIM-1997: a split property appears once per kvv area with only
+        that area's buildings and a ``share`` kind. Its objects and buildings
+        map to their own side; its bare property code maps to the default
+        side, like GET /kvv-areas/resolve does for a property code."""
+        split_a = self._apartment_request(estate_code="2203")  # 705-022-04-0201
+        split_b = create_maintenance_request(self.env, space_caption="Byggnad")
+        building = create_building(
+            self.env, maintenance_request_id=split_b.id, code="2203-02", property_code="2203"
+        )
+        split_b.building_id = building.id
+        property_level = create_maintenance_request(self.env, space_caption="Fastighet")
+        prop = create_property(
+            self.env, maintenance_request_id=property_level.id, code="2203"
+        )
+        property_level.property_id = prop.id
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi:
+            api = self._mock_trees(MockApi)
+            api.fetch_property_tree_for_cost_center.return_value["groups"] = [
+                {
+                    "id": 41, "code": "61141", "name": None, "responsible": None,
+                    "properties": [
+                        self._node("property", "2203", [
+                            self._node("building", "2203-01", [
+                                self._node("residence", "705-022-04-0201"),
+                            ]),
+                        ], share="default"),
+                    ],
+                },
+                {
+                    "id": 42, "code": "61142", "name": None, "responsible": None,
+                    "properties": [
+                        self._node("property", "2203", [
+                            self._node("building", "2203-02", []),
+                        ], share="exception"),
+                    ],
+                },
+            ]
+            self.service.backfill_batch(limit=500)
+
+        api.fetch_kvv_area_for_location.assert_not_called()
+        self.assertEqual(split_a.kvv_area_code, "61141")
+        self.assertEqual(split_b.kvv_area_code, "61142")
+        self.assertEqual(split_b.cost_center_code, "61140")
+        self.assertEqual(property_level.kvv_area_code, "61141")
+        for request in (split_a, split_b, property_level):
+            self.assertTrue(request.management_area_lookup_at)
 
     def test_backfill_does_not_reprocess_stamped_requests(self):
         requests = self._apartment_request(estate_code="2201") | self._apartment_request(
@@ -765,8 +979,8 @@ class TestManagementAreaService(ManagementAreaTestMixin, TransactionCase):
                 {"id": 4, "code": "61140", "name": "Distrikt Väst"},
                 {"id": 5, "code": "61110", "name": "Distrikt Mitt"},
             ]
-            api.fetch_cost_center_tree.side_effect = [
-                api.fetch_cost_center_tree.return_value,
+            api.fetch_property_tree_for_cost_center.side_effect = [
+                api.fetch_property_tree_for_cost_center.return_value,
                 None,  # OneCore hiccup on the second district
             ]
             self.assertEqual(self.service.backfill_batch(limit=500), 0)

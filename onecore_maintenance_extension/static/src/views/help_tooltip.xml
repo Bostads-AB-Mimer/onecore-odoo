@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Same markup and popover as the field help "?" in web.FormLabel;
+         web.FieldTooltip keeps the text's line breaks. -->
+    <t t-name="onecore_maintenance_extension.HelpTooltip">
+        <sup class="d-print-none text-info p-1"
+             t-att="{'data-tooltip-template': 'web.FieldTooltip', 'data-tooltip-info': tooltipInfo, 'data-tooltip-touch-tap-to-show': 'true'}">?</sup>
+    </t>
+
+</templates>

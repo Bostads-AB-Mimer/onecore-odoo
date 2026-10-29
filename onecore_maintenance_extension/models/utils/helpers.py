@@ -1,6 +1,31 @@
 """Helper functions for maintenance requests."""
 
+import logging
 import os
+
+from markupsafe import Markup
+
+_logger = logging.getLogger(__name__)
+
+# OneCore's lease status strings, mapped to the numeric codes used throughout
+# this addon (LEASE_STATUS_LABELS in constants.py).
+LEASE_STATUS_MAP = {"Current": 0, "Upcoming": 1, "AboutToEnd": 2, "Ended": 3}
+UNKNOWN_LEASE_STATUS = 4
+
+
+def normalize_lease_status(raw_status):
+    """Normalize a OneCore lease status to a LEASE_STATUS_LABELS key.
+
+    Accepts either OneCore's string status ("Current", "Upcoming", ...) or an
+    already-numeric LEASE_STATUS_LABELS code, so callers that re-fetch a lease
+    and callers that already hold a normalized value can share this function.
+    """
+    if raw_status in LEASE_STATUS_MAP:
+        return LEASE_STATUS_MAP[raw_status]
+    if raw_status in LEASE_STATUS_MAP.values():
+        return raw_status
+    _logger.warning("Unexpected lease status value: %s", raw_status)
+    return UNKNOWN_LEASE_STATUS
 
 
 def is_local():
@@ -34,3 +59,17 @@ def select_active_lease(lease_records):
         if matches:
             return max(matches, key=lambda r: r.lease_number or "")
     return max(lease_records, key=lambda r: r.lease_number or "")
+
+
+def close_request_reason_html(reason):
+    """Free text for a close-request message body, or None when blank (MIM-2036).
+
+    Escaped, then line breaks as <br>: Mina sidor renders message bodies with
+    v-html, and the text is a tenant's or a handläggare's own words, so it must
+    never reach the body as markup. Markup.join escapes every piece it joins.
+    Whitespace-only counts as no reason at all.
+    """
+    text = str(reason or "").strip()
+    if not text:
+        return None
+    return Markup("<br>").join(text.splitlines())

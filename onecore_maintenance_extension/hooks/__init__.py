@@ -73,6 +73,25 @@ STAGE_DATA = {
 
 def _post_init_hook(env):
     _update_maintenance_stages(env)
+    _label_owner_as_orderer(env)
+
+
+def _label_owner_as_orderer(env):
+    """Label maintenance.request.owner_user_id with this module's string,
+    "Beställare", in every installed language.
+
+    The field's string only replaces the en_US label: installing or upgrading
+    keeps the other languages' labels, such as stock maintenance's Swedish
+    "Skapad av användare", and translation files only fill missing ones.
+    Run from the post_init hook and from migrations/19.0.1.0.14. Idempotent.
+    """
+    field = env["ir.model.fields"]._get("maintenance.request", "owner_user_id")
+    label = env["maintenance.request"]._fields["owner_user_id"].string
+    langs = [code for code, _name in env["res.lang"].get_installed() if code != "en_US"]
+    if not field or not langs:
+        return
+    field.update_field_translations("field_description", dict.fromkeys(langs, label))
+    env.registry.clear_cache("stable")
 
 
 def _has_lang(env, lang_code):

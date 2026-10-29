@@ -143,15 +143,17 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
     def test_hours_must_be_within_limits(self):
         wizard = self._open_wizard()
         wizard.action_today()
-        for hours in (0, -1, 25):
+        for hours in (0, -1, 1000):
             wizard.hours_spent = hours
             with self.assertRaises(UserError):
                 wizard.action_confirm_hours()
-        wizard.hours_spent = 1.5
-        wizard.action_confirm_hours()
-        self.assertEqual(wizard.step, "job_type")
-        wizard.action_back()
-        self.assertEqual(wizard.step, "hours")
+        # Painters report all hours on a request at once, well above a day.
+        for hours in (1.5, 25, 999):
+            wizard.hours_spent = hours
+            wizard.action_confirm_hours()
+            self.assertEqual(wizard.step, "job_type")
+            wizard.action_back()
+            self.assertEqual(wizard.step, "hours")
 
     def test_weekday_label_is_swedish(self):
         wizard = self._open_wizard()
@@ -188,6 +190,11 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
 
         wizard.date_for_work = fields.Date.to_date("2026-01-15")
         self.assertTrue(wizard._build_payload()["dateForWork"].endswith("+01:00"))
+
+    def test_payload_sends_max_hours(self):
+        wizard = self._wizard_at_job_type(hours=999)
+        wizard.job_type = "painting"
+        self.assertEqual(wizard._build_payload()["hoursSpent"], 999)
 
     # ------------------------------------------------------------------
     # Submit
@@ -245,7 +252,7 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
     def test_submit_rechecks_values_written_over_rpc(self):
         today = fields.Date.context_today(self.env["maintenance.time.report.wizard"])
         bad_values = [
-            {"hours_spent": 500},
+            {"hours_spent": 1000},
             {"hours_spent": 0},
             {"date_for_work": today + timedelta(days=3)},
             {"step": "date"},
@@ -325,7 +332,7 @@ class TestMaintenanceTimeReportWizard(ManagementAreaTestMixin, TransactionCase):
 
     def _search_property(self, wizard, core_api, properties, district=None):
         core_api.return_value.fetch_properties.return_value = properties
-        core_api.return_value.fetch_kvv_area_for_property.return_value = district
+        core_api.return_value.fetch_kvv_area_for_location.return_value = district
         wizard.property_search = "MINKEN"
         result = wizard._onchange_property_search()
         wizard._onchange_property_option_id()

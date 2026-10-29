@@ -14,20 +14,22 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
 
             # Reuse existing rental property option if one already exists for this property
             property_code = property_data["code"]
-            rental_property_option = self.env[
-                "maintenance.rental.property.option"
-            ].search(
-                [("user_id", "=", self.env.user.id), ("code", "=", property_code)],
-                limit=1,
+            rental_id = item.get("rental_id") or property_data["rentalInformation"].get(
+                "rentalId"
             )
+            rental_property_option = self._existing_option(
+                "maintenance.rental.property.option", rental_id
+            )
+            is_new_object = not rental_property_option
 
-            if not rental_property_option:
+            if is_new_object:
                 rental_property_option = self.env[
                     "maintenance.rental.property.option"
                 ].create(
                     {
                         "user_id": self.env.user.id,
                         "name": property_data["rentalInformation"].get("rentalId"),
+                        "rental_id": rental_id,
                         "address": property_data["name"],
                         "code": property_code,
                         "property_type": property_data["type"].get("name"),
@@ -54,6 +56,11 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
             else:
                 self._clear_lease_and_tenant_options()
 
+            # A renewed contract is two lease items on one object: its units
+            # were created with the first item, do not list them twice.
+            if not is_new_object:
+                continue
+
             for maintenance_unit in maintenance_units:
                 self.env["maintenance.maintenance.unit.option"].create(
                     {
@@ -64,6 +71,9 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
                         "type": maintenance_unit["type"],
                         "code": maintenance_unit["code"],
                         "rental_property_option_id": rental_property_option.id,
+                        "serves_rental_object": bool(
+                            maintenance_unit.get("serves_rental_object")
+                        ),
                     }
                 )
 
@@ -75,10 +85,18 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
         if property_records:
             self.record.rental_property_option_id = property_records[0].id
 
-        maintenance_unit_records = self.env[
-            "maintenance.maintenance.unit.option"
-        ].search([("user_id", "=", self.env.user.id)])
-        if maintenance_unit_records:
-            self.record.maintenance_unit_option_id = maintenance_unit_records[0].id
-
         self._set_lease_and_tenant_selections(search_type, search_value)
+
+        # The active lease decides the object (the lease onchange would switch
+        # it anyway); pick the unit for THAT object, not for property_records[0].
+        lease_object = self.record.lease_option_id.rental_property_option_id
+        if lease_object:
+            self.record.rental_property_option_id = lease_object.id
+
+        # The unit Xpand assigns to the selected object, or none — never the
+        # property's first unit (MIM-1921: it was always the same laundry room
+        # for every tenant on the property). Imported here: the services
+        # package imports the handlers (direct_lookup_service).
+        from ..services.form_field_service import FormFieldService
+
+        FormFieldService(self.env).select_serving_maintenance_unit(self.record)

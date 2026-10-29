@@ -13,23 +13,31 @@ class FacilityHandler(RentalObjectBaseHandler):
             if not facility:
                 continue
 
-            facility_option = self.env["maintenance.facility.option"].create(
-                {
-                    "user_id": self.env.user.id,
-                    "name": facility.get("name", "Namn saknas"),
-                    "code": facility.get("code"),
-                    "type_name": facility.get("type", {}).get("name"),
-                    "type_code": facility.get("type", {}).get("code"),
-                    "area": str(facility.get("area", "")),
-                    "building_code": facility.get("building", {}).get("code"),
-                    "building_name": facility.get("building", {}).get("name"),
-                    "property_code": facility.get("property", {}).get("code"),
-                    "property_name": facility.get("property", {}).get("name"),
-                    "rental_type": facility.get("rentalInformation", {})
-                    .get("type", {})
-                    .get("name"),
-                }
+            # Reuse existing facility option if one already exists for this facility
+            rental_id = item.get("rental_id")
+            facility_option = self._existing_option(
+                "maintenance.facility.option", rental_id
             )
+
+            if not facility_option:
+                facility_option = self.env["maintenance.facility.option"].create(
+                    {
+                        "user_id": self.env.user.id,
+                        "name": facility.get("name", "Namn saknas"),
+                        "rental_id": rental_id,
+                        "code": facility.get("code"),
+                        "type_name": facility.get("type", {}).get("name"),
+                        "type_code": facility.get("type", {}).get("code"),
+                        "area": str(facility.get("area", "")),
+                        "building_code": facility.get("building", {}).get("code"),
+                        "building_name": facility.get("building", {}).get("name"),
+                        "property_code": facility.get("property", {}).get("code"),
+                        "property_name": facility.get("property", {}).get("name"),
+                        "rental_type": facility.get("rentalInformation", {})
+                        .get("type", {})
+                        .get("name"),
+                    }
+                )
 
             # Only create lease and tenant options if lease data exists
             if lease:

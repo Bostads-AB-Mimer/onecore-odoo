@@ -4,6 +4,7 @@ import { patch } from "@web/core/utils/patch";
 import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
 import { useService } from "@web/core/utils/hooks";
 import ConfirmDialog from "./confirm_dialog";
+import { confirmReturnToTeam } from "./confirm_return_dialog";
 import { askComponentQuestion } from "./component_question_dialog";
 import { openComponentWizardDialog } from "./open_component_wizard_dialog";
 
@@ -73,13 +74,14 @@ patch(StatusBarField.prototype, {
     const goingToAtersand =
       isMaintenanceRequest && item.label === "Återsänd" && !item.isSelected;
 
-    // MIM-486: all users confirm before returning a request — the move
-    // hands the request back to the orderer's team.
+    // MIM-486: all users confirm before returning a request, and are told
+    // which team it goes back to (see confirmReturnToTeam).
     if (goingToAtersand) {
-      const confirmed = await ConfirmDialog(
+      const confirmed = await confirmReturnToTeam(
+        this.orm,
         this.dialogService,
-        "Bekräfta återsändning",
-        "Är du säker på att du vill återsända ärendet?"
+        record.resId,
+        item.value
       );
       if (!confirmed) {
         return;

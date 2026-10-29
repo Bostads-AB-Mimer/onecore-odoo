@@ -134,6 +134,41 @@ class TestMaintenanceStageManager(StageTestMixin, TransactionCase):
         request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
         self.assertEqual(request.performed_date, performed_date)
 
+    def test_performed_date_set_to_closing_time_when_closed_without_utford(self):
+        """Closed without passing Utförd: the work counts as performed when
+        the request is closed, so "Utfört datum" covers it."""
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        request.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+        self.assertFalse(request.performed_date)
+
+        request.with_user(self.internal_user).write({"stage_id": self.stage_avslutad.id})
+        self.assertTrue(request.closed_date)
+        self.assertEqual(request.performed_date, request.closed_date)
+
+    def test_closing_several_requests_dates_only_the_undated(self):
+        """One write closing a performed and an unperformed request: the
+        first keeps its date, the second gets the closing time."""
+        performed_at = datetime(2026, 9, 1, 12, 0, 0)
+        performed = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        performed.with_user(self.internal_user).write({"stage_id": self.stage_utford.id})
+        performed.sudo().write({"performed_date": performed_at})
+        started = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        started.with_user(self.internal_user).write({"stage_id": self.stage_paborjad.id})
+
+        (performed | started).with_user(self.internal_user).write(
+            {"stage_id": self.stage_avslutad.id}
+        )
+
+        self.assertEqual(performed.performed_date, performed_at)
+        self.assertTrue(started.closed_date)
+        self.assertEqual(started.performed_date, started.closed_date)
+
     def test_closed_date_cleared_when_moving_back_from_avslutad(self):
         """Moving from 'Avslutad' to any other stage should clear closed_date"""
         request = create_maintenance_request(
@@ -598,3 +633,113 @@ class TestFieldChangeTracker(TransactionCase):
         final_message_count = self.env["mail.message"].search_count([])
         # Allow for some messages (like creation notification) but not change tracking
         self.assertLess(final_message_count - initial_message_count, 3)
+
+
+@tagged("onecore")
+class TestStageChangeLog(StageTestMixin, TransactionCase):
+    """MIM-1965: a stage change must show "Status: gammal → ny" in the chatter."""
+
+    def setUp(self):
+        super().setUp()
+        self.internal_user = create_internal_user(self.env)
+        self._setup_common_stages()
+        self.status_subtype = self.env.ref("maintenance.mt_req_status")
+
+    def _flush_tracking(self):
+        # Tracking messages are posted in a precommit hook
+        self.env.flush_all()
+        self.env.cr.flush()
+
+    def _status_messages(self, request):
+        request.invalidate_recordset(["message_ids"])
+        return request.message_ids.filtered(
+            lambda m: m.subtype_id == self.status_subtype
+        ).sorted("id", reverse=True)
+
+    def _stage_notes(self, request):
+        request.invalidate_recordset(["message_ids"])
+        return request.message_ids.filtered(
+            lambda m: m.subtype_id == self.env.ref("mail.mt_note")
+            and "→" in (m.body or "")
+            and self.stage_paborjad.name in (m.body or "")
+        )
+
+    def test_stage_write_logs_old_and_new_stage(self):
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        self._flush_tracking()
+        self.assertEqual(request.stage_id, self.stage_tilldelad)
+        before = self._status_messages(request)
+
+        # create() returns records with creating_records=True, which skips
+        # FieldChangeTracker; clear it so the duplicate-note check can fail.
+        # Same for lang: ONECore writes over RPC without one.
+        request.with_user(self.internal_user).with_context(
+            creating_records=False, lang=None
+        ).write({"stage_id": self.stage_paborjad.id})
+        self._flush_tracking()
+
+        new_messages = self._status_messages(request) - before
+        self.assertEqual(len(new_messages), 1)
+        body = str(new_messages.body)
+        self.assertIn("Status:", body)
+        self.assertIn(self.stage_tilldelad.name, body)
+        self.assertIn(self.stage_paborjad.name, body)
+        self.assertIn("→", body)
+        # One message per stage change, no extra log note with the same info
+        self.assertFalse(self._stage_notes(request))
+
+    def test_automatic_stage_change_on_assignment_logs_old_and_new_stage(self):
+        request = create_maintenance_request(self.env, stage_id=self.stage_vantar.id)
+        self._flush_tracking()
+        before = self._status_messages(request)
+
+        request.write({"user_id": self.internal_user.id})
+        self._flush_tracking()
+
+        self.assertEqual(request.stage_id, self.stage_tilldelad)
+        new_messages = self._status_messages(request) - before
+        self.assertEqual(len(new_messages), 1)
+        body = str(new_messages.body)
+        self.assertIn(self.stage_vantar.name, body)
+        self.assertIn(self.stage_tilldelad.name, body)
+        self.assertIn("→", body)
+
+    def test_same_stage_write_logs_nothing(self):
+        request = create_maintenance_request(self.env, stage_id=self.stage_vantar.id)
+        self._flush_tracking()
+        message_count = len(request.message_ids)
+
+        request.write({"stage_id": self.stage_vantar.id})
+        self._flush_tracking()
+
+        request.invalidate_recordset(["message_ids"])
+        self.assertEqual(len(request.message_ids), message_count)
+
+    def test_stage_tracking_value_hidden_only_when_body_shows_change(self):
+        request = create_maintenance_request(
+            self.env, stage_id=self.stage_vantar.id, user_id=self.internal_user.id
+        )
+        self._flush_tracking()
+        before = self._status_messages(request)
+        request.write({"stage_id": self.stage_paborjad.id})
+        self._flush_tracking()
+        message = (self._status_messages(request) - before).sudo()
+
+        stage_tracking = message.tracking_value_ids.filtered(
+            lambda t: t.field_id.name == "stage_id"
+        )
+        self.assertTrue(stage_tracking)
+        self.assertFalse(
+            request._track_filter_for_display(message.tracking_value_ids)
+            & stage_tracking
+        )
+
+        # Older tracking messages have no body: keep showing the value there
+        message.write({"body": ""})
+        self.assertEqual(
+            request._track_filter_for_display(message.tracking_value_ids)
+            & stage_tracking,
+            stage_tracking,
+        )

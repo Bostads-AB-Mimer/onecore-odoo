@@ -2,7 +2,7 @@
 
 {
     "name": "ONECore Web Extension",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "author": "Bostads-AB-Mimer",
     "sequence": 100,
     "category": "Hidden",
@@ -13,6 +13,7 @@
         "web.assets_backend": [
             "onecore_web_extension/static/src/views/*.xml",
             "onecore_web_extension/static/src/js/*.js",
+            "onecore_web_extension/static/src/scss/*.scss",
         ],
     },
     "auto_install": True,
