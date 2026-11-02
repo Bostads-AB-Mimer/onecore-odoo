@@ -15,7 +15,14 @@
                         <field string="Telefonnummer" name="phone_number" />
                         <field string="Kundnummer" name="contact_code" />
                         <field string="Tvättstuga" name="maintenance_unit_id" />
-                        <field string="Hyresobjekt" name="rental_property_id" />
+                        <!-- The object number of a lägenhet, bilplats or
+                             lokal: the ärende only links a lägenhet through
+                             rental_property_id -->
+                        <field string="Hyresobjekt" name="rental_property_id"
+                            filter_domain="['|', '|',
+                                ('rental_property_id.rental_property_id', 'ilike', self),
+                                ('parking_space_id.rental_property_id', 'ilike', self),
+                                ('facility_id.rental_property_id', 'ilike', self)]" />
                         <field name="category_id" />
                         <field name="user_id" />
                         <field name="equipment_id" />
@@ -609,6 +616,8 @@
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
                                             invisible="not parking_space_id and create_date != True" />
+                                        <field name="parking_space_object_number" string="Objektsnummer"
+                                            invisible="not parking_space_object_number" />
                                         <field name="parking_space_code" string="Kod"
                                             invisible="not parking_space_code" />
                                         <field name="parking_space_type_name" string="P-platstyp"
@@ -647,6 +656,8 @@
                                             options="{'no_create_edit': True, 'no_create':True, 'no_open': True}"
                                             readonly="1"
                                             invisible="not facility_id and create_date != True" />
+                                        <field name="facility_object_number" string="Objektsnummer"
+                                            invisible="not facility_object_number" />
                                         <field
                                             name="facility_code" string="Kod"
                                             invisible="not facility_code" />
