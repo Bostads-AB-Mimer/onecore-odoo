@@ -9,6 +9,7 @@ class ParkingSpaceFieldsMixin(models.AbstractModel):
     parking_space_id = fields.Many2one("maintenance.parking.space", string="Parking Space ID", store=True)
     parking_space_name = fields.Char("P-plats Namn", related="parking_space_id.name", depends=["parking_space_id"])
     parking_space_code = fields.Char("P-plats Kod", related="parking_space_id.code", depends=["parking_space_id"])
+    parking_space_object_number = fields.Char("P-plats Objektsnummer", related="parking_space_id.rental_property_id", depends=["parking_space_id"])
     parking_space_type_name = fields.Char("P-platstyp", related="parking_space_id.type_name", depends=["parking_space_id"])
     parking_space_type_code = fields.Char("P-platstypkod", related="parking_space_id.type_code", depends=["parking_space_id"])
     parking_space_number = fields.Char("P-platsnummer", related="parking_space_id.number", depends=["parking_space_id"])
