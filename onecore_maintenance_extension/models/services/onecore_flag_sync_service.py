@@ -17,6 +17,7 @@ request every run.
 """
 
 import logging
+import random
 import time
 
 from markupsafe import Markup, escape
@@ -445,7 +446,10 @@ class OneCoreFlagSyncService:
             requests_by_lease_id.setdefault(request.lease_id.lease_id, []).append(
                 request
             )
-        lease_ids = sorted(requests_by_lease_id)
+        # Shuffled so that a run stopped at the time limit leaves different
+        # leases for the next run, not always the same tail.
+        lease_ids = list(requests_by_lease_id)
+        random.shuffle(lease_ids)
         if not lease_ids:
             return 0
 

@@ -620,8 +620,8 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
         MockApi.assert_not_called()
 
     def test_lease_ids_are_chunked(self):
-        """Patch the size rather than create 500 leases - the boundary logic
-        is what matters, not the constant's value."""
+        """Patch the size rather than create a full batch of leases - the
+        boundary logic is what matters, not the constant's value."""
         self._request_with_lease(lease_ref="1/01", lease_status=0)
         self._request_with_lease(lease_ref="2/01", lease_status=0)
         self._request_with_lease(lease_ref="3/01", lease_status=0)
@@ -634,9 +634,29 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
             self.service.sync_lease_status()
 
         calls = MockApi.return_value.fetch_leases_batch.call_args_list
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][0][0], ["1/01", "2/01"])
-        self.assertEqual(calls[1][0][0], ["3/01"])
+        chunks = [call[0][0] for call in calls]
+        self.assertEqual([len(chunk) for chunk in chunks], [2, 1])
+        self.assertEqual(sorted(sum(chunks, [])), ["1/01", "2/01", "3/01"])
+
+    def test_lease_ids_are_shuffled(self):
+        """A run stopped at the time limit must not leave the same leases
+        for the next run every time."""
+        self._request_with_lease(lease_ref="1/01", lease_status=0)
+        self._request_with_lease(lease_ref="2/01", lease_status=0)
+        self._request_with_lease(lease_ref="3/01", lease_status=0)
+        self._configure_onecore()
+
+        with patch(CORE_API_PATH) as MockApi, patch.object(
+            sync_module, "LEASE_BATCH_SIZE", 1
+        ), patch.object(sync_module, "random") as mock_random:
+            mock_random.shuffle.side_effect = lambda ids: ids.sort(reverse=True)
+            MockApi.return_value.fetch_leases_batch.return_value = []
+            self.service.sync_lease_status()
+
+        calls = MockApi.return_value.fetch_leases_batch.call_args_list
+        self.assertEqual(
+            [call[0][0] for call in calls], [["3/01"], ["2/01"], ["1/01"]]
+        )
 
     def test_batch_call_gets_more_time_than_the_other_lookups(self):
         """Leasing fetches every lease in the batch from Tenfast, so the call
@@ -716,13 +736,15 @@ class TestSyncLeaseStatus(FlagSyncTestMixin, TransactionCase):
         request_two = self._request_with_lease(lease_ref="2/01", lease_status=0)
         self._configure_onecore()
 
+        def answer(chunk, **kwargs):
+            if chunk == ["2/01"]:
+                raise Exception("boom")
+            return [_fresh_lease(lease_id, status="AboutToEnd") for lease_id in chunk]
+
         with patch(CORE_API_PATH) as MockApi, patch.object(
             sync_module, "LEASE_BATCH_SIZE", 1
         ):
-            MockApi.return_value.fetch_leases_batch.side_effect = [
-                [_fresh_lease("1/01", status="AboutToEnd")],
-                Exception("boom"),
-            ]
+            MockApi.return_value.fetch_leases_batch.side_effect = answer
             self.service.sync_lease_status()
 
         self.assertEqual(request_one.lease_id.lease_status, 2)
