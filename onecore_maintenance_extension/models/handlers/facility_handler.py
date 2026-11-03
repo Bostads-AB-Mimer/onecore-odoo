@@ -4,6 +4,8 @@ from .rental_object_base_handler import RentalObjectBaseHandler
 class FacilityHandler(RentalObjectBaseHandler):
     """Handler for facility-related maintenance requests."""
 
+    _object_option_field = "facility_option_id"
+
     def update_form_options(self, work_order_data):
         """Update form options with facility data."""
         for item in work_order_data:

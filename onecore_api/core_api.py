@@ -18,10 +18,45 @@ _PARALLEL_GET_TIMEOUT = (5, 30)
 # Endpoints that answer "which leases match this identifier".
 LEASE_PATHS = {
     "leaseId": "/leases",
-    "rentalObjectId": "/leases/by-rental-property-id",
+    "rentalObjectId": "/leases/by-rental-object-code",
     "contactCode": "/leases/by-contact-code",
     "pnr": "/leases/by-pnr",
 }
+
+# The rental object endpoint of a core without /leases/by-rental-object-code.
+LEGACY_RENTAL_OBJECT_LEASE_PATH = "/leases/by-rental-property-id"
+
+# OneCore's LeaseStatus enum names, in the order of their numeric values.
+ONECORE_LEASE_STATUSES = (
+    "Current",
+    "Upcoming",
+    "AboutToEnd",
+    "Ended",
+    "PreliminaryTerminated",
+    "PendingSignature",
+    "NotSent",
+)
+
+# An ended lease: by name, or by the number a core without
+# /leases/by-rental-object-code passes through from Xpand on some routes.
+ENDED_LEASE_STATUSES = ("Ended", 3)
+
+# The statuses the search endpoints are asked for: every one but "ended", as
+# spelled in core's GetLeasesStatusSchema. The rental object endpoint ignores
+# the filter, so ended leases are also dropped from the answer.
+OPEN_LEASE_STATUS_FILTER = (
+    "current,upcoming,about-to-end,preliminary-terminated,pending-signature,not-sent"
+)
+
+def is_not_found(err):
+    """True when OneCore answered "no such record" (404) rather than failing.
+
+    Only a lookup of one record answers 404 for a miss; a search answers an
+    empty list, so a 404 from a search means the call itself failed.
+    """
+    response = getattr(err, "response", None)
+    return getattr(response, "status_code", None) == 404
+
 
 # Which kind of rental object a contract points at. Single source of truth, also
 # used by the direct lookups in onecore_maintenance_extension.
@@ -187,27 +222,57 @@ class CoreApi:
         return results
 
     def _fetch_leases_raw(self, identifier, value):
-        """The lease payload exactly as OneCore returns it.
+        """The lease payload in the shape OneCore returns it.
 
         The search endpoints answer with a list, but ``/leases/{leaseId}`` answers
         with a single lease object. Callers that care about that distinction — see
-        ``fetch_leases`` — need the raw shape.
+        ``fetch_leases`` — need the raw shape. A search list holds open leases
+        only; the single lease is returned whatever its status.
         """
         if identifier not in LEASE_PATHS:
             raise OneCoreException(f"Ogiltig söktyp: {identifier}")
 
-        return self._get_json(
-            f"{LEASE_PATHS[identifier]}/{urllib.parse.quote(str(value), safe='')}",
-            params={"includeContacts": "true", "includeUpcomingLeases": "true"},
-        )
+        is_search = identifier != "leaseId"
+        params = {"includeContacts": "true"}
+        if is_search:
+            # status for core with /leases/by-rental-object-code,
+            # includeUpcomingLeases for core without it.
+            params["status"] = OPEN_LEASE_STATUS_FILTER
+            params["includeUpcomingLeases"] = "true"
+
+        quoted_value = urllib.parse.quote(str(value), safe="")
+        try:
+            content = self._get_json(
+                f"{LEASE_PATHS[identifier]}/{quoted_value}", params=params
+            )
+        except requests.HTTPError as err:
+            # A search answers an empty list for a miss, so a 404 from the
+            # rental object endpoint means this core doesn't have it yet.
+            if identifier != "rentalObjectId" or not is_not_found(err):
+                raise
+            content = self._get_json(
+                f"{LEGACY_RENTAL_OBJECT_LEASE_PATH}/{quoted_value}", params=params
+            )
+        if is_search and isinstance(content, list):
+            content = [
+                lease
+                for lease in content
+                if not (
+                    isinstance(lease, dict)
+                    and lease.get("status") in ENDED_LEASE_STATUSES
+                )
+            ]
+        return content
 
     def fetch_leases_unfiltered(self, identifier, value):
         """Leases for an identifier WITHOUT location-type filtering.
 
         Used by the direct lookups (MIM-1841): there the object/contact must
         resolve regardless of contract type, so this deliberately skips
-        ``filter_lease_on_location_type``. Each lease dict may carry a ``tenants``
-        list; returns an empty list when there is no content.
+        ``filter_lease_on_location_type``. Ended leases are still dropped from a
+        search, as in every lookup (see ``_fetch_leases_raw``). Each lease dict
+        may carry a ``tenants`` list; returns an empty list when there is no
+        content.
         """
         content = self._fetch_leases_raw(identifier, value)
         if content is None:
@@ -242,6 +307,14 @@ class CoreApi:
             )
 
         except requests.HTTPError as http_err:
+            # OneCore answers 404 for an unknown lease id: no result, not a
+            # failed call. The search endpoints answer an empty list instead,
+            # so a 404 from them means the call itself failed.
+            if (
+                identifier == "leaseId"
+                and is_not_found(http_err)
+            ):
+                return []
             raise OneCoreException(
                 f"Kunde inte hitta något resultat för {identifier}: {value}. Det verkar som att det inte finns någon koppling till OneCore-servern.",
             )

@@ -57,10 +57,12 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 ### Odoo → OneCore (`CoreApi`)
 
 - Catch `requests.RequestException` around core calls, not `Exception`, and construct `CoreApi` inside the handling (it may fetch a token). Never report a failed call as success or as "not found" (pattern: `DirectLookupService` raises `LookupFailed` for an outage and returns empty for a miss).
+- Core answers 404 when a lookup of one record misses, and 200 with `[]` when a search misses. A 404 from a search means the call failed (a missing route, a wrong base url), in every caller.
+- Constants that mirror OneCore (enum names, status filters, codes) are written out literally and keyed by name, so they can be grepped against core's schemas. Never derive them by position (`zip`, `index`) or by transforming strings.
 - Core marks many fields nullable and answers 500 for some unknown ids: read with `x.get(k) or default`, and check field names against core's zod schemas.
 - Don't call core from computes or form reads; load lazily from a widget through an RPC method.
 - HTTP calls are not transactional, and Odoo retries a request after a serialization failure. Make anything sent from `create`/`write`/`message_post` idempotent, or send it after commit. The same goes for anything OneCore can resubmit.
-- Odoo ships before OneCore, so tolerate a core that lacks your new route.
+- Odoo ships before OneCore, so tolerate a core that lacks your new route: fall back to the old route on a 404. A joint release doesn't replace this; rollouts and rollbacks happen per service.
 - Calls reach real people (creation SMS, tenant SMS/email). Test with your own number.
 - Store OneCore ids in explicit Char fields, never in an `"id"` vals key, which the ORM drops.
 
@@ -103,12 +105,15 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 - Add new technical and snapshot fields to `FieldChangeTracker.SKIP_FIELDS`. Code that clears a skipped field logs what it removed.
 - Errors name the ärende (`od-<id>`) and say what to do next.
 - `env.ref()` and `browse()` ignore `active`, while `search()` and dropdowns hide archived records. Use `active_test=False` when archived teams or users must be found.
+- An automatic pick (a refetch, a cron, a backfill, a default saved without a user) chooses among the candidates that qualify, and picks nothing when none does. The best of the rest is not a fallback: an unsigned lease never puts its applicant on an ärende.
+- The form search, the add/change wizard, the empty-tenant refetch and OneCore's create build the same lease, tenant and object snapshot. Make the same choice of lease, tenant and object in each, with shared helpers.
 
 ### Transactions and performance
 
 - Catching an exception around database work needs `with self.env.cr.savepoint():`, or the transaction is aborted.
 - Check-then-insert is a race: let the unique constraint decide. Steps that can be refused together share one savepoint.
 - No searches or `env.ref` inside per-record loops. Group writes, count with one `_read_group`, and index Char fields used as lookup keys.
+- A cron that calls OneCore in batches commits after each batch (`ir.cron._commit_progress`) and starts no batch that could run past `limit_time_real_cron`. One transaction across many network calls loses the whole run when the worker is killed.
 
 ### Onchanges
 
@@ -156,8 +161,9 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 
 ## Reviewing
 
-- Review in a fresh session, not the one that wrote the code, and review your own fix commits again before pushing.
+- Review in a fresh session, not the one that wrote the code: a review run from the writing session shares its blind spots. Review your own fix commits again before pushing; fixes made after a review need a review of their own.
 - For every changed rule, find its other copies and callers. List every writer and reader of a changed field, OneCore and planned cards included.
+- When a change widens what a value can be or changes what it means (new statuses, a route's error semantics, a new data source), review every consumer of it, including code outside the diff.
 - Walk every path into the changed state (form, list, kanban, RPC, context defaults, OneCore) and every exit path out of the flow (success, refusal, error, another tab, the pager, leaving the form). Check what the user sees after each.
 - When a finding rests on framework behaviour, read the Odoo source and cite file and line.
 - Label each finding blocking, should-fix or nit. Blocking = breaks behaviour, leaks data across users or companies, breaks a Security rule, or makes the upgrade or a OneCore call fail.

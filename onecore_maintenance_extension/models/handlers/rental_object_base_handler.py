@@ -7,6 +7,9 @@ _logger = logging.getLogger(__name__)
 class RentalObjectBaseHandler(BaseMaintenanceHandler):
     """Base handler for rental object searches (rental properties, parking spaces, facilities)."""
 
+    # The request's option field for this handler's kind of object.
+    _object_option_field = None
+
     def handle_search(self, search_type, search_value, space_caption):
         if search_type in ["pnr", "contactCode", "leaseId", "rentalObjectId"]:
             work_order_data = self.core_api.fetch_form_data(
@@ -25,7 +28,13 @@ class RentalObjectBaseHandler(BaseMaintenanceHandler):
             )
 
     def _set_lease_and_tenant_selections(self, search_type, search_value):
-        """Set lease and tenant form selections after a search."""
+        """Set lease and tenant form selections after a search, and select
+        the active lease's object.
+
+        The object has to follow the lease: with the first object listed
+        still selected, the object's onchange switches the lease to one on
+        that object.
+        """
         lease_records = self.env["maintenance.lease.option"].search(
             [("user_id", "=", self.env.user.id)]
         )
@@ -41,6 +50,10 @@ class RentalObjectBaseHandler(BaseMaintenanceHandler):
                 self.record.tenant_option_id = self._select_tenant_for_search(
                     tenant_records, search_type, search_value
                 ).id
+
+            lease_object = active_lease[self._object_option_field]
+            if lease_object:
+                self.record[self._object_option_field] = lease_object.id
 
     def _existing_option(self, model_name, rental_id):
         """An object option already created for ``rental_id``, if any.
