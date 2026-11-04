@@ -16,6 +16,11 @@ class FacilityFieldsMixin(models.AbstractModel):
     facility_code = fields.Char(
         "Lokal Kod", related="facility_id.code", depends=["facility_id"]
     )
+    facility_object_number = fields.Char(
+        "Lokal Objektsnummer",
+        related="facility_id.rental_property_id",
+        depends=["facility_id"],
+    )
     facility_type_name = fields.Char(
         "Lokaltyp", related="facility_id.type_name", depends=["facility_id"]
     )

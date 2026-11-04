@@ -58,4 +58,5 @@ from .models import test_my_filters
 from .models import test_status_filters
 from .models import test_create_location_links
 from .models import test_pass_on_orderer
+from .models import test_object_number
 from .migrations import test_migration_19_0_1_0_14
