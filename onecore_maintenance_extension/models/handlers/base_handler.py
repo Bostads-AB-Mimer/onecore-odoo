@@ -83,9 +83,10 @@ class BaseMaintenanceHandler:
             "lease_type": lease["type"],
             "lease_status": status,
             "lease_start_date": lease["leaseStartDate"],
-            "last_debit_date": lease["lastDebitDate"],
-            "contract_date": lease["contractDate"],
-            "approval_date": lease["approvalDate"],
+            # Optional in core: Tenfast leases leave them out when unset.
+            "last_debit_date": lease.get("lastDebitDate") or False,
+            "contract_date": lease.get("contractDate") or False,
+            "approval_date": lease.get("approvalDate") or False,
         }
 
         if parking_space_option_id:
