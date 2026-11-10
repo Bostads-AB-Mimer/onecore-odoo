@@ -6,6 +6,7 @@ class RentalPropertyHandler(RentalObjectBaseHandler):
     """Handler for rental property maintenance requests (apartments, etc.)."""
 
     _object_option_field = "rental_property_option_id"
+    _object_kind = "residence"
 
     def update_form_options(self, work_order_data):
         """Update form options with rental property data."""

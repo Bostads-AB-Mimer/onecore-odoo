@@ -12,6 +12,13 @@ LEASE_STATUS_LABELS = {
     7: "Ej skickat",
 }
 
+# The Utrymme that holds each object kind (core_api.FORM_ITEM_OBJECT_KEYS).
+OBJECT_KIND_SPACE_CAPTIONS = {
+    "residence": "Lägenhet",
+    "parking": "Bilplats",
+    "facility": "Lokal",
+}
+
 # Space types available for maintenance requests
 SPACES = [
     ("Byggnad", "Byggnad"),

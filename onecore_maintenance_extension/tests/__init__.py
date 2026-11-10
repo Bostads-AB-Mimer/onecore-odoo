@@ -16,6 +16,7 @@ from .models.handlers import test_base_handler
 from .models.handlers import test_handler_factory
 from .models.handlers import test_rental_property_handler
 from .models.handlers import test_object_follows_active_lease
+from .models.handlers import test_wrong_space_search
 from .models.services import test_maintenance_workflow_service
 from .models.services import test_maintenance_return_stage
 from .models.services import test_record_management_service

@@ -5,6 +5,7 @@ class FacilityHandler(RentalObjectBaseHandler):
     """Handler for facility-related maintenance requests."""
 
     _object_option_field = "facility_option_id"
+    _object_kind = "facility"
 
     def update_form_options(self, work_order_data):
         """Update form options with facility data."""

@@ -7,6 +7,9 @@ _logger = logging.getLogger(__name__)
 class PropertyHandler(BaseMaintenanceHandler):
     """Handler for property-level maintenance requests."""
 
+    # The lease-based searches read the apartment's payload.
+    _object_kind = "residence"
+
     def handle_search(self, search_type, search_value, space_caption):
         """Handle search for property requests.
 
@@ -33,6 +36,10 @@ class PropertyHandler(BaseMaintenanceHandler):
             if not work_order_data:
                 _logger.info("No data found in response.")
                 return self._return_no_results_warning(search_value)
+
+            work_order_data, warning = self._items_for_space(work_order_data)
+            if warning:
+                return warning
 
             self.update_form_options_from_lease_data(work_order_data)
             self._set_form_selections()

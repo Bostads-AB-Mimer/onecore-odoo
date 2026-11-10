@@ -20,6 +20,10 @@ class RentalObjectBaseHandler(BaseMaintenanceHandler):
                 _logger.info("No data found in response.")
                 return self._return_no_results_warning(search_value)
 
+            work_order_data, warning = self._items_for_space(work_order_data)
+            if warning:
+                return warning
+
             self.update_form_options(work_order_data)
             self._set_form_selections(search_type, search_value)
         else:

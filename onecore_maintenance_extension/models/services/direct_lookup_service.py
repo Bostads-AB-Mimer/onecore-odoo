@@ -24,6 +24,7 @@ from ..handlers.base_handler import BaseMaintenanceHandler
 from ..handlers.rental_property_handler import RentalPropertyHandler
 from ..handlers.parking_space_handler import ParkingSpaceHandler
 from ..handlers.facility_handler import FacilityHandler
+from ..constants import OBJECT_KIND_SPACE_CAPTIONS
 from ....onecore_api import core_api
 
 _logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class LookupFailed(Exception):
 # ``core_api.OBJECT_KIND_FETCHERS`` / ``core_api.LEASE_TYPE_TO_OBJECT_KIND``.
 _ROUTES = {
     "residence": {
-        "space": "Lägenhet",
+        "space": OBJECT_KIND_SPACE_CAPTIONS["residence"],
         "option_model": "maintenance.rental.property.option",
         "option_field": RentalPropertyHandler._object_option_field,
         "handler": RentalPropertyHandler,
@@ -45,7 +46,7 @@ _ROUTES = {
         "record_field": "rental_property_id",
     },
     "parking": {
-        "space": "Bilplats",
+        "space": OBJECT_KIND_SPACE_CAPTIONS["parking"],
         "option_model": "maintenance.parking.space.option",
         "option_field": ParkingSpaceHandler._object_option_field,
         "handler": ParkingSpaceHandler,
@@ -53,7 +54,7 @@ _ROUTES = {
         "record_field": "parking_space_id",
     },
     "facility": {
-        "space": "Lokal",
+        "space": OBJECT_KIND_SPACE_CAPTIONS["facility"],
         "option_model": "maintenance.facility.option",
         "option_field": FacilityHandler._object_option_field,
         "handler": FacilityHandler,

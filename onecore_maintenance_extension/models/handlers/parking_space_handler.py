@@ -5,6 +5,7 @@ class ParkingSpaceHandler(RentalObjectBaseHandler):
     """Handler for parking space maintenance requests."""
 
     _object_option_field = "parking_space_option_id"
+    _object_kind = "parking"
 
     def update_form_options(self, work_order_data):
         """Update form options with parking space data."""

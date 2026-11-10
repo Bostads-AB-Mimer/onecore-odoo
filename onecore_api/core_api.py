@@ -75,6 +75,13 @@ OBJECT_KIND_FETCHERS = {
     "facility": "fetch_facility",
 }
 
+# The form item key that holds each object kind's payload.
+FORM_ITEM_OBJECT_KEYS = {
+    "residence": "rental_property",
+    "parking": "parking_space",
+    "facility": "facility",
+}
+
 # Object kinds whose objects can HAVE maintenance units attached.
 KINDS_WITH_MAINTENANCE_UNITS = ("residence", "facility")
 
@@ -90,14 +97,14 @@ def build_form_item(lease, kind, obj, maintenance_units=None, rental_id=None):
     the id the object was fetched by, and the only identifier available for every
     object kind (the parking and facility payloads do not carry one).
     """
-    return {
+    item = {
         "lease": lease,
         "rental_id": rental_id or (lease or {}).get("rentalPropertyId"),
-        "rental_property": obj if kind == "residence" else None,
-        "parking_space": obj if kind == "parking" else None,
-        "facility": obj if kind == "facility" else None,
         "maintenance_units": maintenance_units or [],
     }
+    for object_kind, key in FORM_ITEM_OBJECT_KEYS.items():
+        item[key] = obj if kind == object_kind else None
+    return item
 
 
 class CoreApi:

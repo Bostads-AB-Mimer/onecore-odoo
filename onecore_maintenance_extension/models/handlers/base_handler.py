@@ -6,13 +6,18 @@ from ..utils.helpers import (
     normalize_lease_status,
     select_active_lease,
 )
-from ..constants import LEASE_STATUS_LABELS
+from ..constants import LEASE_STATUS_LABELS, OBJECT_KIND_SPACE_CAPTIONS
+from ....onecore_api.core_api import FORM_ITEM_OBJECT_KEYS
 
 _logger = logging.getLogger(__name__)
 
 
 class BaseMaintenanceHandler:
     """Base class for handling different types of maintenance requests."""
+
+    # The object kind (a FORM_ITEM_OBJECT_KEYS key) this handler reads from
+    # lease-based form items.
+    _object_kind = None
 
     def __init__(self, maintenance_request, core_api):
         self.record = maintenance_request
@@ -149,6 +154,47 @@ class BaseMaintenanceHandler:
                 search_value,
             )
         )
+
+    def _items_for_space(self, work_order_data):
+        """The form items this handler can read, and a warning when there are none.
+
+        A contract number search returns the contract whatever its type, so
+        its object can be of another kind than the chosen Utrymme holds. Those
+        items are dropped; when nothing is left, the warning names the Utrymme
+        the contract belongs to.
+        """
+        other_keys = {
+            kind: key
+            for kind, key in FORM_ITEM_OBJECT_KEYS.items()
+            if kind != self._object_kind
+        }
+        matching, other = [], []
+        for item in work_order_data:
+            other_kind = next(
+                (kind for kind, key in other_keys.items() if item.get(key)), None
+            )
+            if other_kind:
+                other.append((other_kind, item))
+            else:
+                matching.append(item)
+
+        if matching or not other:
+            return matching, None
+        other_kind, item = other[0]
+        return [], self._return_wrong_space_warning(other_kind, item.get("lease"))
+
+    def _return_wrong_space_warning(self, kind, lease):
+        """Return a warning naming the Utrymme that holds the found object."""
+        space = OBJECT_KIND_SPACE_CAPTIONS[kind]
+        lease = lease or {}
+        if lease.get("leaseId") and lease.get("type"):
+            message = (
+                f"Kontrakt {lease['leaseId']} ({lease['type'].strip()}) hör till "
+                f"Utrymme {space}. Välj {space} och sök igen."
+            )
+        else:
+            message = f"Sökträffen hör till Utrymme {space}. Välj {space} och sök igen."
+        return {"warning": {"title": "Fel utrymme", "message": message}}
 
     def _return_no_results_warning(self, search_value):
         """Return a warning dict when no results are found (non-disruptive)."""
