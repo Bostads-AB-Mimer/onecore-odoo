@@ -24,6 +24,7 @@ from . import test_customer_message_indicator
 from .handlers import test_base_handler
 from .handlers import test_handler_factory
 from .handlers import test_rental_property_handler
+from .handlers import test_object_follows_active_lease
 from .services import test_record_management_service
 from .services import test_maintenance_workflow_service
 from .services import test_external_contractor_service

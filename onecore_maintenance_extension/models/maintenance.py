@@ -2033,7 +2033,7 @@ class OneCoreMaintenanceRequest(
         request's lease (MIM-1954).
 
         Hourly, like special attention: a contract's status changes about as
-        often as that flag does, and a run costs one call per 500 distinct
+        often as that flag does, and a run costs one call per 100 distinct
         lease ids rather than one per open request.
         """
         return OneCoreFlagSyncService(self.env).sync_lease_status()
