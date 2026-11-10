@@ -66,10 +66,19 @@ def is_local():
 
 
 def get_tenant_name(tenant):
-    """Construct the tenant's name based on available information."""
+    """The tenant's name, or a placeholder when core sends none.
+
+    Core withholds the names of a tenant with protected identity and sends
+    them as null. The placeholder keeps ``name``, which is required on the
+    tenant and tenant option, from being empty.
+    """
     if tenant.get("firstName") and tenant.get("lastName"):
         return tenant["firstName"] + " " + tenant["lastName"]
-    return tenant.get("fullName", "")
+    if tenant.get("fullName"):
+        return tenant["fullName"]
+    if tenant.get("protectedIdentity"):
+        return "Skyddad identitet"
+    return "Namn saknas"
 
 
 def get_main_phone_number(tenant):
@@ -77,7 +86,7 @@ def get_main_phone_number(tenant):
     return next(
         (
             item["phoneNumber"]
-            for item in tenant.get("phoneNumbers", [])
+            for item in tenant.get("phoneNumbers") or []
             if item["isMainNumber"] == 1
         ),
         None,

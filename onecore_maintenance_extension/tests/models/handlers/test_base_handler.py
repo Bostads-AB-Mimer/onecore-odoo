@@ -283,6 +283,66 @@ class TestBaseMaintenanceHandler(TransactionCase):
         self.assertTrue(tenant_option.exists())
         self.assertEqual(tenant_option.name, full_name)
 
+    def test_create_tenant_options_with_withheld_protected_identity(self):
+        """Core sends a withheld tenant with null names: the option gets a
+        placeholder name instead of failing the required field."""
+        contact_code = self.fake.contact_code()
+
+        tenants = [
+            {
+                "contactCode": contact_code,
+                "contactKey": self.fake.contact_key(),
+                "firstName": None,
+                "lastName": None,
+                "fullName": None,
+                "nationalRegistrationNumber": "",
+                "birthDate": None,
+                "phoneNumbers": [],
+                "emailAddress": None,
+                "isTenant": True,
+                "protectedIdentity": True,
+                "protectedIdentityDetails": "withheld",
+            }
+        ]
+
+        self.handler._create_tenant_options(tenants)
+
+        tenant_option = self.env["maintenance.tenant.option"].search(
+            [("contact_code", "=", contact_code)]
+        )
+
+        self.assertTrue(tenant_option.exists())
+        self.assertEqual(tenant_option.name, "Skyddad identitet")
+        self.assertFalse(tenant_option.national_registration_number)
+        self.assertFalse(tenant_option.email_address)
+        self.assertFalse(tenant_option.phone_number)
+
+    def test_create_tenant_options_without_any_name(self):
+        """A tenant without names and without protected identity gets the
+        generic placeholder."""
+        contact_code = self.fake.contact_code()
+
+        tenants = [
+            {
+                "contactCode": contact_code,
+                "contactKey": self.fake.contact_key(),
+                "firstName": None,
+                "lastName": None,
+                "fullName": None,
+                "phoneNumbers": None,
+                "isTenant": True,
+            }
+        ]
+
+        self.handler._create_tenant_options(tenants)
+
+        tenant_option = self.env["maintenance.tenant.option"].search(
+            [("contact_code", "=", contact_code)]
+        )
+
+        self.assertEqual(tenant_option.name, "Namn saknas")
+        self.assertFalse(tenant_option.phone_number)
+
     def test_create_tenant_options_without_phone_number(self):
         """Test creating tenant options when no main phone number exists."""
         contact_code = self.fake.contact_code()

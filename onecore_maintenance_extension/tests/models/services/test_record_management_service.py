@@ -302,6 +302,40 @@ class TestEmptyTenantAutoRefetchHidesFromMyPages(TransactionCase):
             self.env["maintenance.lease"].search_count([]), leases_before + 1
         )
 
+    def test_backfill_attaches_a_withheld_protected_identity_tenant(self):
+        """Core sends a withheld tenant with null names: the refetch still
+        attaches the tenant, under a placeholder name."""
+        rental_property_option = create_rental_property_option(self.env)
+        request = create_maintenance_request(
+            self.env,
+            space_caption="Lägenhet",
+            rental_property_option_id=rental_property_option.id,
+        )
+        withheld = dict(
+            _tenant_payload("P000004"),
+            firstName=None,
+            lastName=None,
+            fullName=None,
+            nationalRegistrationNumber="",
+            birthDate=None,
+            phoneNumbers=[],
+            emailAddress=None,
+            protectedIdentity=True,
+            protectedIdentityDetails="withheld",
+        )
+
+        with patch(CORE_API_PATH) as MockApi:
+            MockApi.return_value.fetch_form_data.return_value = [
+                {"lease": _lease_payload([withheld])}
+            ]
+            request.invalidate_recordset()
+            _ = request.empty_tenant  # triggers _compute_empty_tenant
+
+        self.assertEqual(request.tenant_id.contact_code, "P000004")
+        self.assertEqual(request.tenant_id.name, "Skyddad identitet")
+        self.assertFalse(request.tenant_id.phone_number)
+        self.assertFalse(request.tenant_id.email_address)
+
     def test_backfill_skips_an_object_with_only_unsigned_leases(self):
         """A draft or a lease waiting for a signature is not a tenancy yet: the
         applicant on it must not be attached, nor the ärende hidden from Mina
