@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Ticket card on /my -->
+    <template
+        id="portal_my_home_tickets"
+        name="Portal My Home: helpdesk card"
+        inherit_id="helpdesk_mgmt.portal_my_home"
+    >
+        <xpath
+            expr="//t[@t-call='helpdesk_mgmt.portal_docs_entry']/t[@t-set='title']"
+            position="replace"
+        >
+            <t t-set="title">Helpdeskärenden</t>
+        </xpath>
+        <xpath
+            expr="//t[@t-call='helpdesk_mgmt.portal_docs_entry']/t[@t-set='text']"
+            position="replace"
+        >
+            <t t-set="text">Följ och kommentera dina helpdeskärenden</t>
+        </xpath>
+    </template>
+
+    <!-- New ticket button on the /my card and on /my/tickets -->
+    <template
+        id="portal_ticket_new_button_label"
+        name="Portal: new ticket button"
+        inherit_id="helpdesk_mgmt.portal_ticket_new_button"
+    >
+        <xpath expr="//button[@name='create_new_ticket']" position="replace">
+            <button
+                name="create_new_ticket"
+                type="action"
+                t-att-class="'btn btn-primary ' + (_btn_classes or '')"
+            >
+                <i class="fa fa-plus" /> Nytt ärende</button>
+        </xpath>
+    </template>
+
+    <!-- New ticket button on /my/tickets: among the options on wide screens,
+         and next to the heading on narrow ones, where the options collapse
+         behind the toggle -->
+    <template
+        id="portal_searchbar_new_ticket"
+        name="Portal searchbar: new ticket button"
+        inherit_id="helpdesk_mgmt.portal_searchbar"
+    >
+        <xpath expr="//t[@t-call='helpdesk_mgmt.portal_ticket_new_button']" position="replace">
+            <div class="d-none d-lg-block">
+                <t t-call="helpdesk_mgmt.portal_ticket_new_button" />
+            </div>
+        </xpath>
+        <xpath expr="//button[hasclass('navbar-toggler')]" position="before">
+            <div class="d-lg-none mx-2">
+                <t t-call="helpdesk_mgmt.portal_ticket_new_button" />
+            </div>
+        </xpath>
+    </template>
+
+    <!-- Breadcrumb, the heading of /my/tickets and the ticket page -->
+    <template
+        id="portal_breadcrumbs_tickets"
+        name="Portal breadcrumbs: helpdesk tickets"
+        inherit_id="helpdesk_mgmt.portal_layout"
+    >
+        <xpath
+            expr="//li[a[@t-attf-href='/my/tickets?{{ keep_query() }}']]/t[@t-else]"
+            position="replace"
+        >
+            <t t-else="">Helpdeskärenden</t>
+        </xpath>
+        <xpath expr="//a[@t-attf-href='/my/tickets?{{ keep_query() }}']" position="replace">
+            <a t-if="ticket" t-attf-href="/my/tickets?{{ keep_query() }}">Helpdeskärenden</a>
+        </xpath>
+    </template>
+
+    <!-- Column headers on /my/tickets -->
+    <template
+        id="portal_ticket_list_headers"
+        name="Portal ticket list: headers"
+        inherit_id="helpdesk_mgmt.portal_ticket_list"
+    >
+        <xpath expr="//th[@name='th_number']" position="replace">
+            <th name="th_number" class="text-left">Nummer</th>
+        </xpath>
+        <xpath expr="//th[@name='th_groupby_category']/em" position="replace">
+            <em class="font-weight-normal text-muted">Ärenden i kategori:</em>
+        </xpath>
+        <xpath expr="//th[@name='th_groupby_stage']/em" position="replace">
+            <em class="font-weight-normal text-muted">Ärenden med status:</em>
+        </xpath>
+        <xpath expr="//th[@name='th_stage']" position="replace">
+            <th name="th_stage" t-if="groupby != 'stage'">Status</th>
+        </xpath>
+        <xpath expr="//th[@name='th_create_date']" position="replace">
+            <th name="th_create_date">Skapad</th>
+        </xpath>
+        <xpath expr="//th[@name='th_last_stage_update']" position="replace">
+            <th name="th_last_stage_update">Senaste statusändring</th>
+        </xpath>
+        <xpath expr="//th[@name='th_closed_date']" position="replace">
+            <th name="th_closed_date">Stängd</th>
+        </xpath>
+    </template>
+</odoo>

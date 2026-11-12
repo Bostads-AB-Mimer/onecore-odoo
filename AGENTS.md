@@ -12,7 +12,7 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 | `onecore_web_extension` | Frontend patches and dialogs (form, kanban, statusbar). |
 | `onecore_ui` | The `mobile` view type used on phones. |
 | `onecore_auth` | Keycloak login: creates or re-links users at first login. Not `auto_install`. |
-| `onecore_helpdesk` | IT tickets (`helpdesk.ticket`), separate from ärenden: the IT team, stages, categories, ticket forms and the portal intake. Not `auto_install`. |
+| `onecore_helpdesk` | IT tickets (`helpdesk.ticket`), separate from ärenden: the IT team, stages, categories, ticket forms, the portal intake and the portal pages. Employees reach their tickets through the "Helpdesk" app (`/my/tickets`); handlers work in "Helpdesk admin". Not `auto_install`. |
 | `helpdesk_mgmt`, `helpdesk_ticket_partner_response`, `helpdesk_ticket_close_inactive`, `helpdesk_type` | Vendored unchanged from OCA (commit in the README). Changes go in `onecore_helpdesk`, never in these folders. |
 | `onecore_api/` | Plain Python package with `CoreApi`, the HTTP client for core. Not an addon. |
 
@@ -127,6 +127,7 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 ### Translations, caches and snapshots
 
 - Team and stage names are translated (jsonb). Pin one language when you read them, and never match on them. Hardcode Swedish for text stored at write time.
+- Renaming a translated field of another module's record from XML (a menu name, …) only replaces its en_US value; the other languages keep that module's translation. Write every installed language with `update_field_translations` from a `<function>` that runs on every upgrade.
 - Module-level caches are per worker and shared by every database: key them by `dbname`, cache only successful loads, and clear them in tests.
 - Snapshots of OneCore data store the stable parts (ids, type, name) and derive positions such as "Fönster 2" on display. Snapshots are never refreshed, except the badges and contract status that `OneCoreFlagSyncService`'s crons keep fresh.
 
