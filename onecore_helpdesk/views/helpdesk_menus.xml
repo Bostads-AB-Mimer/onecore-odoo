@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Employees' entry: the portal list of their own and followed tickets.
+         After Discuss, so it does not become the app users land on. -->
+    <record id="action_portal_my_tickets" model="ir.actions.act_url">
+        <field name="name">Helpdesk</field>
+        <field name="url">/my/tickets</field>
+        <field name="target">self</field>
+    </record>
+
+    <menuitem
+        id="menu_employee_helpdesk"
+        name="Helpdesk"
+        action="action_portal_my_tickets"
+        sequence="17"
+        web_icon="helpdesk_mgmt,static/src/img/helpdesk_icon.svg"
+        groups="base.group_user"
+    />
+
+    <!-- The handlers' app, renamed in every language on each upgrade -->
+    <function
+        model="ir.ui.menu"
+        name="_set_name_in_all_languages"
+        eval="[[ref('helpdesk_mgmt.helpdesk_ticket_main_menu')], 'Helpdesk admin']"
+    />
+</odoo>

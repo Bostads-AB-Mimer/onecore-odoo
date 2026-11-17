@@ -22,6 +22,8 @@
         "views/helpdesk_ticket_team_views.xml",
         "views/helpdesk_ticket_views.xml",
         "views/portal_templates.xml",
+        "views/portal_my_tickets_templates.xml",
+        "views/helpdesk_menus.xml",
         "data/helpdesk_it_team_data.xml",
         "data/helpdesk_it_form_data.xml",
         "data/helpdesk_p1_alarm_data.xml",
