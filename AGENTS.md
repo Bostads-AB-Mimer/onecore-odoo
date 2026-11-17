@@ -153,6 +153,7 @@ Odoo 19 addons that Bostads AB Mimer uses for ärenden (maintenance requests). O
 - New fields and models need no migration. Bump `__manifest__.py` only in a PR that adds a migration, strictly above the target branch's version, and keep the higher version when resolving conflicts.
 - Releases upgrade every onecore module, and that must not fail: guard records on unique-key models (system parameters), and keep hooks idempotent. Never use `--reinit` on a shared database.
 - `noupdate` data (crons, system parameters, favorites) is created once and never updated: get it right before the first release, change it by migration afterwards. Never `<delete>` by id.
+- A `<function>` outside a `noupdate` block runs on every upgrade and overwrites what users changed since the last one. One-off setup goes inside `noupdate`, where it runs at install only, so never on a database that already has the module: use a migration there. Leave it outside only when re-running is the point.
 - Backfills use `active_test=False` and a pinned language, run in batches and can be re-run. Never mark a row done that the backfill couldn't resolve.
 - A new stored field on existing data needs a backfill or a stated "new records only". On `res.users`, it makes Odoo answer 500 between the restart and the upgrade. Time a large migration on a prod copy.
 
