@@ -133,9 +133,13 @@ pattern OCA uses for teams.
   default category, so an email never bounces. `write` checks only when
   the category, form or answers are in the payload, so stage moves and other
   edits on an old ticket without answers still save; the client-side check
-  mirrors this (new record, or answers/form changed). A write that carries a
-  definition change (the gear editor) skips the required-answer check, since
-  adding a required question is configuration, not answering. Agents are not
+  mirrors this (new record, or answers/form changed). A write that changes
+  the questions of a block (the gear editor) skips the required-answer check
+  for that block, since adding a required question is configuration, not
+  answering. It counts only when the ticket has a form for the block, so
+  that Odoo has checked write access to the form, and never in a write that
+  also carries the category or the form; answers written to the other block
+  in the same write are still checked. Agents are not
   exempt: a
   category with one form preselects it, so the rule rarely costs them a
   click. If IT later wants to re-categorise email tickets without a form,

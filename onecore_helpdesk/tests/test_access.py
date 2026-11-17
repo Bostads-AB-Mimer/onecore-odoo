@@ -18,15 +18,17 @@ def create_user(env, name, login, group_xmlid, password=None):
     return env["res.users"].create(vals)
 
 
-def create_ticket(env, name, requester, team):
-    return env["helpdesk.ticket"].create(
-        {
-            "name": name,
-            "description": "Beskrivning",
-            "partner_id": requester.id,
-            "team_id": team.id,
-        }
-    )
+def create_ticket(env, name, requester, team, category=None):
+    """Without a category the ticket gets the team's default category."""
+    vals = {
+        "name": name,
+        "description": "Beskrivning",
+        "partner_id": requester.id,
+        "team_id": team.id,
+    }
+    if category:
+        vals["category_id"] = category.id
+    return env["helpdesk.ticket"].create(vals)
 
 
 @tagged("onecore", "post_install", "-at_install")
@@ -37,6 +39,10 @@ class TestItTicketAccess(TransactionCase):
         cls.Ticket = cls.env["helpdesk.ticket"]
         cls.team = cls.env.ref("onecore_helpdesk.team_it")
         other_team = cls.env["helpdesk.ticket.team"].create({"name": "Kommunikation"})
+        # the new team has no default category, and every ticket needs one
+        other_category = cls.env["helpdesk.ticket.category"].create(
+            {"name": "Pressfrågor"}
+        )
 
         cls.employee_a = create_user(
             cls.env, "Anställd A", "anstalld.a@test.mimer.nu", EMPLOYEE
@@ -63,7 +69,11 @@ class TestItTicketAccess(TransactionCase):
         )
         outside_requester = cls.env["res.partner"].create({"name": "Extern beställare"})
         cls.other_team_ticket = create_ticket(
-            cls.env, "Pressmeddelande", outside_requester, other_team
+            cls.env,
+            "Pressmeddelande",
+            outside_requester,
+            other_team,
+            category=other_category,
         )
         cls.all_tickets = cls.ticket | cls.other_team_ticket
 

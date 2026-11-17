@@ -1,4 +1,4 @@
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import TransactionCase, tagged
 
 from .test_mail_gateway import EMAIL_TEMPLATE
@@ -310,10 +310,6 @@ class TestTicketForms(TransactionCase):
             }
         )
 
-    def test_user_must_choose_a_category(self):
-        with self.assertRaises(ValidationError):
-            self._ticket(user=self._employee())
-
     def test_user_must_choose_a_form_when_the_category_has_several(self):
         self.Form.create({"name": "Skrivare", "category_id": self.category_fault.id})
 
@@ -441,6 +437,110 @@ class TestTicketForms(TransactionCase):
 
         names = [p["name"] for p in self.addon_impact.ticket_properties]
         self.assertEqual(names, ["affected_scope", "impact", "since_when"])
+
+    # the way the gear editor sends a new required question
+    NEW_REQUIRED_QUESTION = {
+        "name": "building",
+        "string": "Byggnad",
+        "type": "char",
+        "required": True,
+        "definition_changed": True,
+    }
+
+    def _handler_ticket_with_a_required_question(self, answer="3"):
+        """A ticket whose form has a required question, in a category without
+        add-on, as a handler who may not write forms. Without ``answer`` the
+        question is left unanswered, as on a ticket older than the question."""
+        form = self.Form.create(
+            {
+                "name": "Skrivare",
+                "category_id": self.category_equipment.id,
+                "ticket_properties": [
+                    {
+                        "name": "pages",
+                        "string": "Antal sidor",
+                        "type": "char",
+                        "required": True,
+                    }
+                ],
+            }
+        )
+        handler = self.env["res.users"].create(
+            {
+                "name": "Hanna Handläggare",
+                "login": "hanna.handlaggare@test.mimer.nu",
+                "email": "hanna.handlaggare@test.mimer.nu",
+                "group_ids": [
+                    (6, 0, [self.env.ref("helpdesk_mgmt.group_helpdesk_user").id])
+                ],
+            }
+        )
+        vals = {"category_id": self.category_equipment.id, "form_id": form.id}
+        if answer:
+            ticket = self._ticket(properties={"pages": answer}, **vals)
+        else:
+            unchecked = self.Ticket.with_context(skip_ticket_form_rules=True)
+            ticket = self.Ticket.browse(
+                unchecked.create(
+                    {
+                        "name": "Skrivaren på plan 3",
+                        "description": "<p>Skrivaren fungerar inte.</p>",
+                        "team_id": self.team.id,
+                        **vals,
+                    }
+                ).id
+            )
+        self.assertFalse(ticket.addon_form_id)
+        return ticket.with_user(handler)
+
+    def test_question_flag_on_a_block_without_form_is_not_a_question_change(self):
+        ticket = self._handler_ticket_with_a_required_question(answer=None)
+        flagged = [
+            {"name": "extra", "string": "Extra", "type": "char", "definition_changed": True}
+        ]
+
+        with self.assertRaisesRegex(ValidationError, "Antal sidor"):
+            ticket.write({"addon_properties": flagged})
+
+    def test_changing_the_questions_needs_write_access_to_the_form(self):
+        ticket = self._handler_ticket_with_a_required_question()
+        definition = self._read(ticket)
+        definition[0].update(value="", definition_changed=True)
+
+        with self.assertRaisesRegex(AccessError, r"helpdesk\.ticket\.form"):
+            ticket.write({"properties": definition})
+
+    def test_answers_in_the_other_block_are_checked_when_questions_change(self):
+        ticket = self._fault_ticket(form_id=self.form_fault.id)
+        definition = self._read(ticket) + [dict(self.NEW_REQUIRED_QUESTION)]
+
+        with self.assertRaisesRegex(ValidationError, "Hur drabbas"):
+            ticket.write({"properties": definition, "addon_properties": {"impact": False}})
+
+    def test_question_change_with_answers_to_the_other_block_is_allowed(self):
+        ticket = self._fault_ticket(form_id=self.form_fault.id)
+        definition = self._read(ticket) + [dict(self.NEW_REQUIRED_QUESTION)]
+
+        ticket.write({"properties": definition, "addon_properties": self.ANSWERS})
+
+        self.assertIn("building", [p["name"] for p in self.form_fault.ticket_properties])
+
+    def test_question_change_through_several_tickets_is_allowed(self):
+        tickets = self._fault_ticket(form_id=self.form_fault.id) | self._fault_ticket(
+            form_id=self.form_fault.id
+        )
+        definition = self._read(tickets[0]) + [dict(self.NEW_REQUIRED_QUESTION)]
+
+        tickets.write({"properties": definition})
+
+        self.assertIn("building", [p["name"] for p in self.form_fault.ticket_properties])
+
+    def test_question_change_in_a_write_that_carries_the_form_checks_the_answers(self):
+        ticket = self._fault_ticket(form_id=self.form_fault.id)
+        definition = self._read(ticket) + [dict(self.NEW_REQUIRED_QUESTION)]
+
+        with self.assertRaisesRegex(ValidationError, "Byggnad"):
+            ticket.write({"form_id": self.form_fault.id, "properties": definition})
 
     def test_a_category_without_forms_needs_no_form(self):
         ticket = self._ticket(user=self._employee(), category_id=self.category_other.id)

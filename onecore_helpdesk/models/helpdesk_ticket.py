@@ -87,7 +87,9 @@ class HelpdeskTicket(models.Model):
     # neither pick a form nor answer questions. Not a constraint: write only
     # checks when the category, form or answers change, so stage moves and
     # other edits never trip over an old ticket.
-    def _check_category_and_form_required(self, check_answers=True):
+    def _check_category_and_form_required(self, answer_blocks=None):
+        """``answer_blocks``: the answer fields to check for required
+        answers; every block when left out."""
         if self.env.context.get("skip_ticket_form_rules"):
             return
         for ticket in self:
@@ -100,18 +102,21 @@ class HelpdeskTicket(models.Model):
                         category=ticket.category_id.complete_name,
                     )
                 )
-        if check_answers:
-            self._check_required_answers()
+        if answer_blocks is None:
+            answer_blocks = [field_name for field_name, _container in QUESTION_BLOCKS]
+        self._check_required_answers(answer_blocks)
 
-    # Questions flagged ``required`` must be answered, in both blocks. The
-    # flag is a Mimer extension of the definition schema (see models/base.py);
-    # the widget enforces it in the browser, this is the server-side half.
-    def _check_required_answers(self):
-        fields_to_read = [field_name for field_name, _container in QUESTION_BLOCKS]
-        for data in self.read(fields_to_read):
+    # Questions flagged ``required`` must be answered, in every block given.
+    # The flag is a Mimer extension of the definition schema (see
+    # models/base.py); the widget enforces it in the browser, this is the
+    # server-side half.
+    def _check_required_answers(self, answer_blocks):
+        if not answer_blocks:
+            return
+        for data in self.read(answer_blocks):
             missing = [
                 prop.get("string") or prop["name"]
-                for field_name in fields_to_read
+                for field_name in answer_blocks
                 for prop in data[field_name]
                 if self._is_missing_required_answer(prop)
             ]
@@ -176,18 +181,25 @@ class HelpdeskTicket(models.Model):
         team = self.env["helpdesk.ticket.team"].browse(vals.get("team_id") or [])
         return team.default_category_id.id
 
-    @api.model
-    def _edits_definition(self, vals):
-        """True when a question block in ``vals`` carries a definition change
-        (the gear editor, read format) rather than plain answers."""
-        for field_name, _container in QUESTION_BLOCKS:
-            value = vals.get(field_name)
-            if isinstance(value, list) and any(
+    def _definition_edit_blocks(self, vals):
+        """The answer fields in ``vals`` whose write changes the questions on
+        the form (the gear editor, read format) rather than plain answers.
+
+        The definition_changed flag comes from the client, so it only counts
+        where Odoo acts on it: Properties.write stores the new definition on
+        the block's container, which checks that the user may write the form.
+        A flagged block without a container changes no questions.
+        """
+        return {
+            field_name
+            for field_name, container in QUESTION_BLOCKS
+            if self.mapped(container)
+            and isinstance(vals.get(field_name), list)
+            and any(
                 isinstance(prop, dict) and prop.get("definition_changed")
-                for prop in value
-            ):
-                return True
-        return False
+                for prop in vals[field_name]
+            )
+        }
 
     def _log_deleted_question_answers(self, vals):
         """Deleting a question with the gear icon removes it from the form's
@@ -225,18 +237,33 @@ class HelpdeskTicket(models.Model):
                 rest = self - without_category
                 return rest.write(vals) if rest else True
         touches_container = "category_id" in vals or "form_id" in vals
-        touches_answers = any(field_name in vals for field_name, _c in QUESTION_BLOCKS)
+        written_blocks = {
+            field_name for field_name, _c in QUESTION_BLOCKS if field_name in vals
+        }
+        # Read before super(): Odoo's Properties.write strips the
+        # definition_changed flags from these dicts. A write that also
+        # carries the category or the form is never a question edit.
+        definition_blocks = (
+            set() if touches_container else self._definition_edit_blocks(vals)
+        )
         snapshots = self._answer_snapshots() if touches_container else {}
         self._log_deleted_question_answers(vals)
         res = super().write(vals)
-        if touches_container or touches_answers:
+        if touches_container or written_blocks:
             # Editing the questions with the gear icon writes the new
             # definition through the host ticket. That is configuration, not
             # answering: a required question added that way is enforced from
             # the next answer edit on, not on the ticket it was added from.
-            self._check_category_and_form_required(
-                check_answers=not self._edits_definition(vals)
-            )
+            # Answers written to another block in the same write are checked.
+            if written_blocks and written_blocks <= definition_blocks:
+                answer_blocks = []
+            else:
+                answer_blocks = [
+                    field_name
+                    for field_name, _c in QUESTION_BLOCKS
+                    if field_name not in definition_blocks
+                ]
+            self._check_category_and_form_required(answer_blocks=answer_blocks)
         for ticket in self:
             for field_name, container in QUESTION_BLOCKS:
                 old_form, answers = snapshots.get(ticket.id, {}).get(

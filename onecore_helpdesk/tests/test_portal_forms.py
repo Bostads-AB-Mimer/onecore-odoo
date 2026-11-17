@@ -1,3 +1,5 @@
+from lxml import html
+
 from odoo import http
 from odoo.tests import tagged
 
@@ -118,7 +120,11 @@ class TestPortalTicketForms(HttpCaseWithUserPortal):
 
     def test_page_lists_addons_nowhere_in_the_form_select(self):
         response = self.url_open("/new/ticket")
-        self.assertNotRegex(response.text, rf'<option[^>]*value="{self.addon_impact.id}"')
+
+        page = html.fromstring(response.content)
+        listed = page.xpath("//select[@id='form'][@name='form']/option/@value")
+        self.assertIn(str(self.form_fault.id), listed)
+        self.assertNotIn(str(self.addon_impact.id), listed)
 
     def test_page_keeps_entered_values_after_a_rejected_submit(self):
         response = self._post(
