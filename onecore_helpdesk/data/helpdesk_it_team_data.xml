@@ -100,8 +100,9 @@
         </record>
     </data>
 
-    <!-- Archive the generic OCA stages so only the stages above are offered -->
-    <data>
+    <!-- Archive the generic OCA stages so only the stages above are offered.
+         Runs at install only: a stage re-activated later stays active -->
+    <data noupdate="1">
         <function model="helpdesk.ticket.stage" name="write">
             <value eval="[
                 ref('helpdesk_mgmt.helpdesk_ticket_stage_new'),

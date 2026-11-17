@@ -1,6 +1,9 @@
 from odoo.tests import TransactionCase, tagged
+from odoo.tools import convert_file
 
 from .test_mail_gateway import EMAIL_TEMPLATE
+
+TEAM_DATA_FILE = "data/helpdesk_it_team_data.xml"
 
 OCA_STAGE_XMLIDS = [
     "helpdesk_mgmt.helpdesk_ticket_stage_new",
@@ -74,6 +77,18 @@ class TestItTeamConfig(TransactionCase):
             ]
         )
 
+    def _load_team_data(self, mode):
+        """Load the team data file the way load_data() in odoo/modules/loading.py
+        does: mode 'init' at install, 'update' at upgrade."""
+        convert_file(
+            self.env, "onecore_helpdesk", TEAM_DATA_FILE, {}, mode, noupdate=False
+        )
+
+    def _oca_stages(self):
+        return self.env["helpdesk.ticket.stage"].browse(
+            [self.env.ref(xmlid).id for xmlid in OCA_STAGE_XMLIDS]
+        )
+
     def test_only_the_it_stages_are_offered(self):
         for xmlid in OCA_STAGE_XMLIDS:
             self.assertFalse(self.env.ref(xmlid).active, xmlid)
@@ -89,6 +104,23 @@ class TestItTeamConfig(TransactionCase):
                 "Stängt",
             ],
         )
+
+    def test_install_archives_the_oca_stages(self):
+        stages = self._oca_stages()
+        stages.active = True
+
+        self._load_team_data("init")
+
+        self.assertEqual(stages.filtered("active").mapped("name"), [])
+
+    def test_upgrade_keeps_a_reactivated_oca_stage(self):
+        stages = self._oca_stages()
+        reactivated = self.env.ref("helpdesk_mgmt.helpdesk_ticket_stage_awaiting")
+        reactivated.active = True
+
+        self._load_team_data("update")
+
+        self.assertEqual(stages.filtered("active"), reactivated)
 
     def test_team_has_the_it_categories(self):
         self.assertEqual(len(self.team.category_ids), 6)
