@@ -1,11 +1,12 @@
 """A Lägenhet ärende with components moves to Utförd or Avslutad only when
-every component has an outcome. Utförd → Avslutad passes, and so does
-Avslutad when nobody is assigned."""
+every component has an outcome, also from Utförd to Avslutad. Avslutad passes
+when nobody is assigned."""
 
 from odoo import Command
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 
+from ...models.services import MaintenanceStageManager
 from ..utils.test_utils import create_external_contractor_user, create_maintenance_team
 from .test_maintenance_request_component import _apartment_request, _link_vals
 from .test_mark_done import MarkDoneCase, _surface_vals
@@ -13,6 +14,11 @@ from .test_mark_done import MarkDoneCase, _surface_vals
 
 @tagged("onecore")
 class TestComponentOutcomeGuard(MarkDoneCase):
+    SAVE_WITHOUT_LEAVING = (
+        "Spara först utan att byta Utrymme eller arkivera ärendet och använd "
+        'sedan knappen "Markera som utförd".'
+    )
+
     def setUp(self):
         super().setUp()
         self.closed_stage = self.env.ref("maintenance.stage_6")
@@ -134,7 +140,7 @@ class TestComponentOutcomeGuard(MarkDoneCase):
 
         self.assertEqual(request.stage_id, self.done_stage)
 
-    def test_done_to_closed_passes_without_outcomes(self):
+    def test_done_to_closed_without_outcomes_is_refused(self):
         request = self._request(_link_vals(outcome="REPAIRED"))
         self._move(request, "maintenance.stage_5")
         # A component added after Utförd
@@ -142,9 +148,18 @@ class TestComponentOutcomeGuard(MarkDoneCase):
             {"component_ids": [Command.create(_link_vals("comp-spis", "Spis"))]}
         )
 
-        self._move(request, "maintenance.stage_6")
+        message = self._refusal(lambda: self._move(request, "maintenance.stage_6"))
 
-        self.assertEqual(request.stage_id, self.closed_stage)
+        self.assertTrue(message.startswith(f"od-{request.id}: "))
+        self.assertIn(f"kan flyttas till {self.closed_stage.name}.", message)
+        # The button is hidden in Utförd
+        self.assertIn(
+            'Flytta det först till en pågående status och använd sedan knappen '
+            '"Markera som utförd".',
+            message,
+        )
+        self.assertIn("Saknar utfall: Spis (Kök).", message)
+        self.assertEqual(request.stage_id, self.done_stage)
 
     def test_unassigned_request_closes_without_outcomes(self):
         request = self._request(_link_vals(), assign=False)
@@ -153,6 +168,31 @@ class TestComponentOutcomeGuard(MarkDoneCase):
         self._move(request, "maintenance.stage_6")
 
         self.assertEqual(request.stage_id, self.closed_stage)
+
+    def test_core_closes_an_unassigned_inspection_request_without_outcomes(self):
+        team = create_maintenance_team(self.env)
+        created = self.env["maintenance.request"].create(
+            {
+                "name": "Besiktning",
+                "maintenance_request_category_id": self.env.ref(
+                    "onecore_maintenance_extension.category_1"
+                ).id,
+                "space_caption": "Lägenhet",
+                "maintenance_team_id": team.id,
+                "priority_expanded": "7",
+            }
+        )
+        request = self.env["maintenance.request"].browse(created.id)
+        request.write({"component_ids": [Command.create(_link_vals())]})
+        self.assertFalse(request.user_id)
+        self.assertEqual(request.stage_id, self.env.ref("maintenance.stage_0"))
+        self.assertFalse(request.component_ids.outcome)
+
+        request.with_user(self.internal_user).write({"stage_id": self.closed_stage.id})
+
+        self.assertEqual(request.stage_id, self.closed_stage)
+        self.assertFalse(request.user_id)
+        self.assertEqual(request.maintenance_team_id, team)
 
     def test_returned_request_closes_without_outcomes(self):
         # Återsänd clears the resource
@@ -258,6 +298,56 @@ class TestComponentOutcomeGuard(MarkDoneCase):
 
         self.assertIn("Saknar utfall: Frys (Kök).", message)
         self.assertNotEqual(request.stage_id, self.done_stage)
+
+    def test_leaving_apartment_in_the_same_write_is_checked(self):
+        request = self._request(_link_vals())
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"space_caption": "Tvättstuga", "stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn(self.SAVE_WITHOUT_LEAVING, message)
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+        self.assertEqual(request.space_caption, "Lägenhet")
+
+    def test_archived_in_the_same_write_is_checked(self):
+        request = self._request(_link_vals())
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"archive": True, "stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn(self.SAVE_WITHOUT_LEAVING, message)
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+        self.assertFalse(request.archive)
+
+    def test_several_requests_name_the_one_without_outcomes(self):
+        # Called directly: a stage write on several ärenden raises earlier, in
+        # MaintenanceStageManager.handle_stage_change
+        complete = self._request(_link_vals(outcome="REPAIRED"))
+        incomplete = self._request(_link_vals())
+        for request in complete | incomplete:
+            self._move(request, "maintenance.stage_3")
+
+        message = self._refusal(
+            lambda: (complete | incomplete)
+            .with_user(self.internal_user)
+            ._check_component_outcomes(
+                self.done_stage,
+                MaintenanceStageManager(self.env),
+                {"stage_id": self.done_stage.id},
+            )
+        )
+
+        self.assertTrue(message.startswith(f"od-{incomplete.id}: "))
+        self.assertNotIn(f"od-{complete.id}:", message)
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
 
     def test_new_request_in_done_needs_outcomes(self):
         message = self._refusal(
