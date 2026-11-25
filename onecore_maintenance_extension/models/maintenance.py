@@ -965,6 +965,58 @@ class OneCoreMaintenanceRequest(
     # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
     # ============================================================================
 
+    def _check_component_outcomes(self, stage, stage_manager, vals=None, new=False):
+        """Refuse moving the ärenden to Utförd or Avslutad while a component
+        has no outcome. An ärende is checked when it is a Lägenhet that isn't
+        archived, either with its stored values or with the values in vals
+        over them. These pass: a write that keeps the stage, and Avslutad with
+        no resource. The first ärende that fails is named in the error. With
+        new, the ärenden were just created in stage."""
+        vals = vals or {}
+        done = stage_manager.done_stage()
+        closed = stage_manager.closed_stage()
+        if not stage or stage not in done | closed:
+            return
+        for record in self:
+            stored_in_flow = record.space_caption == "Lägenhet" and not record.archive
+            saved_in_flow = (
+                vals.get("space_caption", record.space_caption) == "Lägenhet"
+                and not vals.get("archive", record.archive)
+            )
+            if not stored_in_flow and not saved_in_flow:
+                continue
+            if not new and record.stage_id == stage:
+                continue
+            if stage == closed and not vals.get("user_id", record.user_id):
+                continue
+            # sudo: every row counts, also one a record rule hides
+            missing = record.sudo().component_ids.filtered(lambda c: not c.outcome)
+            if not missing:
+                continue
+            if new:
+                prefix, verb = "", "sparas som"
+                step = "Spara det i en annan status och använd sedan knappen"
+            else:
+                prefix, verb = f"{WORK_ORDER_PREFIX}{record.id}: ", "flyttas till"
+                if not saved_in_flow:
+                    step = (
+                        "Spara först utan att byta Utrymme eller arkivera ärendet "
+                        "och använd sedan knappen"
+                    )
+                elif record.stage_id in stage_manager.restricted_stages():
+                    step = (
+                        "Flytta det först till en pågående status och använd sedan "
+                        "knappen"
+                    )
+                else:
+                    step = "Använd knappen"
+            names = ", ".join(component._summary_name() for component in missing)
+            raise UserError(
+                f"{prefix}Alla komponenter behöver ett utfall innan ärendet kan "
+                f'{verb} {stage.name}. {step} "Markera som utförd".\n\n'
+                f"Saknar utfall: {names}."
+            )
+
     def _mark_done_refusal(self):
         """Why the ärende can't be marked as utförd from the button, or False."""
         self.ensure_one()
@@ -1473,6 +1525,10 @@ class OneCoreMaintenanceRequest(
             create_service.setup_close_date(request)
             stage_manager.handle_initial_user_assignment(request)
 
+            # A new ärende in Utförd or Avslutad needs an outcome on every
+            # component, checked before the creation SMS
+            request._check_component_outcomes(request.stage_id, stage_manager, new=True)
+
             request._send_creation_sms()
 
             # Post loan product message if loan product was issued during creation
@@ -1584,6 +1640,13 @@ class OneCoreMaintenanceRequest(
         # Components first, in the stage they were chosen in
         if "component_ids" in vals and "stage_id" in vals:
             super().write({"component_ids": vals.pop("component_ids")})
+
+        # Utförd and Avslutad need an outcome on every component, also the
+        # ones saved just above
+        if "stage_id" in vals:
+            self._check_component_outcomes(
+                self.env["maintenance.stage"].browse(vals["stage_id"]), stage_manager, vals
+            )
 
         # Note: activity_update() is overridden to suppress automatic activities
         result = super().write(vals)
