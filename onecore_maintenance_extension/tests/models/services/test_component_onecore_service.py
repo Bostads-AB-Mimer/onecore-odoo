@@ -6,6 +6,8 @@ import time
 from datetime import date
 from unittest.mock import Mock
 
+import psycopg2
+
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
@@ -451,6 +453,9 @@ class TestLoadRoomComponents(TransactionCase):
         service._api = self.mock_api
         return service.load_room_components(rental_id)
 
+    def _key(self, rental_id='406-096-04-0101'):
+        return (self.env.cr.dbname, rental_id)
+
     def test_rooms_with_their_components(self):
         self.mock_api.fetch_rooms.return_value = [
             _room('room-kok', 'Kök', 1),
@@ -683,7 +688,7 @@ class TestLoadRoomComponents(TransactionCase):
         self.assertFalse(badrum['loaded'])
         self.assertEqual(badrum['components'], [])
         # Partly failed: not cached
-        self.assertNotIn('406-096-04-0101', component_onecore_service._room_components_cache)
+        self.assertNotIn(self._key(), component_onecore_service._room_components_cache)
 
     def test_label_never_comes_from_model(self):
         self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
@@ -728,7 +733,7 @@ class TestLoadRoomComponents(TransactionCase):
         self.mock_api.parallel_get_json.return_value = [[]]
         self._load()
         cache = component_onecore_service._room_components_cache
-        cache['406-096-04-0101'] = (time.monotonic() - 1, cache['406-096-04-0101'][1])
+        cache[self._key()] = (time.monotonic() - 1, cache[self._key()][1])
 
         self._load()
 
@@ -745,16 +750,38 @@ class TestLoadRoomComponents(TransactionCase):
 
     def test_storing_drops_expired_entries(self):
         cache = component_onecore_service._room_components_cache
-        cache['old-rental'] = (time.monotonic() - 1, {'ok': True, 'rooms': []})
-        cache['fresh-rental'] = (time.monotonic() + 60, {'ok': True, 'rooms': []})
+        cache[self._key('old-rental')] = (time.monotonic() - 1, {'ok': True, 'rooms': []})
+        cache[self._key('fresh-rental')] = (time.monotonic() + 60, {'ok': True, 'rooms': []})
         self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
         self.mock_api.parallel_get_json.return_value = [[]]
 
         self._load()
 
-        self.assertNotIn('old-rental', cache)
-        self.assertIn('fresh-rental', cache)
-        self.assertIn('406-096-04-0101', cache)
+        self.assertNotIn(self._key('old-rental'), cache)
+        self.assertIn(self._key('fresh-rental'), cache)
+        self.assertIn(self._key(), cache)
+
+    def test_cache_is_per_database(self):
+        # Another database on the same server may use another OneCore
+        component_onecore_service._room_components_cache[
+            ('other_db', '406-096-04-0101')
+        ] = (time.monotonic() + 60, {'ok': True, 'rooms': []})
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.parallel_get_json.return_value = [[]]
+
+        result = self._load()
+
+        self.mock_api.fetch_rooms.assert_called_once_with('406-096-04-0101')
+        self.assertEqual([r['id'] for r in result['rooms']], ['room-1'])
+
+    def test_database_error_is_raised_not_swallowed(self):
+        # The transaction is aborted: Odoo must roll back and retry
+        self.mock_api.fetch_rooms.side_effect = psycopg2.errors.SerializationFailure(
+            "could not serialize access due to concurrent update"
+        )
+
+        with self.assertRaises(psycopg2.errors.SerializationFailure):
+            self._load()
 
     def test_rooms_error_is_not_cached(self):
         self.mock_api.fetch_rooms.side_effect = Exception("500 Server Error")

@@ -7,6 +7,8 @@ import time
 import urllib.parse
 from datetime import datetime
 
+import psycopg2
+
 from odoo import fields
 
 from ....onecore_api import core_api
@@ -22,7 +24,7 @@ PROPERTY_OBJECT_SPACE_TYPE = 'PropertyObject'
 # open; users page back and forth between ärenden on the same apartment.
 # Worst-case staleness = TTL.
 ROOM_COMPONENTS_CACHE_TTL = 300  # seconds
-_room_components_cache = {}  # rental_id -> (expires_at_monotonic, result)
+_room_components_cache = {}  # (dbname, rental_id) -> (expires_at_monotonic, result)
 
 
 def _component_subtype(comp):
@@ -312,12 +314,17 @@ class ComponentOneCoreService:
         if not rental_id:
             return {'ok': False, 'rooms': []}
 
-        cached = _room_components_cache.get(rental_id)
+        cache_key = (self.env.cr.dbname, rental_id)
+        cached = _room_components_cache.get(cache_key)
         if cached and time.monotonic() < cached[0]:
             return cached[1]
 
         try:
             rooms, results, _extra = self._fetch_rooms_with_components(rental_id)
+        except psycopg2.Error:
+            # E.g. a serialization failure when the auth token is refreshed:
+            # the transaction is aborted, so let Odoo roll back and retry
+            raise
         except Exception as e:
             _logger.warning(
                 "Failed to fetch rooms for rental id %s from OneCore: %s", rental_id, e
@@ -355,8 +362,50 @@ class ComponentOneCoreService:
             for key, (expires_at, _cached) in list(_room_components_cache.items()):
                 if expires_at <= now:
                     _room_components_cache.pop(key, None)
-            _room_components_cache[rental_id] = (now + ROOM_COMPONENTS_CACHE_TTL, result)
+            _room_components_cache[cache_key] = (now + ROOM_COMPONENTS_CACHE_TTL, result)
         return result
+
+    def link_values(self, result, component_ids, rental_id):
+        """Values for maintenance.request.component rows, one per component id.
+
+        The same values the room grid writes when a component is checked
+        (toggle in static/src/js/room_components.js).
+
+        Args:
+            result: Output of load_room_components for rental_id
+            component_ids: OneCore component ids, in the order to create
+            rental_id: The rental object's id the rooms were loaded for
+
+        Returns:
+            tuple: (vals_list, missing_ids). An id is missing when no loaded
+            room has it, e.g. an unknown or uninstalled component, or one in
+            a room that failed to load.
+        """
+        found = {}
+        for room in result.get('rooms') or []:
+            for component in room.get('components') or []:
+                found.setdefault(component.get('id'), (room, component))
+
+        vals_list, missing_ids = [], []
+        for component_id in component_ids:
+            if component_id not in found:
+                missing_ids.append(component_id)
+                continue
+            room, component = found[component_id]
+            vals_list.append({
+                'onecore_component_id': component['id'],
+                'installation_id': component.get('installation_id') or False,
+                'rental_id': rental_id,
+                'space_id': room.get('id'),
+                'space_name': room.get('name'),
+                'space_sequence': room.get('sequence'),
+                # Without the grid's number: it shifts over time
+                'component_name': component.get('label'),
+                'subtype_name': component.get('subtype_name') or False,
+                'subtype_xpand_code': component.get('subtype_xpand_code') or False,
+                'category_type': component.get('category_type') or False,
+            })
+        return vals_list, missing_ids
 
     def _transform_component_data(self, comp, room_name, room_id):
         """Transform OneCore component data to wizard format.
