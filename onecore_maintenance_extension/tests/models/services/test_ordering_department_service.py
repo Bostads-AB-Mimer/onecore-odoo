@@ -10,6 +10,7 @@ from odoo.tests.common import TransactionCase
 
 from odoo.addons.onecore_maintenance_extension.models.services.ordering_department_service import (
     MIMER_NU_DEPARTMENT_PARAM,
+    OrderingDepartmentService,
 )
 
 from ...utils.test_utils import (
@@ -173,6 +174,20 @@ class TestOrderingDepartmentService(TransactionCase):
         )
 
         self.assertEqual(request.ordering_department, "Kundcenterenheten")
+
+    def test_placeholder_departments_follow_the_parameter(self):
+        """A blank parameter adds nothing, so an empty department is never
+        mistaken for a Mina sidor one."""
+        params = self.env["ir.config_parameter"].sudo()
+        service = OrderingDepartmentService(self.env)
+
+        params.set_param(MIMER_NU_DEPARTMENT_PARAM, " Hyresgäst ")
+        self.assertEqual(
+            service.placeholder_departments(), {"Hyresgäst", "Förmedlat av Kundcenter"}
+        )
+
+        params.set_param(MIMER_NU_DEPARTMENT_PARAM, "   ")
+        self.assertEqual(service.placeholder_departments(), {"Förmedlat av Kundcenter"})
 
     def test_create_keeps_a_department_stamped_by_the_caller(self):
         """core over XML-RPC (and later MIM-1971) wins over the derivation."""

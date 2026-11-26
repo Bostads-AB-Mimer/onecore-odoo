@@ -7,7 +7,8 @@
     "sequence": 100,
     "category": "Manufacturing/Maintenance",
     "description": "Extends the maintenance module with ONECore features.",
-    "depends": ["maintenance", "onecore_ui"],
+    # auth_oauth: res.users.oauth_uid, read by the ordering-department rules.
+    "depends": ["maintenance", "onecore_ui", "auth_oauth"],
     "summary": "Extends the maintenance module with ONECore features.",
     "website": "https://www.odoo.com/app/maintenance",
     "data": [
@@ -37,6 +38,8 @@
         ],
     },
     "post_init_hook": "_post_init_hook",
-    "auto_install": True,
+    # Auto-installs once maintenance and onecore_ui are installed, and pulls
+    # in auth_oauth.
+    "auto_install": ["maintenance", "onecore_ui"],
     "license": "LGPL-3",
 }

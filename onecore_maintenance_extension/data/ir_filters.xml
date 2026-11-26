@@ -21,8 +21,9 @@
          "Enhet" is the orderer's AD unit (ordering_department). -->
     <data noupdate="1">
         <!-- What I ordered that sits with someone else, per stage: whoever
-             created the request or last passed it on to another resource
-             group is its orderer (owner_user_id). -->
+             created the request or, for a request without a real orderer,
+             last passed it on to another resource group is its orderer
+             (owner_user_id). -->
         <record id="filter_my_orders" model="ir.filters">
             <field name="name">Mina beställningar</field>
             <field name="model_id">maintenance.request</field>
