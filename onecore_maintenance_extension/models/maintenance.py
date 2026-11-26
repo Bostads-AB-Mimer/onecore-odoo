@@ -157,11 +157,13 @@ class OneCoreMaintenanceRequest(
         store=True,
         readonly=False,
     )
+    # copy=False: a duplicate is created here, not on Mina sidor.
     creation_origin = fields.Selection(
         CREATION_ORIGINS,
         string="Skapad från",
         default="internal",
         store=True,
+        copy=False,
     )
 
     # ============================================================================

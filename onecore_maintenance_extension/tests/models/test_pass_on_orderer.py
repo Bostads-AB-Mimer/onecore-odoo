@@ -470,6 +470,21 @@ class TestPassOnOrderer(TransactionCase):
         self.assertEqual(duplicate.ordering_department, "Fastighetsserviceenheten")
         self.assertFalse(duplicate.ordering_backfilled_at)
 
+    def test_a_duplicated_mina_sidor_request_is_ordered_by_whoever_duplicates_it(self):
+        """The duplicate is created here, so it is no tenant's order, and the
+        next group to pass it on does not take it from its creator."""
+        duplicate = self.request.with_user(self.mover).copy()
+
+        self.assertEqual(duplicate.creation_origin, "internal")
+        self.assertEqual(duplicate.owner_user_id, self.mover)
+        self.assertEqual(duplicate.ordering_department, "Fastighetsserviceenheten")
+
+        self._move(duplicate, self.mover, self.orderer_team)
+        self._move(duplicate, self.orderer, self.contractor_team)
+
+        self.assertEqual(duplicate.owner_user_id, self.mover)
+        self.assertFalse(self._orderer_notes(duplicate))
+
     def test_an_unstamped_request_mediated_by_kundcenter_is_taken_over(self):
         """The backfill would stamp it mediated, not with the member's unit."""
         request = self._internal_request(self.kc_user, self.appliances)

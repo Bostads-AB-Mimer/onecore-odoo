@@ -25,9 +25,8 @@ Kundcenter creates is stamped "Förmedlat av Kundcenter", except in the
 categories Kundcenter orders in (keys), and Kundcenter's moves never make it
 the orderer. A request without a real orderer (Mina sidor, mediated by
 Kundcenter, an orderer who has left or nobody can follow up, or one who took
-it over) gets
-one when someone else passes it on to another resource group (pass_on). A
-real orderer, who created the request, is kept.
+it over) gets one when someone else passes it on to another resource group
+(pass_on). A real orderer, who created the request, is kept.
 
 Write path only: create(), the backfill cron and pass_on(). The read path
 stays free of work.
