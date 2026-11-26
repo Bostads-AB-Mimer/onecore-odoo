@@ -7,3 +7,4 @@ from .component_onecore_service import ComponentOneCoreService
 from .component_ai_analysis_service import ComponentAIAnalysisService
 from .management_area_service import ManagementAreaService
 from .time_report_service import TimeReportService
+from .component_event_sync_service import ComponentEventSyncService

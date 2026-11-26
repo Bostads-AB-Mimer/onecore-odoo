@@ -569,6 +569,33 @@ class TestFieldChangeTracker(TransactionCase):
         # Should not have posted any new messages
         self.assertEqual(len(request.message_ids), initial_count)
 
+    def test_component_sync_fields_post_no_change_note(self):
+        """The badge "Komponent ej synkad" and the lines under it are
+        computed; a client write that carries them posts no change note."""
+        request_id = create_maintenance_request(self.env).id
+        # Browsed anew, as an RPC call does: the record create() returns
+        # carries creating_records, which skips all change notes
+        request = self.env["maintenance.request"].with_user(self.internal_user).browse(
+            request_id
+        )
+        Message = self.env["mail.message"]
+        domain = [("model", "=", "maintenance.request"), ("res_id", "=", request_id)]
+        messages_before = Message.search_count(domain)
+
+        request.write(
+            {
+                "component_sync_pending": True,
+                "component_sync_message": "Utfallet för Frys väntar på att skickas.",
+            }
+        )
+
+        self.assertEqual(Message.search_count(domain), messages_before)
+
+        # The same write posts a note for a field users set
+        request.write({"priority_expanded": "10"})
+
+        self.assertEqual(Message.search_count(domain), messages_before + 1)
+
     def test_multiple_records_change_tracking(self):
         """Test change tracking works correctly for multiple records"""
         request1 = create_maintenance_request(self.env, description="Request 1")

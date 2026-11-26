@@ -31,6 +31,12 @@
                         Huvudnyckel ändrad
                     </span>
                 </div>
+                <div t-if="record.component_sync_pending.raw_value">
+                    <span class="mimer-badge mimer-badge-orange"
+                        title="Utfallet för minst en komponent har inte kommit fram till OneCore. Öppna ärendet för att se varför och vad du behöver göra.">
+                        Komponent ej synkad
+                    </span>
+                </div>
             </div>
         </div>
 

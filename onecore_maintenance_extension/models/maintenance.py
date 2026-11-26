@@ -22,6 +22,7 @@ from .services import (
     MaintenanceStageManager,
     ManagementAreaService,
     ComponentOneCoreService,
+    ComponentEventSyncService,
 )
 from .constants import (
     SORTED_SPACES,
@@ -29,6 +30,7 @@ from .constants import (
     PRIORITY_OPTIONS,
     CREATION_ORIGINS,
     FORM_STATES,
+    COMPONENT_SYNC_GRACE,
 )
 from .mixins import (
     SearchFieldsMixin,
@@ -243,6 +245,23 @@ class OneCoreMaintenanceRequest(
     )
     # Shows the "Markera som utförd" button: only on ärenden with components
     can_mark_done = fields.Boolean(compute="_compute_can_mark_done", store=False)
+    # Badge "Komponent ej synkad": an outcome that isn't in OneCore's component
+    # history. Not stored, because it depends on the time. Computed as
+    # superuser, so a row hidden from the user still shows the badge.
+    component_sync_pending = fields.Boolean(
+        string="Komponent ej synkad",
+        compute="_compute_component_sync_pending",
+        compute_sudo=True,
+        store=False,
+    )
+    # Under the badge on the form: one line per component behind it, with
+    # what to do next
+    component_sync_message = fields.Text(
+        string="Komponenter som inte är synkade",
+        compute="_compute_component_sync_pending",
+        compute_sudo=True,
+        store=False,
+    )
 
     # ============================================================================
     # MANAGEMENT AREA — distrikt / kvartersvärdsområde (OneCore snapshot)
@@ -462,6 +481,75 @@ class OneCoreMaintenanceRequest(
                 and not record.archive
                 and record.stage_id not in closed_stages
             )
+
+    @api.depends(
+        "component_ids.sync_state",
+        "component_ids.sync_error",
+        "component_ids.write_date",
+    )
+    def _compute_component_sync_pending(self):
+        lines = {}
+        for row in self._unsynced_component_rows():
+            lines.setdefault(row.maintenance_request_id.id, []).append(
+                ComponentEventSyncService.status_text(row)
+            )
+        for record in self:
+            record_lines = lines.get(record._origin.id)
+            record.component_sync_pending = bool(record_lines)
+            record.component_sync_message = (
+                "\n".join(record_lines) if record_lines else False
+            )
+
+    def _unsynced_component_rows(self):
+        """The component rows behind the badge "Komponent ej synkad", as
+        superuser: failed or rejected, or still pending after the grace
+        period, so the badge doesn't show while the cron sends them.
+        Searched rather than read through component_ids, whose cache is
+        shared with the user's env, where record rules hide rows."""
+        Component = self.env["maintenance.request.component"].sudo()
+        request_ids = self._origin.ids
+        if not request_ids:
+            return Component
+        overdue = fields.Datetime.now() - COMPONENT_SYNC_GRACE
+        return Component.search(
+            [
+                ("maintenance_request_id", "in", request_ids),
+                "|",
+                ("sync_state", "in", ("failed", "rejected")),
+                "&",
+                ("sync_state", "=", "pending"),
+                ("write_date", "<", overdue),
+            ]
+        )
+
+    def action_resend_component_outcomes(self):
+        """For an administrator, once the reason is fixed: put the component
+        outcomes behind the badge "Komponent ej synkad" back in the queue to
+        OneCore and run the sync cron."""
+        self.check_access("write")
+        work_orders = ", ".join(f"{WORK_ORDER_PREFIX}{record.id}" for record in self)
+        if not self.env.user.has_group("base.group_system"):
+            raise AccessError(
+                f"{work_orders}: Bara en administratör kan skicka utfall till "
+                "OneCore igen. Kontakta en administratör."
+            )
+        rows = self._unsynced_component_rows()
+        if not rows:
+            raise UserError(
+                f"{work_orders}: Alla utfall har kommit fram till OneCore eller "
+                "väntar på att skickas. Ladda om sidan."
+            )
+        rows._queue_again()
+        _logger.info(
+            "Component outcomes of %s queued again by user %s",
+            work_orders,
+            self.env.uid,
+        )
+        return self._notification_and_reload(
+            "Skicka igen",
+            f"{work_orders}: Utfallen skickas till OneCore igen.",
+            "success",
+        )
 
     @api.depends("recently_added_tenant")
     def _compute_empty_tenant(self):
@@ -1888,18 +1976,27 @@ class OneCoreMaintenanceRequest(
 
     @staticmethod
     def _district_team_notification(message, notification_type):
+        # Needed for every outcome: the warning case may have just fetched
+        # the district
+        return OneCoreMaintenanceRequest._notification_and_reload(
+            "Tilldela resursgrupp", message, notification_type
+        )
+
+    @staticmethod
+    def _notification_and_reload(title, message, notification_type):
         # "next" is what makes the form show the new values without a manual
         # reload: a button that returns nothing gets act_window_close from the
         # web client, which triggers the record reload; a client action does
         # not. display_notification returns params.next, and the action service
         # runs it with the same onClose. Same pattern as hr_recruitment,
-        # l10n_in and mail in stock Odoo. Needed for every outcome — the
-        # warning case may have just fetched the district.
+        # l10n_in and mail in stock Odoo. On maintenance.request the form's
+        # button patch (onecore_web_extension no_autosave.js) reloads on that
+        # act_window_close too, unless the form has unsaved changes.
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
-                "title": "Tilldela resursgrupp",
+                "title": title,
                 "message": message,
                 "type": notification_type,
                 "sticky": False,

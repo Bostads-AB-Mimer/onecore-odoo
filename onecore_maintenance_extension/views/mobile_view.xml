@@ -59,6 +59,7 @@
         <field name="has_unread_supplier_dialog" />
         <field name="has_unread_internal_dialog" />
         <field name="has_unread_master_key_change" />
+        <field name="component_sync_pending" />
       </mobile>
     </field>
   </record>

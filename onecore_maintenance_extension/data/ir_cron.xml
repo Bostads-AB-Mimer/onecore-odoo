@@ -2,7 +2,7 @@
 <odoo>
     <data noupdate="1">
         <!--
-        Two jobs on purpose: they have completely different tempos.
+        Separate jobs on purpose: they have completely different tempos.
 
         noupdate="1" so ops can retune the intervals without an upgrade
         overwriting them.
@@ -45,6 +45,23 @@
             <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!--
+        Outcomes on components sent to OneCore as component events. Saving an
+        outcome triggers this at once; the interval retries the rows that
+        failed (OneCore down, timeouts) about every 15 minutes. One call per
+        row, committed per row; core answers a repeat with the same event.
+        -->
+        <record id="ir_cron_sync_component_events" model="ir.cron">
+            <field name="name">Ärenden: skicka komponenters utfall till OneCore</field>
+            <field name="model_id" ref="model_maintenance_request_component"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_component_events()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">15</field>
+            <field name="interval_type">minutes</field>
             <field name="active" eval="True"/>
         </record>
     </data>

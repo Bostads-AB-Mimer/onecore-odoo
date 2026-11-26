@@ -161,6 +161,7 @@
                 <xpath expr="//group[1]" position="inside">
                     <field name="special_attention" invisible="1" />
                     <field name="requires_pest_control" invisible="1" />
+                    <field name="component_sync_pending" invisible="1" />
                     <field name="creation_origin" invisible="1" readonly="1"></field>
 
                     <div>
@@ -178,6 +179,22 @@
                             class="mimer-badge mb-3 fs-6 lh-base px-3 py-2 rounded-pill bg-warning text-dark"
                             invisible="not requires_pest_control">
                             <span>Spärr skadedjur</span>
+                        </div>
+                        <div
+                            class="mimer-badge mimer-badge-orange mb-3 fs-6 lh-base px-3 py-2 rounded-pill"
+                            invisible="not component_sync_pending"
+                            title="Utfallet för minst en komponent har inte kommit fram till OneCore. Under märket står varför och vad du behöver göra.">
+                            <span>Komponent ej synkad</span>
+                        </div>
+                        <!-- Per component: why it isn't synced and what to do next -->
+                        <div class="mb-3" invisible="not component_sync_pending">
+                            <field name="component_sync_message" nolabel="1" readonly="1" />
+                            <button name="action_resend_component_outcomes" type="object"
+                                string="Skicka igen"
+                                icon="fa-refresh"
+                                class="btn btn-secondary btn-sm d-block mt-2"
+                                groups="base.group_system"
+                                help="Lägger utfallen tillbaka i kön till OneCore. Rätta först felet som står ovanför." />
                         </div>
                     </div>
 
@@ -940,6 +957,7 @@
                     <field name="has_unread_master_key_change" />
                     <field name="has_loan_product" />
                     <field name="loan_product_details" />
+                    <field name="component_sync_pending" />
                 </xpath>
 
                 <xpath expr="//t[@t-name='card']" position="replace">

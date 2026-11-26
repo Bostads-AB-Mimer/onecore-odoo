@@ -209,6 +209,9 @@ class FieldChangeTracker:
         # One2many commands, not a value: the generic formatting would post
         # the raw command list on every save
         "component_ids",
+        # Computed from the component rows' sync to OneCore, not set by a user
+        "component_sync_pending",
+        "component_sync_message",
     }
 
     def __init__(self, env):

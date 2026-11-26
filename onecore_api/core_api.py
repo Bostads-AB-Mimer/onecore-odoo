@@ -466,6 +466,17 @@ class CoreApi:
         response.raise_for_status()
         return response.json()
 
+    def create_component_event(self, component_id, payload, **kwargs):
+        """POST /components/{id}/events. Returns the response without checking
+        its status: 201 (created), 200 (the same event already existed), 400,
+        404 and 5xx each mean something different to the caller."""
+        return self.request(
+            "POST",
+            f"/components/{urllib.parse.quote(str(component_id), safe='')}/events",
+            json=payload,
+            **kwargs,
+        )
+
     def upload_document(self, file_data, component_instance_id, file_name=None):
         """Upload a document/image to a component instance.
 

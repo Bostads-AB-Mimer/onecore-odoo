@@ -1,5 +1,12 @@
 """Constants and configurations for maintenance requests."""
 
+from datetime import timedelta
+
+# How long a component outcome may wait for its send to OneCore before the
+# ärende shows "Komponent ej synkad", counted from the row's last write. The
+# sync cron runs every 15 minutes.
+COMPONENT_SYNC_GRACE = timedelta(minutes=15)
+
 # Lease status labels
 LEASE_STATUS_LABELS = {
     0: "Gällande",
