@@ -233,11 +233,11 @@ class TestMaintenanceRequestUtilityMethods(FakerMixin, TransactionCase):
         self.assertEqual(name, full_name)
 
     def test_get_tenant_name_with_empty_data(self):
-        """_get_tenant_name should return empty string for empty data"""
+        """get_tenant_name returns the placeholder for empty data"""
         tenant_data = {}
 
         name = get_tenant_name(tenant_data)
-        self.assertEqual(name, "")
+        self.assertEqual(name, "Namn saknas")
 
     def test_get_main_phone_number_finds_main_number(self):
         """_get_main_phone_number should find the phone number marked as main"""
