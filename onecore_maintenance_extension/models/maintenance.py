@@ -349,26 +349,37 @@ class OneCoreMaintenanceRequest(
     #   2. Mina sidor-ärenden arrive over XML-RPC with a technical integration
     #      user as create_uid, which has no department. Those resolve from
     #      creation_origin to a system parameter instead.
+    # copy=False: a duplicate is ordered by whoever duplicates it, and is
+    # stamped again at create.
     owner_user_id = fields.Many2one(
         string="Beställare",
-        help="Den som beställde ärendet: den som skapade det, eller den som "
-        "senast skickade det vidare till en annan resursgrupp.",
+        copy=False,
+        help="Den som beställde ärendet: den som skapade det. Saknar ärendet "
+        "en beställare som kan följa upp det blir den som skickar det vidare "
+        "till en annan resursgrupp beställare. Det gäller ärenden från Mina "
+        "sidor, ärenden som Kundcenter förmedlat, besiktningar, ärenden vars "
+        "skapare har slutat och ärenden som någon redan tagit över på det "
+        "sättet.",
     )
     ordering_department = fields.Char(
         "Beställande enhet",
         readonly=True,
+        copy=False,
         # The backfill cron's filter column and the group-by key behind
         # MIM-1975/1976/1977.
         index=True,
         help="Enheten (enligt AD) som beställde ärendet. Sätts när ärendet "
-        "skapas och byts när någon skickar ärendet vidare till en annan "
-        "resursgrupp (inte Kundcenter, som bara fördelar). Ärenden från Mina "
-        "sidor registreras på Mina sidor. Skiljer sig från Resursgrupp, som är "
-        "den grupp ärendet ligger hos just nu.",
+        "skapas. Ärenden från Mina sidor registreras på Mina sidor och ärenden "
+        "som Kundcenter förmedlat på Förmedlat av Kundcenter. Byts Beställare "
+        "när ärendet skickas vidare till en annan resursgrupp (inte "
+        "Kundcenter, som bara fördelar) får ärendet den nya beställarens "
+        "enhet. Skiljer sig från Resursgrupp, som är den grupp ärendet ligger "
+        "hos just nu.",
     )
     ordering_backfilled_at = fields.Datetime(
         "Beställare härledd i efterhand",
         readonly=True,
+        copy=False,
         help="Satt av backfill-jobbet. Är det ifyllt tillsammans med en "
         "beställande avdelning är avdelningen en gissning, härledd ur vem som "
         "skapade ärendet och vilken avdelning den personen har idag — inte "
@@ -1599,10 +1610,10 @@ class OneCoreMaintenanceRequest(
                     master_key_changed_ids.append(record.id)
 
         # Moving a request to another resource group makes the mover its
-        # orderer (OrderingDepartmentService.pass_on). Not for a write that
-        # enters Återsänd; the handback's own team write below runs under
-        # sudo() and passes_on() skips the superuser. The team before the
-        # write tells a move from a resend of the same team.
+        # orderer when it has none (OrderingDepartmentService.pass_on). Not
+        # for a write that enters Återsänd; the handback's own team write
+        # below runs under sudo() and passes_on() skips the superuser. The
+        # team before the write tells a move from a resend of the same team.
         team_before = {}
         if "maintenance_team_id" in vals and not entering_atersand:
             team_before = {record.id: record.maintenance_team_id for record in self}

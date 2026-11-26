@@ -23,8 +23,11 @@ Stamped at create and never recomputed on read:
 Kundcenter distributes requests without ordering them. A request a member of
 Kundcenter creates is stamped "Förmedlat av Kundcenter", except in the
 categories Kundcenter orders in (keys), and Kundcenter's moves never make it
-the orderer. Whoever else passes a request on to another resource group
-becomes its orderer (pass_on).
+the orderer. A request without a real orderer (Mina sidor, mediated by
+Kundcenter, an orderer who has left or nobody can follow up, or one who took
+it over) gets
+one when someone else passes it on to another resource group (pass_on). A
+real orderer, who created the request, is kept.
 
 Write path only: create(), the backfill cron and pass_on(). The read path
 stays free of work.
@@ -99,6 +102,51 @@ class OrderingDepartmentService:
             orderer.id in self.kundcenter_member_ids()
             and not request.maintenance_request_category_id.kundcenter_orders
         )
+
+    @staticmethod
+    def department_may_arrive(active, oauth_uid):
+        """An orderer without a department may still get one: an active user
+        linked to Keycloak, whose unit is written at their next SSO login."""
+        return bool(active and oauth_uid)
+
+    def placeholder_departments(self):
+        """Departments that name no orderer. A blank parameter adds nothing,
+        so an empty department is never a placeholder."""
+        return {self.mimer_nu_department(), KUNDCENTER_MEDIATED_DEPARTMENT} - {False}
+
+    def has_real_orderer(self, request, placeholders):
+        """Whether somebody ordered ``request`` who follows it up.
+
+        Only the user who created a request can be its real orderer. No real
+        orderer: no owner; an owner who took the request over (not its
+        creator); an archived owner, who has left; a Mina sidor request still
+        owned by the integration user, whatever its stamp; a placeholder
+        department (``placeholders``, from placeholder_departments); an
+        unstamped request the backfill has given up on, would stamp mediated,
+        or whose owner can never get a department (not linked to Keycloak).
+        An owner whose unit is pending is a real orderer: the backfill fills
+        in their department.
+        """
+        owner = request.owner_user_id
+        if (
+            not owner
+            or owner != request.create_uid
+            or self.ordered_by_tenant(request)
+        ):
+            return False
+        # sudo: called in the mover's env, which may be denied the owner's
+        # oauth_uid.
+        owner = owner.sudo()
+        if not owner.active:
+            return False
+        if request.ordering_department:
+            return request.ordering_department not in placeholders
+        if request.ordering_backfilled_at or self.mediated_by_kundcenter(request):
+            return False
+        return bool(self.department_of(owner)) or self.department_may_arrive(
+            owner.active, owner.oauth_uid
+        )
+
     def mimer_nu_department(self):
         """The department stamped on tenant (Mina sidor) requests."""
         value = (
@@ -183,13 +231,20 @@ class OrderingDepartmentService:
         return bool(MaintenanceStageManager(self.env).resolve_orderer_team(user))
 
     def pass_on(self, requests):
-        """Make the current user the orderer of ``requests``, which they have
-        just moved to another resource group.
+        """Make the current user the orderer of ``requests`` that have no real
+        orderer (has_real_orderer), which they have just moved to another
+        resource group.
 
         Left alone: archived (cancelled) and closed requests, a request sent
         to Kundcenter, and a request moved into a group the user is a member
         of. Those are not passed on: Kundcenter only distributes, and taking
         a request into your own group is not ordering it from someone else.
+        Also left alone: a request with a real orderer. Who ordered it stays
+        its orderer, also when their department is still waiting for the
+        backfill, and also when they are in no resource group: Återsänd then
+        hands it to Kundcenter (resolve_return_team), not to the group that
+        passed it on. A user who took a request over is no real orderer: the
+        next user who passes it on takes it over in turn.
 
         The department becomes the user's AD unit. Without one it is left
         empty, and unstamped, for the backfill to fill in once the user's unit
@@ -200,6 +255,7 @@ class OrderingDepartmentService:
         kundcenter = MaintenanceStageManager(self.env).kundcenter_team()
         if not self._passes_on(kundcenter):
             return
+        placeholders = self.placeholder_departments()
         user = self.env.user
         department = self.department_of(user)
         changed = requests.filtered(
@@ -208,6 +264,7 @@ class OrderingDepartmentService:
             and request.maintenance_team_id
             and request.maintenance_team_id != kundcenter
             and user not in request.maintenance_team_id.sudo().member_ids
+            and not self.has_real_orderer(request, placeholders)
             and (
                 request.owner_user_id != user
                 or request.ordering_department != department
@@ -354,6 +411,6 @@ class OrderingDepartmentService:
             # create path.
             if department:
                 mapping[row["id"]] = department
-            elif row["active"] and row["oauth_uid"]:
+            elif self.department_may_arrive(row["active"], row["oauth_uid"]):
                 pending.add(row["id"])
         return mapping, pending
