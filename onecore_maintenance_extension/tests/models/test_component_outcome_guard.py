@@ -1,6 +1,6 @@
-"""A Lägenhet ärende with components moves to Utförd or Avslutad only when
-every component has an outcome, also from Utförd to Avslutad. Avslutad passes
-when nobody is assigned."""
+"""An ärende with components, on a Lägenhet, a maintenance unit or a Lokal,
+moves to Utförd or Avslutad only when every component has an outcome, also
+from Utförd to Avslutad. Avslutad passes when nobody is assigned."""
 
 from odoo import Command
 from odoo.exceptions import UserError
@@ -8,7 +8,12 @@ from odoo.tests import tagged
 
 from ...models.services import MaintenanceStageManager
 from ..utils.test_utils import create_external_contractor_user, create_maintenance_team
-from .test_maintenance_request_component import _apartment_request, _link_vals
+from .test_maintenance_request_component import (
+    _apartment_request,
+    _facility_request,
+    _link_vals,
+    _unit_request,
+)
 from .test_mark_done import MarkDoneCase, _surface_vals
 
 
@@ -256,14 +261,105 @@ class TestComponentOutcomeGuard(MarkDoneCase):
 
         self.assertEqual(request.stage_id, self.done_stage)
 
-    def test_request_that_isnt_an_apartment_any_more_passes(self):
+    def test_request_without_the_room_grid_any_more_passes(self):
         # Its components stay, hidden, and it has no "Markera som utförd"
         request = self._request(_link_vals())
-        request.write({"space_caption": "Tvättstuga"})
+        request.write({"space_caption": "Fastighet"})
 
         self._move(request, "maintenance.stage_5")
 
         self.assertEqual(request.stage_id, self.done_stage)
+
+    def test_unit_and_facility_requests_are_refused_without_outcomes(self):
+        for make in (_unit_request, _facility_request):
+            for xml_id in ("maintenance.stage_5", "maintenance.stage_6"):
+                with self.subTest(make=make.__name__, stage=xml_id):
+                    request = self._request(
+                        _link_vals("comp-tvatt", "Tvättmaskin", space_name="Tvättstuga"),
+                        make=make,
+                    )
+                    stage_before = request.stage_id
+
+                    message = self._refusal(lambda: self._move(request, xml_id))
+
+                    self.assertIn('Använd knappen "Markera som utförd".', message)
+                    self.assertIn("Saknar utfall: Tvättmaskin (Tvättstuga).", message)
+                    self.assertEqual(request.stage_id, stage_before)
+
+    def test_apartment_saved_as_a_unit_still_needs_outcomes(self):
+        # A deliberate choice: the new Utrymme has the room grid too, so the
+        # components chosen on the apartment still count
+        request = self._request(_link_vals())
+        request.write({"space_caption": "Tvättstuga"})
+
+        message = self._refusal(lambda: self._move(request, "maintenance.stage_5"))
+
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+
+    def test_new_unit_or_facility_request_in_done_or_closed_needs_outcomes(self):
+        for make in (_unit_request, _facility_request):
+            for stage in (self.done_stage, self.closed_stage):
+                with self.subTest(make=make.__name__, stage=stage.name):
+                    message = self._refusal(
+                        lambda: make(
+                            self.env,
+                            stage_id=stage.id,
+                            # Avslutad passes without a resource
+                            user_id=self.internal_user.id,
+                            component_ids=[Command.create(_link_vals())],
+                        )
+                    )
+
+                    self.assertIn(f"kan sparas som {stage.name}.", message)
+                    self.assertIn("Saknar utfall: Frys (Kök).", message)
+
+    def test_unit_request_moves_when_every_component_has_an_outcome(self):
+        request = self._request(_link_vals(outcome="REPAIRED"), make=_unit_request)
+
+        self._move(request, "maintenance.stage_5")
+
+        self.assertEqual(request.stage_id, self.done_stage)
+
+    def test_to_a_unit_in_the_same_write_is_checked(self):
+        # Hidden components on a Fastighet ärende show again on a Tvättstuga
+        request = self._request(_link_vals())
+        request.write({"space_caption": "Fastighet"})
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"space_caption": "Tvättstuga", "stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn('Använd knappen "Markera som utförd".', message)
+        self.assertIn("Saknar utfall: Frys (Kök).", message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+
+    def test_leaving_a_unit_in_the_same_write_is_checked(self):
+        request = self._request(_link_vals(), make=_unit_request)
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"space_caption": "Fastighet", "stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn(self.SAVE_WITHOUT_LEAVING, message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
+        self.assertEqual(request.space_caption, "Tvättstuga")
+
+    def test_from_a_unit_to_a_facility_in_the_same_write_is_checked(self):
+        request = self._request(_link_vals(), make=_unit_request)
+
+        message = self._refusal(
+            lambda: request.with_user(self.internal_user).write(
+                {"space_caption": "Lokal", "stage_id": self.done_stage.id}
+            )
+        )
+
+        self.assertIn('Använd knappen "Markera som utförd".', message)
+        self.assertNotEqual(request.stage_id, self.done_stage)
 
     def test_archived_request_passes(self):
         request = self._request(_link_vals())
@@ -288,7 +384,7 @@ class TestComponentOutcomeGuard(MarkDoneCase):
 
     def test_back_to_apartment_in_the_same_write_is_checked(self):
         request = self._request(_link_vals())
-        request.write({"space_caption": "Tvättstuga"})
+        request.write({"space_caption": "Fastighet"})
 
         message = self._refusal(
             lambda: request.with_user(self.internal_user).write(
@@ -304,7 +400,7 @@ class TestComponentOutcomeGuard(MarkDoneCase):
 
         message = self._refusal(
             lambda: request.with_user(self.internal_user).write(
-                {"space_caption": "Tvättstuga", "stage_id": self.done_stage.id}
+                {"space_caption": "Fastighet", "stage_id": self.done_stage.id}
             )
         )
 

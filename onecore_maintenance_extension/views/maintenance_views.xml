@@ -197,7 +197,7 @@
                         same lines. -->
                         <field name="component_ids" widget="component_notes" nolabel="1"
                             readonly="restricted_external"
-                            invisible="space_caption != 'Lägenhet'" />
+                            invisible="not component_source_kind" />
                     </div>
 
                     <div class="d-flex w-100 justify-content-between justify-content-md-start"
@@ -240,6 +240,7 @@
                                 data-bs-parent="#accordionFlush">
                                 <div class="accordion-body">
                                     <field name="form_state" invisible="1" />
+                                    <field name="component_source_kind" invisible="1" />
                                     <group col="1"
                                         invisible="form_state != 'rental-property'">
                                         <field name="create_date" invisible="1" />
@@ -843,7 +844,7 @@
                         <!-- Rum och komponenter: full width, on its own row -->
                         <div
                             class="accordion-item bg-transparent shadow-sm flex-grow-1 w-100 mb-3"
-                            invisible="space_caption != 'Lägenhet'">
+                            invisible="not component_source_kind">
                             <h2 class="accordion-header">
                                 <button name="accordion-button-5"
                                     class="accordion-button collapsed d-md-none fs-3 fw-bold"

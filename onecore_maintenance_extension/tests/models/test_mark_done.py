@@ -14,7 +14,13 @@ from ..utils.test_utils import (
     create_maintenance_request,
     create_maintenance_team,
 )
-from .test_maintenance_request_component import _apartment_request, _link_vals
+from .test_maintenance_request_component import (
+    UNIT_ID,
+    _apartment_request,
+    _facility_request,
+    _link_vals,
+    _unit_request,
+)
 
 
 def _surface_vals(component_id="comp-golv", label="Golv", **kwargs):
@@ -33,10 +39,10 @@ class MarkDoneCase(TransactionCase):
         self.internal_user = create_internal_user(self.env)
         self.done_stage = self.env.ref("maintenance.stage_5")
 
-    def _request(self, *link_vals, assign=True, **kwargs):
-        """A Lägenhet ärende with these components, with a resource assigned
-        unless assign=False."""
-        request = _apartment_request(self.env, **kwargs)
+    def _request(self, *link_vals, assign=True, make=_apartment_request, **kwargs):
+        """A Lägenhet ärende, or the ärende make creates, with these
+        components, with a resource assigned unless assign=False."""
+        request = make(self.env, **kwargs)
         if link_vals:
             request.write(
                 {"component_ids": [Command.create(vals) for vals in link_vals]}
@@ -239,11 +245,15 @@ class TestRegisterOutcomes(MarkDoneCase):
 
         self.assertEqual(request.component_ids.outcome, "REPAIRED")
 
-    def test_request_that_isnt_an_apartment_is_refused(self):
-        request = create_maintenance_request(self.env, space_caption="Tvättstuga")
+    def test_request_without_the_room_grid_is_refused(self):
+        # Its components stay, hidden
+        request = self._request(_link_vals())
+        request.write({"space_caption": "Fastighet"})
 
-        with self.assertRaises(UserError):
-            self._register(request, [])
+        with self.assertRaisesRegex(UserError, "bara för ärenden med Rum och komponenter"):
+            self._register(request, self._answers(request))
+
+        self.assertFalse(request.component_ids.outcome)
 
     def test_archived_request_is_refused(self):
         request = self._request(_link_vals())
@@ -356,6 +366,16 @@ class TestRegisterOutcomes(MarkDoneCase):
 
         with self.assertRaises(AccessError):
             self._register(request, self._answers(request), user=portal_user)
+
+    def test_unit_and_facility_requests_are_marked_done(self):
+        for make in (_unit_request, _facility_request):
+            with self.subTest(make=make.__name__):
+                request = self._request(_link_vals(), make=make)
+
+                self._register(request, self._answers(request, "REPLACED"))
+
+                self.assertEqual(request.stage_id, self.done_stage)
+                self.assertEqual(request.component_ids.outcome, "REPLACED")
 
 
 @tagged("onecore")
@@ -598,12 +618,27 @@ class TestCheckCanMarkDone(MarkDoneCase):
 
         self.assertIn("inga valda komponenter", result["error"])
 
-    def test_explains_that_only_apartment_requests_have_it(self):
-        request = create_maintenance_request(self.env, space_caption="Tvättstuga")
+    def test_explains_that_only_requests_with_the_room_grid_have_it(self):
+        request = create_maintenance_request(self.env, space_caption="Fastighet")
 
         result = self._check(request)
 
-        self.assertIn("lägenhet", result["error"])
+        self.assertEqual(
+            result["error"],
+            "Markera som utförd finns bara för ärenden med Rum och komponenter.",
+        )
+
+    def test_unit_and_facility_requests_have_it(self):
+        for make in (_unit_request, _facility_request):
+            with self.subTest(make=make.__name__):
+                request = self._request(
+                    _link_vals(rental_id=UNIT_ID, space_id=UNIT_ID), make=make
+                )
+
+                result = self._check(request)
+
+                self.assertFalse(result["error"])
+                self.assertEqual(len(result["components"]), 1)
 
     def test_user_without_access_to_requests_is_refused(self):
         request = self._request(_link_vals())
@@ -660,10 +695,23 @@ class TestCanMarkDone(MarkDoneCase):
 
         self.assertFalse(record.can_mark_done)
 
-    def test_not_on_a_request_that_isnt_an_apartment(self):
-        request = create_maintenance_request(self.env, space_caption="Tvättstuga")
+    def test_not_on_a_request_without_the_room_grid(self):
+        # Its components stay, hidden
+        request = self._request(_link_vals())
+        request.write({"space_caption": "Fastighet"})
 
+        self.assertTrue(request.component_ids)
         self.assertFalse(request.can_mark_done)
+
+    def test_unit_and_facility_requests_with_components_can_be_marked_done(self):
+        for make in (_unit_request, _facility_request):
+            with self.subTest(make=make.__name__):
+                request = self._request(_link_vals(), make=make)
+
+                self.assertTrue(request.can_mark_done)
+
+    def test_unit_request_without_components_cannot(self):
+        self.assertFalse(self._request(make=_unit_request).can_mark_done)
 
     def test_not_in_done_closed_or_returned(self):
         for xml_id in (

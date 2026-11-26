@@ -6,7 +6,7 @@ import time
 
 from markupsafe import Markup
 from psycopg2.errors import UniqueViolation
-from odoo import Command, api, fields, models, _
+from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import mute_logger
 
@@ -24,6 +24,8 @@ from .services import (
     ComponentOneCoreService,
 )
 from .constants import (
+    COMPONENT_SOURCE_KINDS,
+    FORM_STATE_BY_SPACE,
     SORTED_SPACES,
     SEARCH_TYPES,
     PRIORITY_OPTIONS,
@@ -53,9 +55,15 @@ _pest_control_cache = {}  # rental_id -> (expires_at_monotonic, bool)
 # Why OneCore component ids got no row on an ärende: the text for the log and
 # the chatter note, where {components} is e.g. "2 komponenter"
 UNLINKED_COMPONENT_REASONS = {
-    "no_rental_object": (
-        "no rental object",
-        "{components} kunde inte kopplas till ärendet eftersom det saknar hyresobjekt.",
+    "no_room_grid": (
+        "space has no room grid",
+        "{components} kunde inte kopplas till ärendet eftersom dess Utrymme inte har "
+        "Rum och komponenter.",
+    ),
+    "no_source_object": (
+        "no OneCore object id",
+        "{components} kunde inte kopplas till ärendet eftersom ärendet saknar ett "
+        "objekt med id i OneCore.",
     ),
     "onecore_down": (
         "OneCore didn't return the rooms",
@@ -72,6 +80,13 @@ UNLINKED_COMPONENT_REASONS = {
         "{components} hittades inte i OneCore och kunde inte kopplas till ärendet. "
         "Välj rätt komponenter under Rum och komponenter.",
     ),
+}
+
+# Where a saved ärende holds the OneCore id of each component source kind
+COMPONENT_SOURCE_ID_PATHS = {
+    "rental": "rental_property_id.rental_property_id",
+    "unit": "maintenance_unit_id.property_object_id",
+    "facility": "facility_id.facility_id",
 }
 
 
@@ -236,10 +251,18 @@ class OneCoreMaintenanceRequest(
     component_ids = fields.One2many(
         "maintenance.request.component", "maintenance_request_id", string="Komponenter"
     )
-    # The rental id the room grid loads components for. Also set on a new,
-    # unsaved ärende, from the selected search hit.
-    component_rental_id = fields.Char(
-        compute="_compute_component_rental_id", store=False
+    # Where the room grid loads components from, also on a new, unsaved
+    # ärende. False hides the grid.
+    component_source_kind = fields.Selection(
+        COMPONENT_SOURCE_KINDS, compute="_compute_component_source", store=False
+    )
+    # The source object's OneCore id: the rental id, the maintenance unit's
+    # property_object_id or the facility's facility_id. Empty for a unit or
+    # facility stored before those ids were, which shows the empty state.
+    component_source_id = fields.Char(compute="_compute_component_source", store=False)
+    # The card name for a maintenance unit, which has no rooms of its own
+    component_source_name = fields.Char(
+        compute="_compute_component_source", store=False
     )
     # Shows the "Markera som utförd" button: only on ärenden with components
     can_mark_done = fields.Boolean(compute="_compute_can_mark_done", store=False)
@@ -389,35 +412,9 @@ class OneCoreMaintenanceRequest(
     )
     def _compute_form_state(self):
         for record in self:
-            if record.space_caption == "Bilplats":
-                record.form_state = "parking-space"
-            elif record.space_caption == "Fastighet":
-                record.form_state = "property"
-            elif record.space_caption in [
-                "Byggnad",
-                "Uppgång",
-                "Vind",
-                "Källare",
-                "Cykelförråd",
-                "Gården/Utomhus",
-                "Övrigt",
-            ]:
-                record.form_state = "building"
-            elif record.space_caption in [
-                "Tvättstuga",
-                "Miljöbod",
-                "Lekplats",
-            ]:
-                record.form_state = "maintenance-unit"
-            elif record.space_caption == "Lokal":
-                record.form_state = "facility"
-            elif record.space_caption in [
-                "Lägenhet",
-            ]:
-                record.form_state = "rental-property"
-            else:
-                # Fallback for any undefined space_caption
-                record.form_state = "rental-property"
+            record.form_state = FORM_STATE_BY_SPACE.get(
+                record.space_caption, "rental-property"
+            )
 
     @api.depends("rental_property_id", "rental_property_option_id", "space_caption")
     def _compute_floor_plan(self):
@@ -436,18 +433,48 @@ class OneCoreMaintenanceRequest(
             else:
                 record.floor_plan_image_url = False
 
-    @api.depends("rental_property_id", "rental_property_option_id")
-    def _compute_component_rental_id(self):
+    @api.depends(
+        "space_caption",
+        "rental_property_id",
+        "rental_property_option_id",
+        "maintenance_unit_id",
+        "maintenance_unit_option_id",
+        "facility_id",
+        "facility_option_id",
+    )
+    def _compute_component_source(self):
         # No HTTP here: the browser loads rooms and components via the
         # room_components widget.
         for record in self:
-            record.component_rental_id = (
-                record.rental_property_id.rental_property_id
-                or record.rental_property_option_id.name
-                or False
-            )
+            kind = record._component_source_kind_for(record.space_caption)
+            # A saved ärende shows its stored object, also while the form is
+            # edited: write() never stores a search hit, and picking one
+            # empties the stored link in the form (FormFieldService assigns
+            # the hit's name to the many2one). A new ärende shows its object,
+            # else the selected search hit, which create() stores.
+            new = not record._origin.id
+            stored = record if new else record._origin
+            source_id = source_name = False
+            if kind == "rental":
+                source_id = stored.rental_property_id.rental_property_id
+                if new and not source_id:
+                    source_id = record.rental_property_option_id.name
+            elif kind == "unit":
+                unit = stored.maintenance_unit_id
+                if new and not unit:
+                    unit = record.maintenance_unit_option_id
+                source_id = unit.property_object_id
+                source_name = unit.name
+            elif kind == "facility":
+                facility = stored.facility_id
+                if new and not facility:
+                    facility = record.facility_option_id
+                source_id = facility.facility_id
+            record.component_source_kind = kind
+            record.component_source_id = source_id or False
+            record.component_source_name = source_name or False
 
-    @api.depends("space_caption", "stage_id", "archive", "component_ids")
+    @api.depends("component_source_kind", "stage_id", "archive", "component_ids")
     def _compute_can_mark_done(self):
         stage_manager = MaintenanceStageManager(self.env)
         done_stage = stage_manager.done_stage()
@@ -457,7 +484,7 @@ class OneCoreMaintenanceRequest(
             record.can_mark_done = bool(
                 done_stage
                 and record._origin.id
-                and record.space_caption == "Lägenhet"
+                and record._has_component_picker()
                 and record.component_ids
                 and not record.archive
                 and record.stage_id not in closed_stages
@@ -847,8 +874,9 @@ class OneCoreMaintenanceRequest(
         """Add a component row for each OneCore component id not yet linked.
 
         Rows get the same values as when the component is checked in the room
-        grid. Ids OneCore doesn't return for the rental object are skipped
-        with a note in the chatter; a later call tries them again. Never
+        grid. Ids OneCore doesn't return for the ärende's object (apartment,
+        maintenance unit or facility) are skipped with a note in the chatter;
+        a later call tries them again. Never
         raises because of OneCore. Runs as the calling user, so the
         component rules apply as for a component_ids write.
         """
@@ -874,21 +902,36 @@ class OneCoreMaintenanceRequest(
         if not new_ids:
             return
 
-        # Read the rental property from the database: a many2one given as a
+        # Read the source object from the database: a many2one given as a
         # string id (core sends one) is cached as empty on create
-        self.invalidate_recordset(["rental_property_id", "component_rental_id"])
-        rental_id = self.component_rental_id
-        if not rental_id:
-            self._log_unlinked_components(new_ids, "no_rental_object")
+        self.invalidate_recordset(
+            [
+                "rental_property_id",
+                "maintenance_unit_id",
+                "facility_id",
+                "component_source_kind",
+                "component_source_id",
+                "component_source_name",
+            ]
+        )
+        source_kind = self.component_source_kind
+        source_id = self.component_source_id
+        if not source_kind:
+            self._log_unlinked_components(new_ids, "no_room_grid")
+            return
+        if not source_id:
+            self._log_unlinked_components(new_ids, "no_source_object")
             return
 
         service = ComponentOneCoreService(self.env)
-        result = service.load_room_components(rental_id)
+        result = service.load_room_components(
+            source_kind, source_id, self.component_source_name
+        )
         if not result.get("ok"):
             self._log_unlinked_components(new_ids, "onecore_down")
             return
 
-        vals_list, missing_ids = service.link_values(result, new_ids, rental_id)
+        vals_list, missing_ids = service.link_values(result, new_ids, source_id)
         if vals_list:
             self._create_component_rows(
                 [{"maintenance_request_id": self.id, **vals} for vals in vals_list]
@@ -940,26 +983,57 @@ class OneCoreMaintenanceRequest(
         self._message_log(body=note.format(components=components))
 
     @api.model
-    def get_room_components(self, rental_id):
-        """Rooms of a rental object and their components, for the room grid.
+    def _component_source_kind_for(self, space_caption):
+        """The component source kind for an Utrymme, or False when the ärende
+        has no room grid. Only Lägenhet is an apartment: other captions that
+        fall back to the rental-property form state get no grid."""
+        if space_caption == "Lägenhet":
+            return "rental"
+        return {"maintenance-unit": "unit", "facility": "facility"}.get(
+            FORM_STATE_BY_SPACE.get(space_caption), False
+        )
 
-        Takes the rental id rather than a record so the grid also works on a
-        new, unsaved ärende. A contractor only gets rental objects of ärenden
-        they can read.
+    def _has_component_picker(self):
+        """Whether the ärende, with the Utrymme it has now, has the room grid,
+        and so components and outcomes. The outcome check also reads the
+        Utrymme a write saves, through _component_source_kind_for."""
+        self.ensure_one()
+        return bool(self.component_source_kind)
+
+    @api.model
+    def get_room_components(self, source_kind, source_id, source_name=False):
+        """Rooms of a component source and their components, for the room grid.
+
+        Takes the source rather than a record so the grid also works on a
+        new, unsaved ärende. source_kind is a COMPONENT_SOURCE_KINDS key and
+        source_id the matching component_source_id; source_name names the
+        one room of a maintenance unit. Returns {"ok": bool, "rooms": [...]},
+        as ComponentOneCoreService.load_room_components. A contractor only
+        gets sources of ärenden they can read.
         """
         # @api.model methods are callable over RPC by any logged-in user:
         # require access to ärenden before calling OneCore on their behalf
         self.check_access("read")
+        source_path = isinstance(source_kind, str) and COMPONENT_SOURCE_ID_PATHS.get(
+            source_kind
+        )
+        # Plain strings only: the domain below turns a list id into "in"
         if (
-            rental_id
-            and not self.env.su
-            and ExternalContractorService(self.env).is_external_contractor()
-            and not self.search_count(
-                [("rental_property_id.rental_property_id", "=", rental_id)], limit=1
-            )
+            not source_path
+            or not isinstance(source_id, str)
+            or not source_id
+            or (source_name and not isinstance(source_name, str))
         ):
             return {"ok": False, "rooms": []}
-        return ComponentOneCoreService(self.env).load_room_components(rental_id)
+        if (
+            not self.env.su
+            and ExternalContractorService(self.env).is_external_contractor()
+            and not self.search_count([(source_path, "=", source_id)], limit=1)
+        ):
+            return {"ok": False, "rooms": []}
+        return ComponentOneCoreService(self.env).load_room_components(
+            source_kind, source_id, source_name
+        )
 
     # ============================================================================
     # MARKERA SOM UTFÖRD — an outcome per component, then Utförd
@@ -967,20 +1041,25 @@ class OneCoreMaintenanceRequest(
 
     def _check_component_outcomes(self, stage, stage_manager, vals=None, new=False):
         """Refuse moving the ärenden to Utförd or Avslutad while a component
-        has no outcome. An ärende is checked when it is a Lägenhet that isn't
-        archived, either with its stored values or with the values in vals
-        over them. These pass: a write that keeps the stage, and Avslutad with
-        no resource. The first ärende that fails is named in the error. With
-        new, the ärenden were just created in stage."""
+        has no outcome. An ärende is checked when its Utrymme has the room
+        grid and it isn't archived, either with its stored values or with the
+        values in vals over them. These pass: a write that keeps the stage,
+        and Avslutad with no resource. The first ärende that fails is named in
+        the error. With new, the ärenden were just created in stage."""
         vals = vals or {}
         done = stage_manager.done_stage()
         closed = stage_manager.closed_stage()
         if not stage or stage not in done | closed:
             return
         for record in self:
-            stored_in_flow = record.space_caption == "Lägenhet" and not record.archive
-            saved_in_flow = (
-                vals.get("space_caption", record.space_caption) == "Lägenhet"
+            stored_in_flow = bool(
+                record._component_source_kind_for(record.space_caption)
+                and not record.archive
+            )
+            saved_in_flow = bool(
+                record._component_source_kind_for(
+                    vals.get("space_caption", record.space_caption)
+                )
                 and not vals.get("archive", record.archive)
             )
             if not stored_in_flow and not saved_in_flow:
@@ -1021,8 +1100,8 @@ class OneCoreMaintenanceRequest(
         """Why the ärende can't be marked as utförd from the button, or False."""
         self.ensure_one()
         stage_manager = MaintenanceStageManager(self.env)
-        if self.space_caption != "Lägenhet":
-            return "Markera som utförd finns bara för ärenden på en lägenhet."
+        if not self._has_component_picker():
+            return "Markera som utförd finns bara för ärenden med Rum och komponenter."
         if self.archive:
             return "Ärendet är inaktivt."
         if not stage_manager.done_stage():
@@ -1279,31 +1358,37 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_rental_property_fields(record)
-            # Components chosen for one apartment don't belong to another.
-            # A new search for the same apartment keeps them.
-            other_apartment = record.component_ids.filtered(
-                lambda link: link.rental_id != record.component_rental_id
-            )
-            if other_apartment:
-                record.component_ids -= other_apartment
+        self._drop_components_of_other_source()
 
     @api.onchange("space_caption")
     def _onchange_space_caption_components(self):
-        # Only on a new ärende: on a saved one the components stay, hidden
-        # while the space isn't a Lägenhet
+        # Another Utrymme is another object. On a saved ärende the components
+        # stay, hidden while the Utrymme has no room grid.
+        self._drop_components_of_other_source()
+
+    def _drop_components_of_other_source(self):
+        """On a new ärende, drop the chosen components that don't belong to
+        the selected object, or all of them when the Utrymme has no room
+        grid. A new search for the same object keeps them. A saved ärende
+        keeps its components, and its grid shows its stored object: write()
+        never stores a search hit."""
         for record in self:
-            if (
-                not record._origin
-                and record.space_caption != "Lägenhet"
-                and record.component_ids
-            ):
-                record.component_ids = [Command.clear()]
+            if record._origin:
+                continue
+            other_source = record.component_ids
+            if record._has_component_picker():
+                other_source = other_source.filtered(
+                    lambda link: link.rental_id != record.component_source_id
+                )
+            if other_source:
+                record.component_ids -= other_source
 
     @api.onchange("maintenance_unit_option_id")
     def _onchange_maintenance_unit_option_id(self):
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_maintenance_unit_fields(record)
+        self._drop_components_of_other_source()
 
     @api.onchange("lease_option_id")
     def _onchange_lease_option_id(self):
@@ -1328,6 +1413,7 @@ class OneCoreMaintenanceRequest(
         field_manager = FormFieldService(self.env)
         for record in self:
             field_manager.update_facility_fields(record)
+        self._drop_components_of_other_source()
 
     @api.onchange("user_id")
     def _onchange_user_id(self):

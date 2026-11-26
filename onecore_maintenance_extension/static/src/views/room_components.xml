@@ -3,8 +3,8 @@
 
     <t t-name="onecore_maintenance_extension.RoomComponents">
         <div class="mimer-room-components w-100" t-ref="root">
-            <p t-if="!rentalId" class="text-muted mb-0">
-                Välj ett hyresobjekt för att se rum och komponenter.
+            <p t-if="!sourceKind or (!sourceId and props.record.isNew)" class="text-muted mb-0">
+                Välj ett objekt för att se rum och komponenter.
             </p>
             <p t-elif="state.loading" class="text-muted mb-0">
                 <i class="fa fa-spinner fa-spin me-1" />
@@ -12,11 +12,17 @@
             </p>
             <t t-else="">
                 <t t-set="roomColumns" t-value="columns" />
-                <p t-if="!state.ok" class="text-muted">
-                    Kunde inte hämta rum och komponenter för hyresobjektet.
+                <!-- A saved ärende without the id, e.g. stored before it was
+                kept or moved to another Utrymme: its saved components still
+                show, so they can be removed -->
+                <p t-if="!sourceId" class="text-muted">
+                    Objektet saknar id i OneCore, så rum och komponenter kan inte hämtas.
+                </p>
+                <p t-elif="!state.ok" class="text-muted">
+                    Kunde inte hämta rum och komponenter för objektet.
                 </p>
                 <p t-elif="!roomColumns.length" class="text-muted mb-0">
-                    Hyresobjektet har inga rum med komponenter.
+                    Objektet har inga rum med komponenter.
                 </p>
                 <div t-if="roomColumns.length" class="mimer-room-components-grid">
                     <div t-foreach="roomColumns" t-as="column" t-key="column.key"
@@ -25,7 +31,7 @@
                             <span class="fw-bold" t-esc="column.name" />
                             <span class="mimer-room-card-count" t-esc="column.selectedCount" />
                         </div>
-                        <p t-if="state.ok and !column.loaded" class="text-muted small mb-1">
+                        <p t-if="answered and !column.loaded" class="text-muted small mb-1">
                             Kunde inte hämta komponenterna.
                         </p>
                         <p t-elif="!column.items.length" class="text-muted small mb-1">

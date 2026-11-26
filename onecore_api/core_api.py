@@ -399,6 +399,13 @@ class CoreApi:
             f"/rooms?rentalId={urllib.parse.quote(str(rental_id), safe='')}"
         )
 
+    def fetch_rooms_by_facility_id(self, facility_id):
+        """Fetch the rooms of a facility (lokal) by its facility id, in the
+        same shape as fetch_rooms."""
+        return self._get_json(
+            f"/rooms/by-facility-id/{urllib.parse.quote(str(facility_id), safe='')}"
+        )
+
     def fetch_components_by_room(self, room_id):
         """Fetch components for a specific room."""
         return self._get_json(

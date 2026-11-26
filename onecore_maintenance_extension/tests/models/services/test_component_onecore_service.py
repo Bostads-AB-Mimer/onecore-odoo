@@ -17,6 +17,8 @@ from odoo.addons.onecore_maintenance_extension.models.services.component_onecore
 )
 from odoo.addons.onecore_maintenance_extension.tests.utils.test_utils import setup_faker
 
+from ..test_maintenance_request_component import FACILITY_ID, UNIT_ID
+
 
 @tagged("onecore")
 class TestComponentOneCoreService(TransactionCase):
@@ -448,13 +450,13 @@ class TestLoadRoomComponents(TransactionCase):
         self.addCleanup(component_onecore_service._room_components_cache.clear)
         self.mock_api = Mock()
 
-    def _load(self, rental_id='406-096-04-0101'):
+    def _load(self, rental_id='406-096-04-0101', kind='rental', name=None):
         service = ComponentOneCoreService(self.env)
         service._api = self.mock_api
-        return service.load_room_components(rental_id)
+        return service.load_room_components(kind, rental_id, name)
 
-    def _key(self, rental_id='406-096-04-0101'):
-        return (self.env.cr.dbname, rental_id)
+    def _key(self, rental_id='406-096-04-0101', kind='rental', name=None):
+        return (self.env.cr.dbname, kind, rental_id, name)
 
     def test_rooms_with_their_components(self):
         self.mock_api.fetch_rooms.return_value = [
@@ -764,7 +766,7 @@ class TestLoadRoomComponents(TransactionCase):
     def test_cache_is_per_database(self):
         # Another database on the same server may use another OneCore
         component_onecore_service._room_components_cache[
-            ('other_db', '406-096-04-0101')
+            ('other_db', 'rental', '406-096-04-0101', None)
         ] = (time.monotonic() + 60, {'ok': True, 'rooms': []})
         self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
         self.mock_api.parallel_get_json.return_value = [[]]
@@ -790,3 +792,157 @@ class TestLoadRoomComponents(TransactionCase):
         self._load()
 
         self.assertEqual(self.mock_api.fetch_rooms.call_count, 2)
+
+    def test_unknown_kind_makes_no_call(self):
+        for kind in ('parking-space', False, None):
+            with self.subTest(kind=kind):
+                self.assertEqual(self._load(kind=kind), {'ok': False, 'rooms': []})
+        self.mock_api.fetch_rooms.assert_not_called()
+        self.mock_api.fetch_components_by_room.assert_not_called()
+
+    def test_cache_key_has_the_kind(self):
+        # The same id as a rental id and as a facility id are two sources
+        self.mock_api.fetch_rooms.return_value = [_room('room-1', 'Kök', 1)]
+        self.mock_api.fetch_rooms_by_facility_id.return_value = [_room('room-2', 'Kontor', 1)]
+        self.mock_api.parallel_get_json.return_value = [[]]
+
+        rental = self._load('shared-id')
+        facility = self._load('shared-id', kind='facility')
+
+        self.assertEqual([r['id'] for r in rental['rooms']], ['room-1'])
+        self.assertEqual([r['id'] for r in facility['rooms']], ['room-2'])
+
+
+@tagged("onecore")
+class TestLoadUnitAndFacilityComponents(TransactionCase):
+    """A maintenance unit is one room of its own; a facility has rooms, like
+    an apartment."""
+
+    def setUp(self):
+        super().setUp()
+        component_onecore_service._room_components_cache.clear()
+        self.addCleanup(component_onecore_service._room_components_cache.clear)
+        self.mock_api = Mock()
+
+    def _load(self, kind, source_id, name=None):
+        service = ComponentOneCoreService(self.env)
+        service._api = self.mock_api
+        return service.load_room_components(kind, source_id, name)
+
+    def test_maintenance_unit_is_one_room_with_its_components(self):
+        self.mock_api.fetch_components_by_room.return_value = [
+            _component('comp-tvatt', 'Tvättmaskin', 'Tvättmaskin 8 kg'),
+            _component('comp-tork', 'Torktumlare', 'Kondenstumlare'),
+        ]
+
+        result = self._load('unit', UNIT_ID, 'TVÄTTSTUGA')
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(len(result['rooms']), 1)
+        room = result['rooms'][0]
+        self.assertEqual(
+            (room['id'], room['name'], room['sequence'], room['loaded']),
+            (UNIT_ID, 'Tvättstuga', 0, True),
+        )
+        self.assertEqual(
+            [c['label'] for c in room['components']], ['Torktumlare', 'Tvättmaskin']
+        )
+        # One call, which also refreshes the token: no rooms, no parallel wave
+        self.mock_api.fetch_components_by_room.assert_called_once_with(UNIT_ID)
+        self.mock_api.fetch_rooms.assert_not_called()
+        self.mock_api.parallel_get_json.assert_not_called()
+
+    def test_maintenance_unit_without_a_name_gets_a_label(self):
+        # The grid sorts the cards by name
+        self.mock_api.fetch_components_by_room.return_value = []
+
+        for name in (None, False, ''):
+            with self.subTest(name=name):
+                component_onecore_service._room_components_cache.clear()
+                result = self._load('unit', UNIT_ID, name)
+
+                self.assertEqual(result['rooms'][0]['name'], 'Okänt rum')
+
+    def test_maintenance_unit_name_is_part_of_the_cache_key(self):
+        self.mock_api.fetch_components_by_room.return_value = []
+
+        self._load('unit', UNIT_ID, 'Tvättstuga')
+        renamed = self._load('unit', UNIT_ID, 'Miljöbod')
+
+        self.assertEqual(renamed['rooms'][0]['name'], 'Miljöbod')
+        self.assertEqual(self.mock_api.fetch_components_by_room.call_count, 2)
+
+    def test_maintenance_unit_onecore_down_gives_not_ok_and_is_not_cached(self):
+        self.mock_api.fetch_components_by_room.side_effect = Exception("503")
+
+        self.assertEqual(
+            self._load('unit', UNIT_ID, 'Tvättstuga'), {'ok': False, 'rooms': []}
+        )
+        self._load('unit', UNIT_ID, 'Tvättstuga')
+
+        self.assertEqual(self.mock_api.fetch_components_by_room.call_count, 2)
+
+    def test_maintenance_unit_database_error_is_raised(self):
+        self.mock_api.fetch_components_by_room.side_effect = (
+            psycopg2.errors.SerializationFailure("could not serialize access")
+        )
+
+        with self.assertRaises(psycopg2.errors.SerializationFailure):
+            self._load('unit', UNIT_ID, 'Tvättstuga')
+
+    def test_unit_without_property_object_id_makes_no_call(self):
+        self.assertEqual(self._load('unit', False, 'Tvättstuga'), {'ok': False, 'rooms': []})
+        self.mock_api.fetch_components_by_room.assert_not_called()
+
+    def test_facility_rooms_with_their_components(self):
+        self.mock_api.fetch_rooms_by_facility_id.return_value = [
+            _room('room-wc', 'WC', 2),
+            _room('room-kontor', 'KONTOR', 1),
+            _room('room-gammal', 'Rivet', 3, deleted=True),
+        ]
+        self.mock_api.parallel_get_json.return_value = [
+            [_component('comp-golv', 'Golv', 'Linoleum', 'SURFACE')],
+            [_component('comp-tvattst', 'Tvättställ', 'Porslin')],
+        ]
+
+        result = self._load('facility', FACILITY_ID)
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(
+            [(r['id'], r['name'], r['sequence']) for r in result['rooms']],
+            [('room-kontor', 'Kontor', 0), ('room-wc', 'WC', 1)],
+        )
+        self.assertEqual(
+            [c['id'] for r in result['rooms'] for c in r['components']],
+            ['comp-golv', 'comp-tvattst'],
+        )
+        self.mock_api.fetch_rooms_by_facility_id.assert_called_once_with(FACILITY_ID)
+        self.mock_api.fetch_rooms.assert_not_called()
+        self.mock_api.parallel_get_json.assert_called_once_with(
+            ['/components/by-room/room-kontor', '/components/by-room/room-wc']
+        )
+
+    def test_facility_without_rooms_is_ok_and_empty(self):
+        self.mock_api.fetch_rooms_by_facility_id.return_value = []
+
+        self.assertEqual(self._load('facility', FACILITY_ID), {'ok': True, 'rooms': []})
+        self.mock_api.parallel_get_json.assert_not_called()
+
+    def test_facility_onecore_down_gives_not_ok(self):
+        self.mock_api.fetch_rooms_by_facility_id.side_effect = Exception("500")
+
+        self.assertEqual(self._load('facility', FACILITY_ID), {'ok': False, 'rooms': []})
+        self.mock_api.parallel_get_json.assert_not_called()
+
+    def test_facility_name_argument_is_ignored(self):
+        # Only a maintenance unit is named by the caller
+        self.mock_api.fetch_rooms_by_facility_id.return_value = [_room('room-1', 'Kontor', 1)]
+        self.mock_api.parallel_get_json.return_value = [[]]
+
+        result = self._load('facility', FACILITY_ID, 'Något namn')
+
+        self.assertEqual(result['rooms'][0]['name'], 'Kontor')
+        self.assertIn(
+            (self.env.cr.dbname, 'facility', FACILITY_ID, None),
+            component_onecore_service._room_components_cache,
+        )

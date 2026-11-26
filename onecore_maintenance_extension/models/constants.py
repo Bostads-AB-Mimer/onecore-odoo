@@ -79,3 +79,24 @@ FORM_STATES = [
     ("maintenance-unit", "Underhållsenhet"),
     ("facility", "Lokal"),
 ]
+
+# The form state of each Utrymme. Any other caption, or none, falls back to
+# rental-property.
+FORM_STATE_BY_SPACE = {
+    "Bilplats": "parking-space",
+    "Fastighet": "property",
+    **dict.fromkeys(BUILDING_SPACE_TYPES, "building"),
+    "Tvättstuga": "maintenance-unit",
+    "Miljöbod": "maintenance-unit",
+    "Lekplats": "maintenance-unit",
+    "Lokal": "facility",
+    "Lägenhet": "rental-property",
+}
+
+# Where an ärende's room grid loads components from: an apartment's rooms, a
+# maintenance unit as one room, or a facility's rooms
+COMPONENT_SOURCE_KINDS = [
+    ("rental", "Lägenhet"),
+    ("unit", "Underhållsenhet"),
+    ("facility", "Lokal"),
+]

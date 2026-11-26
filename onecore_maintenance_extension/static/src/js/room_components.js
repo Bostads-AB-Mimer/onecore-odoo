@@ -11,10 +11,11 @@ import { Component, useState, useEffect, useRef, onPatched } from "@odoo/owl";
 import { linkFields } from "./component_link_fields";
 
 /**
- * "Rum och komponenter": one column per room of the rental object, listing
- * the components installed there. Checking a component adds a line to
- * component_ids and opens its note right under it; the change is saved
- * with the form like any other field.
+ * "Rum och komponenter": one column per room of the ärende's component
+ * source (an apartment's or a facility's rooms, or a maintenance unit as its
+ * one room), listing the components installed there. Checking a component
+ * adds a line to component_ids and opens its note right under it; the change
+ * is saved with the form like any other field.
  *
  * Rooms and components come from OneCore through get_room_components, loaded
  * after the form has rendered so a slow OneCore never delays the ärende.
@@ -45,11 +46,12 @@ export class RoomComponents extends Component {
         this.state = useState({
             // Loading from the first render: before the result arrives,
             // saved components would otherwise show as removed
-            loading: Boolean(this.rentalId),
+            loading: Boolean(this.sourceKind && this.sourceId),
             ok: true,
             rooms: [],
-            // Rental id fully loaded for. Only set on success, so a failed or
-            // partial load is retried, like the server, which doesn't cache it
+            // Source (kind, id and name) fully loaded for. Only set on
+            // success, so a failed or partial load is retried, like the
+            // server, which doesn't cache it
             loadedFor: null,
         });
         // Latest request; answers to older ones are ignored
@@ -59,8 +61,8 @@ export class RoomComponents extends Component {
         this.pending = new Set();
 
         useEffect(
-            (rentalId) => {
-                if (!rentalId) {
+            (sourceKind, sourceId, sourceName) => {
+                if (!sourceKind || !sourceId) {
                     this.requestCount++;
                     Object.assign(this.state, {
                         loading: false,
@@ -70,20 +72,27 @@ export class RoomComponents extends Component {
                     });
                     return;
                 }
-                if (this.state.loadedFor === rentalId) {
+                // The name too: it names a maintenance unit's card, and the
+                // rows ticked there take it as their space_name
+                const source = JSON.stringify([sourceKind, sourceId, sourceName || false]);
+                if (this.state.loadedFor === source) {
                     return;
                 }
                 const request = ++this.requestCount;
                 this.state.loading = true;
                 this.orm
-                    .call("maintenance.request", "get_room_components", [rentalId])
+                    .call("maintenance.request", "get_room_components", [
+                        sourceKind,
+                        sourceId,
+                        sourceName || false,
+                    ])
                     .then((result) => {
                         if (request === this.requestCount) {
                             this.state.ok = result.ok;
                             this.state.rooms = result.rooms;
                             const complete =
                                 result.ok && result.rooms.every((room) => room.loaded);
-                            this.state.loadedFor = complete ? rentalId : null;
+                            this.state.loadedFor = complete ? source : null;
                         }
                     })
                     .catch((e) => {
@@ -101,8 +110,8 @@ export class RoomComponents extends Component {
                     });
             },
             // The ärende too: the form keeps this widget when paging, and
-            // another ärende on the same apartment retries a failed load
-            () => [this.props.record.data.component_rental_id, this.props.record.resId]
+            // another ärende on the same source retries a failed load
+            () => [this.sourceKind, this.sourceId, this.sourceName, this.props.record.resId]
         );
     }
 
@@ -110,21 +119,42 @@ export class RoomComponents extends Component {
         return this.props.record.data[this.props.name];
     }
 
-    get rentalId() {
-        return this.props.record.data.component_rental_id;
+    get sourceKind() {
+        return this.props.record.data.component_source_kind;
+    }
+
+    // The source object's OneCore id: a rental id, a maintenance unit's
+    // property object id or a facility id
+    get sourceId() {
+        return this.props.record.data.component_source_id;
+    }
+
+    // Names a maintenance unit's one room; the server names the others
+    get sourceName() {
+        return this.props.record.data.component_source_name;
+    }
+
+    /**
+     * Whether OneCore answered for the source's rooms: not when it is
+     * unreachable, nor when the source has no id and nothing was asked.
+     */
+    get answered() {
+        return Boolean(this.sourceId) && this.state.ok;
     }
 
     /**
      * The rooms OneCore returned, plus selected components it didn't return,
      * shown from the snapshot on the link: uninstalled since, in a room that
-     * failed to load, or everything when OneCore is unreachable.
+     * failed to load, or everything when OneCore is unreachable or the
+     * source has no id.
      */
     get columns() {
+        const answered = this.answered;
         const linksById = new Map(
             this.list.records.map((link) => [link.data.onecore_component_id, link])
         );
         const shownIds = new Set();
-        const columns = this.state.rooms.map((room) => ({
+        const columns = (answered ? this.state.rooms : []).map((room) => ({
             key: room.id,
             name: room.name,
             sequence: room.sequence,
@@ -160,7 +190,7 @@ export class RoomComponents extends Component {
                     key: roomId,
                     name: link.data.space_name || "Okänt rum",
                     sequence: link.data.space_sequence,
-                    loaded: this.state.ok,
+                    loaded: answered,
                     items: [],
                 };
                 columnsByRoomId.set(roomId, column);
@@ -172,7 +202,7 @@ export class RoomComponents extends Component {
                 subtypeName: link.data.subtype_name || "",
                 link,
                 // Only known to be removed when OneCore answered for the room
-                removed: this.state.ok && column.loaded,
+                removed: answered && column.loaded,
             });
         }
 
@@ -206,7 +236,8 @@ export class RoomComponents extends Component {
                         {
                             onecore_component_id: component.id,
                             installation_id: component.installation_id || false,
-                            rental_id: this.rentalId,
+                            // The source object's id, whatever its kind
+                            rental_id: this.sourceId,
                             space_id: room.id,
                             space_name: room.name,
                             space_sequence: room.sequence,
@@ -233,7 +264,11 @@ registry.category("fields").add("room_components", {
     component: RoomComponents,
     supportedTypes: ["one2many"],
     relatedFields: linkFields,
-    fieldDependencies: [{ name: "component_rental_id", type: "char" }],
+    fieldDependencies: [
+        { name: "component_source_kind", type: "selection" },
+        { name: "component_source_id", type: "char" },
+        { name: "component_source_name", type: "char" },
+    ],
 });
 
 /**

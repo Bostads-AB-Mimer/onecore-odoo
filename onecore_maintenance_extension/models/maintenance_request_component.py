@@ -39,7 +39,13 @@ class MaintenanceRequestComponent(models.Model):
     )
     onecore_component_id = fields.Char("Komponent-id (OneCore)", required=True)
     installation_id = fields.Char("Installations-id (OneCore)")
-    rental_id = fields.Char("Hyresobjekt (OneCore)")
+    # The OneCore id of the object the rooms were loaded for, whatever its
+    # kind; compared with the ärende's component_source_id
+    rental_id = fields.Char(
+        "Objekt-id (OneCore)",
+        help="Lägenhetens hyresobjekts-id, underhållsenhetens objekt-id eller "
+        "lokalens id i OneCore.",
+    )
     space_id = fields.Char("Utrymmes-id (OneCore)")
     space_name = fields.Char("Utrymme")
     # Position of the space in the grid, so the notes under the description

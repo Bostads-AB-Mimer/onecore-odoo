@@ -12,6 +12,7 @@ import psycopg2
 from odoo import fields
 
 from ....onecore_api import core_api
+from ..constants import COMPONENT_SOURCE_KINDS
 
 _logger = logging.getLogger(__name__)
 
@@ -21,10 +22,11 @@ APARTMENT_SPACE_CAPTION = 'Lägenhet'
 PROPERTY_OBJECT_SPACE_TYPE = 'PropertyObject'
 
 # Per-worker cache for the ärende form's room grid, which loads on every form
-# open; users page back and forth between ärenden on the same apartment.
+# open; users page back and forth between ärenden on the same object.
 # Worst-case staleness = TTL.
 ROOM_COMPONENTS_CACHE_TTL = 300  # seconds
-_room_components_cache = {}  # (dbname, rental_id) -> (expires_at_monotonic, result)
+# (dbname, source_kind, source_id, unit name) -> (expires_at_monotonic, result)
+_room_components_cache = {}
 
 
 def _component_subtype(comp):
@@ -240,7 +242,7 @@ class ComponentOneCoreService:
         try:
             # Component categories ride along in the same parallel wave
             rooms, room_results, (categories,) = self._fetch_rooms_with_components(
-                rental_property_id, ["/component-categories"]
+                self.api.fetch_rooms, rental_property_id, ["/component-categories"]
             )
             if not rooms:
                 return '[]', '[]', []
@@ -270,9 +272,11 @@ class ComponentOneCoreService:
             _logger.warning(f"Failed to fetch components from OneCore: {e}")
             return '[]', '[]', []
 
-    def _fetch_rooms_with_components(self, rental_id, extra_paths=()):
-        """Rooms of a rental object in display order, with each room's
-        components, fetched in one parallel wave together with extra_paths.
+    def _fetch_rooms_with_components(self, fetch_rooms, source_id, extra_paths=()):
+        """Rooms of an object in display order, with each room's components,
+        fetched in one parallel wave together with extra_paths. fetch_rooms
+        fetches the object's rooms by its id: an apartment's or a
+        facility's.
 
         Returns:
             tuple: (rooms, room_results, extra_results). A failed call gives
@@ -282,7 +286,7 @@ class ComponentOneCoreService:
         # Fetch rooms first (serial): primes/refreshes the auth token so the
         # parallel wave below runs with a valid token.
         rooms = [
-            room for room in self.api.fetch_rooms(rental_id) or []
+            room for room in fetch_rooms(source_id) or []
             if not room.get('deleted')
         ]
         if not rooms:
@@ -296,11 +300,16 @@ class ComponentOneCoreService:
         results = self.api.parallel_get_json(list(extra_paths) + room_paths)
         return rooms, results[len(extra_paths):], results[:len(extra_paths)]
 
-    def load_room_components(self, rental_id):
-        """Load the rooms of a rental object with the components in each.
+    def load_room_components(self, source_kind, source_id, source_name=None):
+        """Load the rooms of a component source with the components in each.
 
         Args:
-            rental_id: The rental object's id, e.g. '406-096-04-0101'
+            source_kind: A COMPONENT_SOURCE_KINDS key: 'rental', 'unit' or
+                'facility'
+            source_id: The source object's OneCore id: a rental id, e.g.
+                '406-096-04-0101', a maintenance unit's property object id
+                or a facility id
+            source_name: A maintenance unit's name, which names its one room
 
         Returns:
             dict: {'ok': bool, 'rooms': [{'id', 'name', 'sequence', 'loaded',
@@ -309,25 +318,41 @@ class ComponentOneCoreService:
             'ok' is False when the rooms can't be fetched. Core answers 500,
             not 404, for an unknown rental id, so this is shown as "no rooms"
             rather than as an error. A room whose components can't be fetched
-            has 'loaded' False; the other rooms still load.
+            has 'loaded' False; the other rooms still load. A maintenance unit
+            is one room of its own, with the unit's id; its components come
+            from one call, so it is 'ok' False when that call fails.
         """
-        if not rental_id:
+        if source_kind not in dict(COMPONENT_SOURCE_KINDS) or not source_id:
             return {'ok': False, 'rooms': []}
+        if source_kind != 'unit':
+            source_name = None
 
-        cache_key = (self.env.cr.dbname, rental_id)
+        cache_key = (self.env.cr.dbname, source_kind, source_id, source_name or None)
         cached = _room_components_cache.get(cache_key)
         if cached and time.monotonic() < cached[0]:
             return cached[1]
 
         try:
-            rooms, results, _extra = self._fetch_rooms_with_components(rental_id)
+            if source_kind == 'unit':
+                # One serial call, which also refreshes the auth token
+                rooms = [{'propertyObjectId': source_id, 'name': source_name}]
+                results = [self.api.fetch_components_by_room(source_id)]
+            else:
+                fetch_rooms = {
+                    'rental': self.api.fetch_rooms,
+                    'facility': self.api.fetch_rooms_by_facility_id,
+                }[source_kind]
+                rooms, results, _extra = self._fetch_rooms_with_components(
+                    fetch_rooms, source_id
+                )
         except psycopg2.Error:
             # E.g. a serialization failure when the auth token is refreshed:
             # the transaction is aborted, so let Odoo roll back and retry
             raise
         except Exception as e:
             _logger.warning(
-                "Failed to fetch rooms for rental id %s from OneCore: %s", rental_id, e
+                "Failed to fetch rooms for %s %s from OneCore: %s",
+                source_kind, source_id, e,
             )
             return {'ok': False, 'rooms': []}
 
@@ -356,7 +381,7 @@ class ComponentOneCoreService:
 
         if all(room['loaded'] for room in result_rooms):
             now = time.monotonic()
-            # Drop expired entries, so the cache only holds the apartments
+            # Drop expired entries, so the cache only holds the objects
             # opened within the TTL. A copy of the items: other worker
             # threads may change the dict meanwhile.
             for key, (expires_at, _cached) in list(_room_components_cache.items()):
@@ -365,16 +390,17 @@ class ComponentOneCoreService:
             _room_components_cache[cache_key] = (now + ROOM_COMPONENTS_CACHE_TTL, result)
         return result
 
-    def link_values(self, result, component_ids, rental_id):
+    def link_values(self, result, component_ids, source_id):
         """Values for maintenance.request.component rows, one per component id.
 
         The same values the room grid writes when a component is checked
         (toggle in static/src/js/room_components.js).
 
         Args:
-            result: Output of load_room_components for rental_id
+            result: Output of load_room_components for source_id
             component_ids: OneCore component ids, in the order to create
-            rental_id: The rental object's id the rooms were loaded for
+            source_id: The OneCore id of the object the rooms were loaded
+                for, stored in the rows' rental_id
 
         Returns:
             tuple: (vals_list, missing_ids). An id is missing when no loaded
@@ -395,7 +421,7 @@ class ComponentOneCoreService:
             vals_list.append({
                 'onecore_component_id': component['id'],
                 'installation_id': component.get('installation_id') or False,
-                'rental_id': rental_id,
+                'rental_id': source_id,
                 'space_id': room.get('id'),
                 'space_name': room.get('name'),
                 'space_sequence': room.get('sequence'),

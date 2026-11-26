@@ -12,11 +12,16 @@ from odoo.tests import new_test_user, tagged
 from odoo.tests.common import TransactionCase
 from odoo.tools import mute_logger
 
+from ...models.constants import SPACES
 from ..utils.test_utils import (
     create_external_contractor_user,
+    create_facility,
+    create_facility_option,
     create_internal_user,
     create_maintenance_request,
     create_maintenance_team,
+    create_maintenance_unit,
+    create_maintenance_unit_option,
     create_rental_property,
     create_rental_property_option,
 )
@@ -25,6 +30,9 @@ SERVICE_PATH = (
     "odoo.addons.onecore_maintenance_extension.models.maintenance.ComponentOneCoreService"
 )
 RENTAL_ID = "406-096-04-0101"
+# A maintenance unit's property object id and a facility id in OneCore
+UNIT_ID = "_0RZ0Y5F5J"
+FACILITY_ID = "_4270KIHDS2PFC9"
 
 
 def _link_vals(component_id="comp-frys", label="Frys", **kwargs):
@@ -48,6 +56,27 @@ def _apartment_request(env, **kwargs):
     )
     # Re-browse: create() returns a recordset whose context skips chatter
     # tracking on later writes
+    return env["maintenance.request"].browse(request.id)
+
+
+def _unit_request(env, space_caption="Tvättstuga", property_object_id=UNIT_ID, **kwargs):
+    unit = create_maintenance_unit(
+        env,
+        name="TVÄTTSTUGA",
+        caption=space_caption,
+        property_object_id=property_object_id,
+    )
+    request = create_maintenance_request(
+        env, space_caption=space_caption, maintenance_unit_id=unit.id, **kwargs
+    )
+    return env["maintenance.request"].browse(request.id)
+
+
+def _facility_request(env, **kwargs):
+    facility = create_facility(env, facility_id=FACILITY_ID)
+    request = create_maintenance_request(
+        env, space_caption="Lokal", facility_id=facility.id, **kwargs
+    )
     return env["maintenance.request"].browse(request.id)
 
 
@@ -134,22 +163,6 @@ class TestRequestComponentLinks(TransactionCase):
 
         self.assertEqual(self._message_count(), messages_before)
 
-    def test_rental_id_from_the_saved_rental_property(self):
-        self.assertEqual(self.request.component_rental_id, RENTAL_ID)
-
-    def test_rental_id_empty_without_rental_property(self):
-        request = create_maintenance_request(self.env, space_caption="Lägenhet")
-        self.assertFalse(request.component_rental_id)
-
-    def test_new_request_takes_rental_id_from_the_selected_search_hit(self):
-        option = create_rental_property_option(self.env, name=RENTAL_ID)
-
-        record = self.env["maintenance.request"].new(
-            {"space_caption": "Lägenhet", "rental_property_option_id": option.id}
-        )
-
-        self.assertEqual(record.component_rental_id, RENTAL_ID)
-
     def test_choosing_another_rental_object_clears_the_components(self):
         first = create_rental_property_option(self.env, name=RENTAL_ID)
         second = create_rental_property_option(self.env, name="406-096-04-0102")
@@ -166,7 +179,7 @@ class TestRequestComponentLinks(TransactionCase):
         record._onchange_rental_property_option_id()
 
         self.assertFalse(record.component_ids)
-        self.assertEqual(record.component_rental_id, "406-096-04-0102")
+        self.assertEqual(record.component_source_id, "406-096-04-0102")
 
     def test_a_new_search_for_the_same_apartment_keeps_the_components(self):
         first = create_rental_property_option(self.env, name=RENTAL_ID)
@@ -185,17 +198,131 @@ class TestRequestComponentLinks(TransactionCase):
         self.assertEqual(len(record.component_ids), 1)
 
     def test_changing_space_away_from_lagenhet_clears_the_components(self):
+        for space_caption in ("Tvättstuga", "Lokal", "Fastighet"):
+            with self.subTest(space_caption=space_caption):
+                record = self.env["maintenance.request"].new(
+                    {
+                        "space_caption": "Lägenhet",
+                        "component_ids": [Command.create(_link_vals(rental_id=RENTAL_ID))],
+                    }
+                )
+
+                record.space_caption = space_caption
+                record._onchange_space_caption_components()
+
+                self.assertFalse(record.component_ids)
+
+    def test_changing_to_a_space_without_the_grid_clears_every_component(self):
         record = self.env["maintenance.request"].new(
             {
-                "space_caption": "Lägenhet",
+                "space_caption": "Tvättstuga",
                 "component_ids": [Command.create(_link_vals())],
             }
         )
 
-        record.space_caption = "Tvättstuga"
+        record.space_caption = "Fastighet"
         record._onchange_space_caption_components()
 
         self.assertFalse(record.component_ids)
+
+    def test_changing_space_from_a_unit_to_a_facility_clears_the_components(self):
+        unit = create_maintenance_unit_option(self.env, property_object_id=UNIT_ID)
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Tvättstuga",
+                "maintenance_unit_option_id": unit.id,
+                "component_ids": [Command.create(_link_vals(rental_id=UNIT_ID))],
+            }
+        )
+
+        record.space_caption = "Lokal"
+        record._onchange_space_caption_components()
+
+        self.assertFalse(record.component_ids)
+
+    def test_choosing_another_maintenance_unit_clears_the_components(self):
+        first = create_maintenance_unit_option(self.env, property_object_id=UNIT_ID)
+        second = create_maintenance_unit_option(self.env, property_object_id="_0RZ0Y1G50")
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Tvättstuga",
+                "maintenance_unit_option_id": first.id,
+                "component_ids": [
+                    Command.create(_link_vals(rental_id=UNIT_ID, space_id=UNIT_ID))
+                ],
+            }
+        )
+        self.assertEqual(len(record.component_ids), 1)
+
+        record.maintenance_unit_option_id = second
+        record._onchange_maintenance_unit_option_id()
+
+        self.assertFalse(record.component_ids)
+        self.assertEqual(record.component_source_id, "_0RZ0Y1G50")
+
+    def test_a_new_search_for_the_same_maintenance_unit_keeps_the_components(self):
+        first = create_maintenance_unit_option(self.env, property_object_id=UNIT_ID)
+        same_again = create_maintenance_unit_option(self.env, property_object_id=UNIT_ID)
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Tvättstuga",
+                "maintenance_unit_option_id": first.id,
+                "component_ids": [Command.create(_link_vals(rental_id=UNIT_ID))],
+            }
+        )
+
+        record.maintenance_unit_option_id = same_again
+        record._onchange_maintenance_unit_option_id()
+
+        self.assertEqual(len(record.component_ids), 1)
+
+    def test_choosing_another_facility_clears_the_components(self):
+        first = create_facility_option(self.env, facility_id=FACILITY_ID)
+        second = create_facility_option(self.env, facility_id="_4270KIHDS2OTHER")
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Lokal",
+                "facility_option_id": first.id,
+                "component_ids": [Command.create(_link_vals(rental_id=FACILITY_ID))],
+            }
+        )
+        self.assertEqual(len(record.component_ids), 1)
+
+        record.facility_option_id = second
+        record._onchange_facility_option_id()
+
+        self.assertFalse(record.component_ids)
+        self.assertEqual(record.component_source_id, "_4270KIHDS2OTHER")
+
+    def test_a_new_search_for_the_same_facility_keeps_the_components(self):
+        first = create_facility_option(self.env, facility_id=FACILITY_ID)
+        same_again = create_facility_option(self.env, facility_id=FACILITY_ID)
+        record = self.env["maintenance.request"].new(
+            {
+                "space_caption": "Lokal",
+                "facility_option_id": first.id,
+                "component_ids": [Command.create(_link_vals(rental_id=FACILITY_ID))],
+            }
+        )
+
+        record.facility_option_id = same_again
+        record._onchange_facility_option_id()
+
+        self.assertEqual(len(record.component_ids), 1)
+
+    def test_a_search_hit_on_a_saved_request_keeps_its_components(self):
+        # write() never stores a search hit on a saved ärende: its object stays
+        request = _unit_request(self.env)
+        request.write(
+            {"component_ids": [Command.create(_link_vals(rental_id=UNIT_ID))]}
+        )
+        other = create_maintenance_unit_option(self.env, property_object_id="_0RZ0Y1G50")
+        record = self.env["maintenance.request"].new({}, origin=request)
+
+        record.maintenance_unit_option_id = other
+        record._onchange_maintenance_unit_option_id()
+
+        self.assertEqual(len(record.component_ids), 1)
 
     def test_changing_space_on_a_saved_request_keeps_the_components(self):
         self.request.write({"component_ids": [Command.create(_link_vals())]})
@@ -221,17 +348,144 @@ class TestRequestComponentLinks(TransactionCase):
 
 
 @tagged("onecore")
+class TestComponentSource(TransactionCase):
+    """Where the room grid loads components from: an apartment, a
+    maintenance unit or a facility, from the saved object or the selected
+    search hit."""
+
+    def _source(self, record):
+        return (
+            record.component_source_kind,
+            record.component_source_id,
+            record.component_source_name,
+        )
+
+    def test_apartment_from_the_saved_rental_property(self):
+        self.assertEqual(
+            self._source(_apartment_request(self.env)), ("rental", RENTAL_ID, False)
+        )
+
+    def test_apartment_without_rental_property_has_an_empty_source(self):
+        request = create_maintenance_request(self.env, space_caption="Lägenhet")
+
+        self.assertEqual(self._source(request), ("rental", False, False))
+
+    def test_new_apartment_request_takes_the_selected_search_hit(self):
+        option = create_rental_property_option(self.env, name=RENTAL_ID)
+
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Lägenhet", "rental_property_option_id": option.id}
+        )
+
+        self.assertEqual(self._source(record), ("rental", RENTAL_ID, False))
+
+    def test_maintenance_unit_is_its_property_object_id_and_name(self):
+        for space_caption in ("Tvättstuga", "Miljöbod", "Lekplats"):
+            with self.subTest(space_caption=space_caption):
+                request = _unit_request(self.env, space_caption=space_caption)
+
+                self.assertEqual(self._source(request), ("unit", UNIT_ID, "TVÄTTSTUGA"))
+
+    def test_new_unit_request_takes_the_selected_search_hit(self):
+        option = create_maintenance_unit_option(
+            self.env, name="Miljöbod", property_object_id=UNIT_ID
+        )
+
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Miljöbod", "maintenance_unit_option_id": option.id}
+        )
+
+        self.assertEqual(self._source(record), ("unit", UNIT_ID, "Miljöbod"))
+
+    def test_unit_stored_without_property_object_id_has_an_empty_source(self):
+        # Saved before the id was stored: the grid shows its empty state
+        request = _unit_request(self.env, property_object_id=False)
+
+        self.assertEqual(self._source(request), ("unit", False, "TVÄTTSTUGA"))
+
+    def test_a_search_hit_on_a_saved_request_doesnt_change_its_source(self):
+        # write() never stores the hit: the grid shows the stored unit
+        request = _unit_request(self.env)
+        option = create_maintenance_unit_option(
+            self.env, name="Miljöbod", property_object_id="_0RZ0Y1G50"
+        )
+        record = self.env["maintenance.request"].new({}, origin=request)
+
+        record.maintenance_unit_option_id = option
+        record._onchange_maintenance_unit_option_id()
+
+        # FormFieldService assigns the hit's name to the many2one, which Odoo
+        # caches as empty in the form
+        self.assertFalse(record.maintenance_unit_id)
+        self.assertEqual(self._source(record), ("unit", UNIT_ID, "TVÄTTSTUGA"))
+
+    def test_saved_apartment_changed_to_tvattstuga_has_no_unit_id(self):
+        request = _apartment_request(self.env)
+        option = create_maintenance_unit_option(self.env, property_object_id=UNIT_ID)
+        record = self.env["maintenance.request"].new({}, origin=request)
+
+        record.space_caption = "Tvättstuga"
+        # The search that reruns for the new Utrymme picks a hit
+        record.maintenance_unit_option_id = option
+        record._onchange_maintenance_unit_option_id()
+
+        self.assertEqual(self._source(record), ("unit", False, False))
+
+    def test_facility_is_its_facility_id(self):
+        self.assertEqual(
+            self._source(_facility_request(self.env)), ("facility", FACILITY_ID, False)
+        )
+
+    def test_new_facility_request_takes_the_selected_search_hit(self):
+        option = create_facility_option(self.env, facility_id=FACILITY_ID)
+
+        record = self.env["maintenance.request"].new(
+            {"space_caption": "Lokal", "facility_option_id": option.id}
+        )
+
+        self.assertEqual(self._source(record), ("facility", FACILITY_ID, False))
+
+    def test_other_spaces_have_no_room_grid(self):
+        with_grid = {"Lägenhet", "Tvättstuga", "Miljöbod", "Lekplats", "Lokal"}
+        rental_property = create_rental_property(self.env, rental_property_id=RENTAL_ID)
+        for space_caption in [key for key, _label in SPACES if key not in with_grid]:
+            with self.subTest(space_caption=space_caption):
+                record = self.env["maintenance.request"].new(
+                    {
+                        "space_caption": space_caption,
+                        "rental_property_id": rental_property.id,
+                    }
+                )
+
+                self.assertEqual(self._source(record), (False, False, False))
+                self.assertFalse(record._has_component_picker())
+
+    def test_a_caption_that_falls_back_to_the_apartment_form_gets_no_apartment_grid(self):
+        # E.g. Skyddsrum, which has no form state of its own
+        rental_property = create_rental_property(self.env, rental_property_id=RENTAL_ID)
+        record = self.env["maintenance.request"].new(
+            {"space_caption": False, "rental_property_id": rental_property.id}
+        )
+
+        self.assertEqual(record.form_state, "rental-property")
+        self.assertEqual(self._source(record), (False, False, False))
+        Request = self.env["maintenance.request"]
+        self.assertFalse(Request._component_source_kind_for("Skyddsrum"))
+        self.assertEqual(Request._component_source_kind_for("Lägenhet"), "rental")
+
+
+@tagged("onecore")
 class TestGetRoomComponents(TransactionCase):
     def setUp(self):
         super().setUp()
         self.result = {"ok": True, "rooms": [{"id": "room-kok", "name": "Kök"}]}
 
-    def _call(self, user, rental_id=RENTAL_ID):
+    def _call(self, user, kind="rental", source_id=RENTAL_ID, name=False):
         with patch(SERVICE_PATH) as MockService:
             load = MockService.return_value.load_room_components
             load.return_value = self.result
             result = self.env["maintenance.request"].with_user(user).get_room_components(
-                rental_id
+                kind, source_id, name
             )
         return result, load
 
@@ -239,17 +493,54 @@ class TestGetRoomComponents(TransactionCase):
         result, load = self._call(create_internal_user(self.env))
 
         self.assertEqual(result, self.result)
-        load.assert_called_once_with(RENTAL_ID)
+        load.assert_called_once_with("rental", RENTAL_ID, False)
 
-    def test_contractor_gets_rooms_of_their_teams_request(self):
+    def test_each_kind_is_passed_on_with_its_name(self):
+        user = create_internal_user(self.env)
+        for kind, source_id, name in (
+            ("unit", UNIT_ID, "Tvättstuga"),
+            ("facility", FACILITY_ID, False),
+        ):
+            with self.subTest(kind=kind):
+                result, load = self._call(user, kind, source_id, name)
+
+                self.assertEqual(result, self.result)
+                load.assert_called_once_with(kind, source_id, name)
+
+    def test_unknown_kind_gets_nothing(self):
+        user = create_internal_user(self.env)
+        for kind in ("parking-space", False, ["rental"]):
+            with self.subTest(kind=kind):
+                result, load = self._call(user, kind)
+
+                self.assertEqual(result, {"ok": False, "rooms": []})
+                load.assert_not_called()
+
+    def _contractor_and_team(self):
         contractor = create_external_contractor_user(self.env)
         team = create_maintenance_team(self.env, member_ids=[Command.link(contractor.id)])
+        return contractor, team
+
+    def test_contractor_gets_rooms_of_their_teams_request(self):
+        contractor, team = self._contractor_and_team()
         _apartment_request(self.env, maintenance_team_id=team.id)
 
         result, load = self._call(contractor)
 
         self.assertEqual(result, self.result)
-        load.assert_called_once_with(RENTAL_ID)
+        load.assert_called_once_with("rental", RENTAL_ID, False)
+
+    def test_contractor_gets_the_unit_and_facility_of_their_teams_requests(self):
+        contractor, team = self._contractor_and_team()
+        _unit_request(self.env, maintenance_team_id=team.id)
+        _facility_request(self.env, maintenance_team_id=team.id)
+
+        for kind, source_id in (("unit", UNIT_ID), ("facility", FACILITY_ID)):
+            with self.subTest(kind=kind):
+                result, load = self._call(contractor, kind, source_id)
+
+                self.assertEqual(result, self.result)
+                load.assert_called_once_with(kind, source_id, False)
 
     def test_user_without_access_to_arenden_is_refused(self):
         portal_user = new_test_user(self.env, login="portal_rooms", groups="base.group_portal")
@@ -257,7 +548,7 @@ class TestGetRoomComponents(TransactionCase):
         with patch(SERVICE_PATH) as MockService:
             with self.assertRaises(AccessError):
                 self.env["maintenance.request"].with_user(portal_user).get_room_components(
-                    RENTAL_ID
+                    "rental", RENTAL_ID, False
                 )
             MockService.return_value.load_room_components.assert_not_called()
 
@@ -267,6 +558,47 @@ class TestGetRoomComponents(TransactionCase):
         _apartment_request(self.env, maintenance_team_id=other_team.id)
 
         result, load = self._call(contractor)
+
+        self.assertEqual(result, {"ok": False, "rooms": []})
+        load.assert_not_called()
+
+    def test_contractor_gets_nothing_for_another_teams_unit_or_facility(self):
+        contractor, team = self._contractor_and_team()
+        other_team = create_maintenance_team(self.env)
+        _unit_request(self.env, maintenance_team_id=other_team.id)
+        _facility_request(self.env, maintenance_team_id=other_team.id)
+        # Their own apartment ärende doesn't open other kinds
+        _apartment_request(self.env, maintenance_team_id=team.id)
+
+        for kind, source_id in (("unit", UNIT_ID), ("facility", FACILITY_ID)):
+            with self.subTest(kind=kind):
+                result, load = self._call(contractor, kind, source_id)
+
+                self.assertEqual(result, {"ok": False, "rooms": []})
+                load.assert_not_called()
+
+    def test_ids_and_names_that_arent_strings_get_nothing(self):
+        # A list id would be searched with "in" and pass the contractor check
+        contractor, team = self._contractor_and_team()
+        _unit_request(self.env, maintenance_team_id=team.id)
+
+        for source_id, name in (
+            ([UNIT_ID, "_0RZ0Y1G50"], False),
+            (UNIT_ID, {"name": "Tvättstuga"}),
+            ("", False),
+        ):
+            with self.subTest(source_id=source_id, name=name):
+                result, load = self._call(contractor, "unit", source_id, name)
+
+                self.assertEqual(result, {"ok": False, "rooms": []})
+                load.assert_not_called()
+
+    def test_contractor_gets_nothing_for_an_id_of_another_kind(self):
+        # Their unit's id isn't a rental id
+        contractor, team = self._contractor_and_team()
+        _unit_request(self.env, maintenance_team_id=team.id)
+
+        result, load = self._call(contractor, "rental", UNIT_ID)
 
         self.assertEqual(result, {"ok": False, "rooms": []})
         load.assert_not_called()
@@ -478,6 +810,23 @@ class TestRequestComponentFormView(TransactionCase):
             # Statically invisible would stop the lines from loading
             self.assertNotIn(node.get("invisible"), ("1", "True"))
         self.assertEqual(len(arch.xpath('//widget[@name="room_components_count"]')), 1)
+
+    def test_grid_and_notes_show_for_every_space_with_a_component_source(self):
+        view = self.env.ref(
+            "onecore_maintenance_extension.hr_equipment_request_view_form_extension"
+        )
+        arch = etree.fromstring(view.arch_db)
+
+        notes = arch.xpath('//field[@name="component_ids"][@widget="component_notes"]')
+        grid_section = arch.xpath(
+            '//field[@name="component_ids"][@widget="room_components"]'
+            '/ancestor::div[contains(@class, "accordion-item")][1]'
+        )
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(len(grid_section), 1)
+        for node in notes + grid_section:
+            self.assertEqual(node.get("invisible"), "not component_source_kind")
+        self.assertEqual(len(arch.xpath('//field[@name="component_source_kind"]')), 1)
 
     def test_form_view_still_renders(self):
         arch = etree.fromstring(

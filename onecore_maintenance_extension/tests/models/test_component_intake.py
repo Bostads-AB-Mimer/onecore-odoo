@@ -19,11 +19,14 @@ from odoo.addons.onecore_maintenance_extension.models.services.component_onecore
 
 from ..utils.test_utils import (
     create_external_contractor_user,
+    create_facility,
     create_internal_user,
     create_maintenance_team,
+    create_maintenance_unit,
     create_rental_property,
 )
 from .services.test_component_onecore_service import _component, _room
+from .test_maintenance_request_component import FACILITY_ID, UNIT_ID
 
 RENTAL_ID = "406-096-04-0101"
 MAINTENANCE_LOGGER = "odoo.addons.onecore_maintenance_extension.models.maintenance"
@@ -326,14 +329,129 @@ class TestComponentIntake(TransactionCase):
         self.assertEqual(len(self._notes(request)), 1)
 
     def test_request_without_rental_object_gets_a_note(self):
-        request = self._create(["comp-frys"], rental_property_id=False)
+        with self.assertLogs(MAINTENANCE_LOGGER, "WARNING") as logs:
+            request = self._create(["comp-frys"], rental_property_id=False)
 
         self.assertFalse(request.component_ids)
         self.assertIn(
-            "1 komponent kunde inte kopplas till ärendet eftersom det saknar hyresobjekt.",
+            "1 komponent kunde inte kopplas till ärendet eftersom ärendet saknar ett "
+            "objekt med id i OneCore.",
             self._notes(request).body,
         )
+        self.assertIn("no OneCore object id", "\n".join(logs.output))
         self.api.fetch_rooms.assert_not_called()
+
+    def _unit_vals(self, property_object_id=UNIT_ID):
+        unit = create_maintenance_unit(
+            self.env,
+            name="TVÄTTSTUGA",
+            caption="Tvättstuga",
+            property_object_id=property_object_id,
+        )
+        # A string id, as core sends it
+        return {
+            "space_caption": "Tvättstuga",
+            "rental_property_id": False,
+            "maintenance_unit_id": str(unit.id),
+        }
+
+    def test_unit_request_links_its_components_as_one_room(self):
+        self.api.fetch_components_by_room.return_value = [
+            _component("comp-tvatt", "Tvättmaskin", "Tvättmaskin 8 kg"),
+            _component("comp-tork", "Torktumlare", "Kondenstumlare"),
+        ]
+
+        request = self._create(["comp-tvatt"], **self._unit_vals())
+
+        self.assertEqual(
+            [
+                (
+                    row.onecore_component_id,
+                    row.rental_id,
+                    row.space_id,
+                    row.space_name,
+                    row.space_sequence,
+                    row.component_name,
+                )
+                for row in request.component_ids
+            ],
+            # The room the grid shows for the unit: the unit itself
+            [("comp-tvatt", UNIT_ID, UNIT_ID, "Tvättstuga", 0, "Tvättmaskin")],
+        )
+        self.api.fetch_components_by_room.assert_called_once_with(UNIT_ID)
+        self.api.fetch_rooms.assert_not_called()
+        self.assertFalse(self._notes(request))
+
+    def test_unit_request_without_property_object_id_gets_a_note(self):
+        request = self._create(["comp-tvatt"], **self._unit_vals(property_object_id=False))
+
+        self.assertFalse(request.component_ids)
+        self.assertIn(
+            "eftersom ärendet saknar ett objekt med id i OneCore.",
+            self._notes(request).body,
+        )
+        self.api.fetch_components_by_room.assert_not_called()
+
+    def test_unit_request_with_onecore_down_gets_a_note(self):
+        self.api.fetch_components_by_room.side_effect = Exception("503 Service Unavailable")
+
+        request = self._create(["comp-tvatt"], **self._unit_vals())
+
+        self.assertTrue(request.exists())
+        self.assertFalse(request.component_ids)
+        self.assertIn("eftersom OneCore inte svarade", self._notes(request).body)
+
+    def test_facility_request_links_the_components_of_its_rooms(self):
+        facility = create_facility(self.env, facility_id=FACILITY_ID)
+        self.api.fetch_rooms_by_facility_id.return_value = [_room("room-kontor", "KONTOR", 1)]
+        self.api.parallel_get_json.return_value = [
+            [_component("comp-golv", "Golv", "Linoleum", "SURFACE")]
+        ]
+
+        request = self._create(
+            ["comp-golv"],
+            space_caption="Lokal",
+            rental_property_id=False,
+            facility_id=str(facility.id),
+        )
+
+        row = request.component_ids
+        self.assertEqual(
+            (row.rental_id, row.space_id, row.space_name),
+            (FACILITY_ID, "room-kontor", "Kontor"),
+        )
+        self.api.fetch_rooms_by_facility_id.assert_called_once_with(FACILITY_ID)
+        self.api.fetch_rooms.assert_not_called()
+
+    def test_request_without_the_room_grid_gets_a_note(self):
+        # A rental object alone isn't enough: the Utrymme decides
+        with self.assertLogs(MAINTENANCE_LOGGER, "WARNING") as logs:
+            request = self._create(["comp-frys"], space_caption="Fastighet")
+
+        self.assertFalse(request.component_ids)
+        self.assertIn(
+            "1 komponent kunde inte kopplas till ärendet eftersom dess Utrymme inte "
+            "har Rum och komponenter.",
+            self._notes(request).body,
+        )
+        self.assertIn("space has no room grid", "\n".join(logs.output))
+        self.api.fetch_rooms.assert_not_called()
+
+    def test_resubmit_on_a_unit_request_adds_only_the_new_components(self):
+        self.api.fetch_components_by_room.return_value = [
+            _component("comp-tvatt", "Tvättmaskin", "Tvättmaskin 8 kg"),
+            _component("comp-tork", "Torktumlare", "Kondenstumlare"),
+        ]
+        request = self._create(["comp-tvatt"], **self._unit_vals())
+        component_onecore_service._room_components_cache.clear()
+
+        # Core sends the full list every time
+        request.write({"onecore_component_ids": ["comp-tvatt", "comp-tork"]})
+
+        self.assertEqual(self._linked(request), ["comp-tork", "comp-tvatt"])
+        self.assertEqual(set(request.component_ids.mapped("space_id")), {UNIT_ID})
+        self.assertEqual(self.api.fetch_components_by_room.call_count, 2)
+        self.assertFalse(self._notes(request))
 
     def test_values_that_are_not_component_ids_are_ignored(self):
         request = self._create([None, 5, "", "comp-frys", "comp-frys", {"id": "comp-spis"}])
